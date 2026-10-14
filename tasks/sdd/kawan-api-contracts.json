@@ -1,0 +1,2893 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kawan:sdd:api:v1",
+  "title": "Kawan extension API contract definitions",
+  "$comment": "Planning specification only. Select named $defs through reference; baseline API contracts remain separate. Dynamic event/tool/provider config payloads and domain invariants require resolved runtime contracts.",
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "details": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "requestId",
+            "retryable"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "ProviderConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "modelIdPrefix": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "modelIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "minItems": 0
+        },
+        "customParams": {
+          "type": "object"
+        },
+        "customOptions": {
+          "type": "object"
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeaderBinding"
+          },
+          "minItems": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "HeaderBinding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "kind": {
+              "const": "literal"
+            },
+            "value": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "kind": {
+              "const": "secret-ref"
+            },
+            "secretRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "secretRef"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "$comment": "Outbound policy rejects forbidden headers and prevents raw auth secrets in literal config; actor cannot grant arbitrary secret refs."
+    },
+    "ServerConnectionCreate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "providerKind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "config": {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            "isDirect": {
+              "const": false
+            },
+            "authMode": {
+              "const": "api-key"
+            },
+            "apiKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "name",
+            "baseUrl",
+            "isDirect",
+            "apiKey"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "providerKind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "config": {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            "isDirect": {
+              "const": false
+            },
+            "authMode": {
+              "const": "none"
+            }
+          },
+          "required": [
+            "name",
+            "baseUrl",
+            "isDirect",
+            "authMode"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "$comment": "Default auth is api-key. Auth-none requires registered adapter capability/policy and explicit selection; never inferred from missing key."
+    },
+    "DirectConnectionCreate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "providerKind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "config": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "isDirect": {
+          "const": true
+        }
+      },
+      "required": [
+        "name",
+        "baseUrl",
+        "isDirect"
+      ],
+      "additionalProperties": false
+    },
+    "ConnectionCreate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ServerConnectionCreate"
+        },
+        {
+          "$ref": "#/$defs/DirectConnectionCreate"
+        }
+      ]
+    },
+    "ConnectionUpdate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "providerKind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "config": {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            "isDirect": {
+              "type": "boolean"
+            },
+            "keyAction": {
+              "const": "keep"
+            }
+          },
+          "required": [
+            "keyAction"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "providerKind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "config": {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            "isDirect": {
+              "const": false
+            },
+            "keyAction": {
+              "const": "replace"
+            },
+            "apiKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "keyAction",
+            "apiKey"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "providerKind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "config": {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            "isDirect": {
+              "type": "boolean"
+            },
+            "keyAction": {
+              "const": "remove"
+            }
+          },
+          "required": [
+            "keyAction"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "$comment": "If-Match required. Domain validates mode transition/auth-none capabilities/destination change; Direct-to-server cannot keep a missing key."
+    },
+    "TestResult": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "success"
+        },
+        "provenance": {
+          "enum": [
+            "server",
+            "browser_reported"
+          ]
+        },
+        "modelCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "minItems": 0
+        },
+        "usable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "provenance",
+        "modelCount",
+        "models",
+        "usable"
+      ],
+      "additionalProperties": false
+    },
+    "ConnectionView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "providerKind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "isDirect": {
+          "type": "boolean"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "keyMask": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hasKey": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "lastTest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TestResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "baseUrl",
+        "providerKind",
+        "isDirect",
+        "isActive",
+        "keyMask",
+        "hasKey",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "DraftServerTest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 100
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "apiKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "authMode": {
+              "const": "api-key"
+            },
+            "providerKind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "config": {
+              "$ref": "#/$defs/ProviderConfig"
+            }
+          },
+          "required": [
+            "baseUrl",
+            "apiKey"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 100
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "authMode": {
+              "const": "none"
+            },
+            "providerKind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "config": {
+              "$ref": "#/$defs/ProviderConfig"
+            }
+          },
+          "required": [
+            "baseUrl",
+            "authMode"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "DirectReport": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "browserInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "status": {
+          "enum": [
+            "success",
+            "failure",
+            "cors",
+            "unavailable"
+          ]
+        },
+        "modelIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "minItems": 0
+        },
+        "errorCategory": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "revision",
+        "browserInstanceId",
+        "status",
+        "modelIds"
+      ],
+      "additionalProperties": false
+    },
+    "TextPart": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000000
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "FilePart": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "file"
+        },
+        "fileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "type",
+        "fileId"
+      ],
+      "additionalProperties": false
+    },
+    "MessageContent": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/TextPart"
+          },
+          {
+            "$ref": "#/$defs/FilePart"
+          }
+        ]
+      },
+      "minItems": 0
+    },
+    "Mutation_append_user": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "append-user"
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content": {
+          "$ref": "#/$defs/MessageContent"
+        },
+        "fileIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "kind",
+        "parentId",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_branch_user_edit": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "branch-user-edit"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "content": {
+          "$ref": "#/$defs/MessageContent"
+        },
+        "fileIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "kind",
+        "messageId",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_edit_user_in_place": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "edit-user-in-place"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "content": {
+          "$ref": "#/$defs/MessageContent"
+        },
+        "fileIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "kind",
+        "messageId",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_edit_assistant": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "edit-assistant"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "content": {
+          "$ref": "#/$defs/MessageContent"
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "kind",
+        "messageId"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "content"
+          ]
+        },
+        {
+          "required": [
+            "output"
+          ]
+        }
+      ]
+    },
+    "Mutation_copy_assistant": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "copy-assistant"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "content": {
+          "$ref": "#/$defs/MessageContent"
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "kind",
+        "messageId"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "content"
+          ]
+        },
+        {
+          "required": [
+            "output"
+          ]
+        }
+      ]
+    },
+    "Mutation_regenerate": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "regenerate"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "suggestionPrompt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100000
+        }
+      },
+      "required": [
+        "kind",
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_continue_assistant": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "continue-assistant"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "kind",
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_select_branch": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "select-branch"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "kind",
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_delete_message_reparent": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "delete-message-reparent"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "kind",
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_delete_subtree": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "delete-subtree"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "kind",
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_insert_message": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "insert-message"
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ]
+        },
+        "content": {
+          "$ref": "#/$defs/MessageContent"
+        }
+      },
+      "required": [
+        "kind",
+        "parentId",
+        "role",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "Mutation_import_tree": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "import-tree"
+        },
+        "tree": {
+          "type": "object"
+        },
+        "formatVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "kind",
+        "tree",
+        "formatVersion"
+      ],
+      "additionalProperties": false
+    },
+    "TreeMutation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Mutation_append_user"
+        },
+        {
+          "$ref": "#/$defs/Mutation_branch_user_edit"
+        },
+        {
+          "$ref": "#/$defs/Mutation_edit_user_in_place"
+        },
+        {
+          "$ref": "#/$defs/Mutation_edit_assistant"
+        },
+        {
+          "$ref": "#/$defs/Mutation_copy_assistant"
+        },
+        {
+          "$ref": "#/$defs/Mutation_regenerate"
+        },
+        {
+          "$ref": "#/$defs/Mutation_continue_assistant"
+        },
+        {
+          "$ref": "#/$defs/Mutation_select_branch"
+        },
+        {
+          "$ref": "#/$defs/Mutation_delete_message_reparent"
+        },
+        {
+          "$ref": "#/$defs/Mutation_delete_subtree"
+        },
+        {
+          "$ref": "#/$defs/Mutation_insert_message"
+        },
+        {
+          "$ref": "#/$defs/Mutation_import_tree"
+        }
+      ],
+      "$comment": "Schema validates shape only; ChatService validates roles/edges/cycles/ownership/current-leaf and native metadata compatibility."
+    },
+    "TreeMutationRequest": {
+      "type": "object",
+      "properties": {
+        "expectedRevision": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "mutation": {
+          "$ref": "#/$defs/TreeMutation"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "mutation"
+      ],
+      "additionalProperties": false
+    },
+    "StartGeneration": {
+      "type": "object",
+      "properties": {
+        "chatId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expectedRevision": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "mutation": {
+          "$ref": "#/$defs/TreeMutation"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "minItems": 1
+        },
+        "connectionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "mode": {
+          "enum": [
+            "server",
+            "direct"
+          ]
+        },
+        "systemPrompt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000000
+        },
+        "generationParams": {
+          "type": "object"
+        },
+        "selectedToolIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minItems": 0
+        },
+        "temporary": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "chatId",
+        "expectedRevision",
+        "mutation",
+        "models",
+        "mode",
+        "temporary"
+      ],
+      "additionalProperties": false
+    },
+    "RunState": {
+      "enum": [
+        "queued",
+        "preparing",
+        "streaming",
+        "waiting_tool",
+        "waiting_approval",
+        "cancelling",
+        "succeeded",
+        "cancelled",
+        "failed",
+        "indeterminate"
+      ]
+    },
+    "RunView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "messageId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "state": {
+          "$ref": "#/$defs/RunState"
+        },
+        "lastEventSeq": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "groupId",
+        "messageId",
+        "model",
+        "state",
+        "lastEventSeq"
+      ],
+      "additionalProperties": false
+    },
+    "GenerationGroupView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "chatId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunView"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "chatId",
+        "revision",
+        "runs"
+      ],
+      "additionalProperties": false
+    },
+    "CancelGeneration": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "enum": [
+            "user_stop",
+            "group_stop",
+            "resource_deleted",
+            "access_revoked"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "EventPayload_run_accepted": {
+      "type": "object",
+      "properties": {
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "chatId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "messageId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "groupId",
+        "chatId",
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_run_state": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/RunState"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_message_start": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "role": {
+          "const": "assistant"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "messageId",
+        "role",
+        "model"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_text_start": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_text_delta": {
+      "type": "object",
+      "properties": {
+        "delta": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100000
+        }
+      },
+      "required": [
+        "delta"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_text_end": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "EventPayload_reasoning_start": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_reasoning_delta": {
+      "type": "object",
+      "properties": {
+        "delta": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100000
+        }
+      },
+      "required": [
+        "delta"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_reasoning_end": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "EventPayload_source": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "label": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "fileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "sourceId"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_file": {
+      "type": "object",
+      "properties": {
+        "fileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "fileId"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_status": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "progress": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_tool_input_delta": {
+      "type": "object",
+      "properties": {
+        "callId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "delta": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100000
+        }
+      },
+      "required": [
+        "callId",
+        "delta"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_tool_ready": {
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "toolId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "callId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "arguments": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "executionId",
+        "toolId",
+        "callId",
+        "arguments"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_tool_approval": {
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "executionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "requestSchema": {
+          "type": "object"
+        },
+        "expiresAtMs": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        }
+      },
+      "required": [
+        "approvalId",
+        "executionId",
+        "requestSchema",
+        "expiresAtMs"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_tool_result": {
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "minItems": 0
+        },
+        "isError": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "executionId",
+        "content",
+        "isError"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_tool_error": {
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "executionId",
+        "code",
+        "message",
+        "retryable"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_usage_updated": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "source": {
+          "enum": [
+            "gateway",
+            "browser_reported",
+            "local_engine"
+          ]
+        },
+        "measurementStatus": {
+          "enum": [
+            "reported",
+            "missing",
+            "estimated"
+          ]
+        },
+        "promptTokens": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completionTokens": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "totalTokens": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "model",
+        "source",
+        "measurementStatus",
+        "promptTokens",
+        "completionTokens",
+        "totalTokens"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_run_completed": {
+      "type": "object",
+      "properties": {
+        "finishReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        }
+      },
+      "required": [
+        "finishReason",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_run_cancelled": {
+      "type": "object",
+      "properties": {
+        "partial": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "partial"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_run_failed": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "partial": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "partial"
+      ],
+      "additionalProperties": false
+    },
+    "EventPayload_run_indeterminate": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "partial": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "partial"
+      ],
+      "additionalProperties": false
+    },
+    "RunEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "run.accepted"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_run_accepted"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "run.state"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_run_state"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "message.start"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_message_start"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "text.start"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_text_start"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs",
+            "partId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "text.delta"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_text_delta"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs",
+            "partId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "text.end"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_text_end"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs",
+            "partId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "reasoning.start"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_reasoning_start"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs",
+            "partId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "reasoning.delta"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_reasoning_delta"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs",
+            "partId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "reasoning.end"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_reasoning_end"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs",
+            "partId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "source"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_source"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "file"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_file"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "status"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_status"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "tool.input.delta"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_tool_input_delta"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "tool.ready"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_tool_ready"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "tool.approval"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_tool_approval"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "tool.result"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_tool_result"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "tool.error"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_tool_error"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "usage.updated"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_usage_updated"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "run.completed"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_run_completed"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "run.cancelled"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_run_cancelled"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "run.failed"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_run_failed"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "generationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "seq": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "run.indeterminate"
+            },
+            "partId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "payload": {
+              "$ref": "#/$defs/EventPayload_run_indeterminate"
+            },
+            "atMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "eventId",
+            "generationId",
+            "seq",
+            "version",
+            "type",
+            "payload",
+            "atMs"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "$comment": "Kawan event v1 type-specific payloads; state/grants/tool dynamic result content validated by domain registry. This is not baseline wire payload or native SDK UIMessage stream."
+    },
+    "ToolCall": {
+      "type": "object",
+      "properties": {
+        "toolId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "callId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "stepIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "arguments": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "toolId",
+        "callId",
+        "stepIndex",
+        "arguments"
+      ],
+      "additionalProperties": false,
+      "$comment": "Arguments additionally validated against selected/discovered tool schema and actor/resource grants. No server secret reference accepted from model."
+    },
+    "ApprovalResponse": {
+      "type": "object",
+      "properties": {
+        "nonce": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "action": {
+          "enum": [
+            "accepted",
+            "declined",
+            "cancelled"
+          ]
+        },
+        "response": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "nonce",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "UsageQuery": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "format": "date"
+        },
+        "to": {
+          "type": "string",
+          "format": "date"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "connectionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "groupBy": {
+          "enum": [
+            "day",
+            "model"
+          ]
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "timezone",
+        "groupBy"
+      ],
+      "additionalProperties": false,
+      "$comment": "Actual HTTP query strings parsed and range/timezone/actor checked; date end exclusive. Missing/client/estimated tokens reported separately."
+    }
+  }
+}

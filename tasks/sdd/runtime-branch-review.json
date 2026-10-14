@@ -1,0 +1,2096 @@
+{
+  "baseline": "f8ae8a6c328946dc62cd0712961a0632574581bf",
+  "scope": "Selected Python if-condition engine/provider metadata; not exhaustive dynamic branch proof",
+  "branches": [
+    {
+      "id": "DISPATCH-0001",
+      "source_reference_id": "SRC-0009",
+      "source": "backend/open_webui/internal/db.py",
+      "line": 232,
+      "phase": "P01",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "do_connect"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0002",
+      "source_reference_id": "SRC-0010",
+      "source": "backend/open_webui/main.py",
+      "line": 1063,
+      "phase": "P00",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "llama.cpp"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0003",
+      "source_reference_id": "SRC-0109",
+      "source": "backend/open_webui/retrieval/external.py",
+      "line": 329,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "qdrant"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0004",
+      "source_reference_id": "SRC-0109",
+      "source": "backend/open_webui/retrieval/external.py",
+      "line": 340,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "milvus"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0005",
+      "source_reference_id": "SRC-0109",
+      "source": "backend/open_webui/retrieval/external.py",
+      "line": 351,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "pgvector"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0006",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 380,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "external"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0007",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 562,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "external",
+        "rag.external_document_loader_api_key",
+        "rag.external_document_loader_url"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0008",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 581,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "rag.tika_server_url",
+        "tika"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0009",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 591,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "datalab_marker",
+        "doc",
+        "docx",
+        "epub",
+        "gif",
+        "html",
+        "jpeg",
+        "jpg",
+        "odp",
+        "ods",
+        "odt",
+        "pdf",
+        "png",
+        "ppt",
+        "pptx",
+        "rag.datalab_marker_api_key",
+        "tiff",
+        "webp",
+        "xls",
+        "xlsx"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0010",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 634,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "docling",
+        "rag.docling_server_url"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0011",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 654,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "document_intelligence",
+        "docx",
+        "pdf",
+        "ppt",
+        "pptx",
+        "rag.document_intelligence_endpoint"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0012",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 681,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "mineru",
+        "rag.mineru_file_extensions"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0013",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 697,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "",
+        "mistral_ocr",
+        "pdf",
+        "rag.mistral_ocr_api_key"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0014",
+      "source_reference_id": "SRC-0114",
+      "source": "backend/open_webui/retrieval/loaders/main.py",
+      "line": 709,
+      "phase": "P09",
+      "selector_symbols": [
+        "self.engine"
+      ],
+      "comparison_literals": [
+        "paddleocr_vl",
+        "rag.paddleocr_vl_base_url",
+        "rag.paddleocr_vl_token"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0015",
+      "source_reference_id": "SRC-0125",
+      "source": "backend/open_webui/retrieval/utils.py",
+      "line": 1112,
+      "phase": "P13",
+      "selector_symbols": [
+        "embedding_engine"
+      ],
+      "comparison_literals": [
+        ""
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0016",
+      "source_reference_id": "SRC-0125",
+      "source": "backend/open_webui/retrieval/utils.py",
+      "line": 1212,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "ollama"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0017",
+      "source_reference_id": "SRC-0125",
+      "source": "backend/open_webui/retrieval/utils.py",
+      "line": 1250,
+      "phase": "P13",
+      "selector_symbols": [
+        "reranking_engine"
+      ],
+      "comparison_literals": [
+        "external"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0018",
+      "source_reference_id": "SRC-0125",
+      "source": "backend/open_webui/retrieval/utils.py",
+      "line": 1260,
+      "phase": "P13",
+      "selector_symbols": [
+        "reranking_engine"
+      ],
+      "comparison_literals": [
+        "external"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0019",
+      "source_reference_id": "SRC-0125",
+      "source": "backend/open_webui/retrieval/utils.py",
+      "line": 1136,
+      "phase": "P13",
+      "selector_symbols": [
+        "embedding_engine"
+      ],
+      "comparison_literals": [
+        "azure_openai",
+        "ollama",
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0020",
+      "source_reference_id": "SRC-0125",
+      "source": "backend/open_webui/retrieval/utils.py",
+      "line": 1226,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0021",
+      "source_reference_id": "SRC-0125",
+      "source": "backend/open_webui/retrieval/utils.py",
+      "line": 1233,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "azure_openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0022",
+      "source_reference_id": "SRC-0166",
+      "source": "backend/open_webui/retrieval/web/searchapi.py",
+      "line": 29,
+      "phase": "P14",
+      "selector_symbols": [
+        "engine",
+        "engine.startswith"
+      ],
+      "comparison_literals": [
+        "google"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0023",
+      "source_reference_id": "SRC-0176",
+      "source": "backend/open_webui/retrieval/web/utils.py",
+      "line": 1180,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "",
+        "safe_web"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0024",
+      "source_reference_id": "SRC-0176",
+      "source": "backend/open_webui/retrieval/web/utils.py",
+      "line": 1196,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "playwright"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0025",
+      "source_reference_id": "SRC-0176",
+      "source": "backend/open_webui/retrieval/web/utils.py",
+      "line": 1203,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "firecrawl"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0026",
+      "source_reference_id": "SRC-0176",
+      "source": "backend/open_webui/retrieval/web/utils.py",
+      "line": 1214,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "tavily"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0027",
+      "source_reference_id": "SRC-0176",
+      "source": "backend/open_webui/retrieval/web/utils.py",
+      "line": 1219,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "exa"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0028",
+      "source_reference_id": "SRC-0176",
+      "source": "backend/open_webui/retrieval/web/utils.py",
+      "line": 1224,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "microsoft_web_iq"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0029",
+      "source_reference_id": "SRC-0176",
+      "source": "backend/open_webui/retrieval/web/utils.py",
+      "line": 1235,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "external"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0030",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 339,
+      "phase": "P15",
+      "selector_symbols": [
+        "form_data.stt.ENGINE"
+      ],
+      "comparison_literals": [
+        ""
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0031",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 759,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "",
+        "transformers"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0032",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 761,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        ""
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0033",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 775,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openai-realtime"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0034",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1549,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0035",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1626,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openai-realtime"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0036",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1632,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0037",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1650,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "elevenlabs"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0038",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1669,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "azure"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0039",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1689,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "mistral"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0040",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 323,
+      "phase": "P15",
+      "selector_symbols": [
+        "form_data.stt.ENGINE"
+      ],
+      "comparison_literals": [
+        "",
+        "audio.stt.engine"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0041",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 325,
+      "phase": "P15",
+      "selector_symbols": [
+        "form_data.tts.ENGINE"
+      ],
+      "comparison_literals": [
+        "audio.tts.engine",
+        "transformers"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0042",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 830,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openai-realtime"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0043",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1579,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openai-realtime"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0044",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1582,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "elevenlabs"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0045",
+      "source_reference_id": "SRC-0181",
+      "source": "backend/open_webui/routers/audio/__init__.py",
+      "line": 1600,
+      "phase": "P15",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "mistral"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0046",
+      "source_reference_id": "SRC-0183",
+      "source": "backend/open_webui/routers/auths.py",
+      "line": 1697,
+      "phase": "P02",
+      "selector_symbols": [
+        "provider_oauth",
+        "provider_oauth.get"
+      ],
+      "comparison_literals": [
+        "sub"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0047",
+      "source_reference_id": "SRC-0190",
+      "source": "backend/open_webui/routers/files.py",
+      "line": 99,
+      "phase": "P09",
+      "selector_symbols": [
+        "STORAGE_PROVIDER"
+      ],
+      "comparison_literals": [
+        "local"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0048",
+      "source_reference_id": "SRC-0190",
+      "source": "backend/open_webui/routers/files.py",
+      "line": 168,
+      "phase": "P09",
+      "selector_symbols": [
+        "content_extraction_engine"
+      ],
+      "comparison_literals": [
+        "image/",
+        "video/"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0049",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 177,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "",
+        "automatic1111"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0050",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 205,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0051",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 343,
+      "phase": "P16",
+      "selector_symbols": [
+        "form_data.engine"
+      ],
+      "comparison_literals": [
+        "automatic1111"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0052",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 207,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "gemini"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0053",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 347,
+      "phase": "P16",
+      "selector_symbols": [
+        "form_data.engine"
+      ],
+      "comparison_literals": [
+        "comfyui"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0054",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 367,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0055",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 627,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0056",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 984,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_EDIT_ENGINE"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0057",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 209,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "comfyui"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0058",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 374,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "gemini"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0059",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 687,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "gemini"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0060",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 1065,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_EDIT_ENGINE"
+      ],
+      "comparison_literals": [
+        "gemini"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0061",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 211,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "",
+        "automatic1111"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0062",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 378,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "comfyui"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0063",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 745,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "comfyui"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0064",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 1122,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_EDIT_ENGINE"
+      ],
+      "comparison_literals": [
+        "comfyui"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0065",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 421,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "",
+        "automatic1111"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0066",
+      "source_reference_id": "SRC-0194",
+      "source": "backend/open_webui/routers/images.py",
+      "line": 800,
+      "phase": "P16",
+      "selector_symbols": [
+        "image_config.IMAGE_GENERATION_ENGINE"
+      ],
+      "comparison_literals": [
+        "",
+        "automatic1111"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0067",
+      "source_reference_id": "SRC-0195",
+      "source": "backend/open_webui/routers/knowledge.py",
+      "line": 579,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "milvus"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0068",
+      "source_reference_id": "SRC-0195",
+      "source": "backend/open_webui/routers/knowledge.py",
+      "line": 586,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "pgvector"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0069",
+      "source_reference_id": "SRC-0195",
+      "source": "backend/open_webui/routers/knowledge.py",
+      "line": 602,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "milvus",
+        "qdrant"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0070",
+      "source_reference_id": "SRC-0195",
+      "source": "backend/open_webui/routers/knowledge.py",
+      "line": 604,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "pgvector"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0071",
+      "source_reference_id": "SRC-0195",
+      "source": "backend/open_webui/routers/knowledge.py",
+      "line": 615,
+      "phase": "P13",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "milvus",
+        "pgvector",
+        "vector_field"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0072",
+      "source_reference_id": "SRC-0202",
+      "source": "backend/open_webui/routers/openai.py",
+      "line": 184,
+      "phase": "P04",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "llama.cpp",
+        "lmstudio"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0073",
+      "source_reference_id": "SRC-0202",
+      "source": "backend/open_webui/routers/openai.py",
+      "line": 193,
+      "phase": "P04",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "lmstudio"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0074",
+      "source_reference_id": "SRC-0202",
+      "source": "backend/open_webui/routers/openai.py",
+      "line": 205,
+      "phase": "P04",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "llama.cpp"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0075",
+      "source_reference_id": "SRC-0202",
+      "source": "backend/open_webui/routers/openai.py",
+      "line": 306,
+      "phase": "P04",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "lmstudio",
+        "unload"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0076",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 154,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        ""
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0077",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 182,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "external"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0078",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 512,
+      "phase": "P13",
+      "selector_symbols": [
+        "form_data.RAG_EMBEDDING_ENGINE"
+      ],
+      "comparison_literals": [
+        ""
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0079",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2187,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "ollama_cloud"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0080",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 525,
+      "phase": "P13",
+      "selector_symbols": [
+        "form_data.RAG_EMBEDDING_ENGINE"
+      ],
+      "comparison_literals": [
+        "openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0081",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 528,
+      "phase": "P13",
+      "selector_symbols": [
+        "form_data.RAG_EMBEDDING_ENGINE"
+      ],
+      "comparison_literals": [
+        "ollama"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0082",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 531,
+      "phase": "P13",
+      "selector_symbols": [
+        "form_data.RAG_EMBEDDING_ENGINE"
+      ],
+      "comparison_literals": [
+        "azure_openai"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0083",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 941,
+      "phase": "P13",
+      "selector_symbols": [
+        "form_data.web.WEB_SEARCH_ENGINE"
+      ],
+      "comparison_literals": [
+        "duckduckgo",
+        "web.search.engine"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0084",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 950,
+      "phase": "P13",
+      "selector_symbols": [
+        "form_data.web.WEB_LOADER_ENGINE"
+      ],
+      "comparison_literals": [
+        "playwright",
+        "web.loader.engine"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0085",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 972,
+      "phase": "P13",
+      "selector_symbols": [
+        "reranker_engine"
+      ],
+      "comparison_literals": [
+        "external",
+        "rag.reranking_engine",
+        "rag.reranking_model"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0086",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2196,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "perplexity_search"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0087",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2209,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "searxng"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0088",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2221,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "openserp"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0089",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2231,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "yacy"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0090",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2244,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "google_pse"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0091",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2256,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "brave"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0092",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2266,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "brave_llm_context"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0093",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2278,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "kagi"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0094",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2289,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "mojeek"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0095",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2300,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "bocha"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0096",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2311,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "serpstack"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0097",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2322,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "serper"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0098",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2332,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "serphouse"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0099",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2343,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "serply"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0100",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2354,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "duckduckgo"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0101",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2363,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "tavily"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0102",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2375,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "staan"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0103",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2388,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "exa"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0104",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2400,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "searchapi"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0105",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2412,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "serpapi"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0106",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2424,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "jina"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0107",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2432,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "bing"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0108",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2442,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "azure"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0109",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2461,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "perplexity"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0110",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2471,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "microsoft_web_iq"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0111",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2485,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "sougou"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0112",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2497,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "firecrawl"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0113",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2506,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "external"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0114",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2517,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "yandex"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0115",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2529,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "youcom"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0116",
+      "source_reference_id": "SRC-0205",
+      "source": "backend/open_webui/routers/retrieval.py",
+      "line": 2537,
+      "phase": "P13",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "linkup"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0117",
+      "source_reference_id": "SRC-0206",
+      "source": "backend/open_webui/routers/scim.py",
+      "line": 318,
+      "phase": "P03",
+      "selector_symbols": [
+        "provider_data"
+      ],
+      "comparison_literals": [
+        "external_id"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0118",
+      "source_reference_id": "SRC-0212",
+      "source": "backend/open_webui/routers/utils.py",
+      "line": 83,
+      "phase": "P24",
+      "selector_symbols": [
+        "engine",
+        "engine.name"
+      ],
+      "comparison_literals": [
+        "sqlite"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0119",
+      "source_reference_id": "SRC-0236",
+      "source": "backend/open_webui/storage/provider.py",
+      "line": 342,
+      "phase": "P09",
+      "selector_symbols": [
+        "storage_provider"
+      ],
+      "comparison_literals": [
+        "local",
+        "s3"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0120",
+      "source_reference_id": "SRC-0236",
+      "source": "backend/open_webui/storage/provider.py",
+      "line": 347,
+      "phase": "P09",
+      "selector_symbols": [
+        "storage_provider"
+      ],
+      "comparison_literals": [
+        "local"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0121",
+      "source_reference_id": "SRC-0236",
+      "source": "backend/open_webui/storage/provider.py",
+      "line": 349,
+      "phase": "P09",
+      "selector_symbols": [
+        "storage_provider"
+      ],
+      "comparison_literals": [
+        "s3"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0122",
+      "source_reference_id": "SRC-0236",
+      "source": "backend/open_webui/storage/provider.py",
+      "line": 351,
+      "phase": "P09",
+      "selector_symbols": [
+        "storage_provider"
+      ],
+      "comparison_literals": [
+        "gcs"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0123",
+      "source_reference_id": "SRC-0236",
+      "source": "backend/open_webui/storage/provider.py",
+      "line": 353,
+      "phase": "P09",
+      "selector_symbols": [
+        "storage_provider"
+      ],
+      "comparison_literals": [
+        "azure"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0124",
+      "source_reference_id": "SRC-0239",
+      "source": "backend/open_webui/tools/builtin.py",
+      "line": 696,
+      "phase": "P12",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "pyodide"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0125",
+      "source_reference_id": "SRC-0239",
+      "source": "backend/open_webui/tools/builtin.py",
+      "line": 731,
+      "phase": "P12",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "jupyter"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0126",
+      "source_reference_id": "SRC-0271",
+      "source": "backend/open_webui/utils/middleware.py",
+      "line": 2294,
+      "phase": "P00",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "llama.cpp"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0127",
+      "source_reference_id": "SRC-0271",
+      "source": "backend/open_webui/utils/middleware.py",
+      "line": 2762,
+      "phase": "P00",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "jupyter"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0128",
+      "source_reference_id": "SRC-0271",
+      "source": "backend/open_webui/utils/middleware.py",
+      "line": 2776,
+      "phase": "P00",
+      "selector_symbols": [
+        "engine"
+      ],
+      "comparison_literals": [
+        "jupyter"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0129",
+      "source_reference_id": "SRC-0271",
+      "source": "backend/open_webui/utils/middleware.py",
+      "line": 6441,
+      "phase": "P00",
+      "selector_symbols": [
+        "ci_engine"
+      ],
+      "comparison_literals": [
+        "pyodide"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0130",
+      "source_reference_id": "SRC-0271",
+      "source": "backend/open_webui/utils/middleware.py",
+      "line": 6453,
+      "phase": "P00",
+      "selector_symbols": [
+        "ci_engine"
+      ],
+      "comparison_literals": [
+        "jupyter"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0131",
+      "source_reference_id": "SRC-0276",
+      "source": "backend/open_webui/utils/oauth.py",
+      "line": 1369,
+      "phase": "P02",
+      "selector_symbols": [
+        "provider_config"
+      ],
+      "comparison_literals": [
+        "register"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0132",
+      "source_reference_id": "SRC-0276",
+      "source": "backend/open_webui/utils/oauth.py",
+      "line": 1411,
+      "phase": "P02",
+      "selector_symbols": [
+        "session.provider"
+      ],
+      "comparison_literals": [
+        "",
+        "mcp:"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0133",
+      "source_reference_id": "SRC-0276",
+      "source": "backend/open_webui/utils/oauth.py",
+      "line": 1978,
+      "phase": "P02",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "data",
+        "feishu"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0134",
+      "source_reference_id": "SRC-0276",
+      "source": "backend/open_webui/utils/oauth.py",
+      "line": 2006,
+      "phase": "P02",
+      "selector_symbols": [
+        "provider"
+      ],
+      "comparison_literals": [
+        "github"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    },
+    {
+      "id": "DISPATCH-0135",
+      "source_reference_id": "SRC-0276",
+      "source": "backend/open_webui/utils/oauth.py",
+      "line": 2063,
+      "phase": "P02",
+      "selector_symbols": [
+        "provider_oauth",
+        "provider_oauth.get"
+      ],
+      "comparison_literals": [
+        "sub"
+      ],
+      "status": "requires_branch_behavior_review",
+      "closure": "resolve operation/config/auth/positive-negative profiles and add missing runtime obligations"
+    }
+  ]
+}

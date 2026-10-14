@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+
+# Build
+.next/
+dist/
+build/
+out/
+
+# Test
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Local database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Storage / uploads
+storage/
+uploads/
+public/uploads/
+
+# Snapshots & backups
+snapshots/
+backups/
+*.dump
+*.sql.gz
+
+# Secrets & certs
+*.pem
+*.key
+*.p12
+*.pfx
+certificates/
+credentials/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+EOF
+echo ok

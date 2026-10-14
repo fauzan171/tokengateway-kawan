@@ -1,0 +1,103 @@
+{
+  "scope": "Synthetic documentation examples, not credentials or executed requests",
+  "examples": {
+    "server-create": {
+      "schema": "ConnectionCreate",
+      "value": {
+        "name": "Gateway pribadi",
+        "baseUrl": "https://api.tokengateway.ai.id/v1",
+        "isDirect": false,
+        "apiKey": "synthetic-key-not-real"
+      }
+    },
+    "direct-create": {
+      "schema": "ConnectionCreate",
+      "value": {
+        "name": "Gateway browser",
+        "baseUrl": "https://api.tokengateway.ai.id/v1",
+        "isDirect": true
+      }
+    },
+    "replace-key": {
+      "schema": "ConnectionUpdate",
+      "value": {
+        "keyAction": "replace",
+        "isDirect": false,
+        "apiKey": "synthetic-replacement-not-real"
+      }
+    },
+    "start": {
+      "schema": "StartGeneration",
+      "value": {
+        "chatId": "chat-opaque",
+        "expectedRevision": "5",
+        "mutation": {
+          "kind": "append-user",
+          "parentId": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Halo"
+            }
+          ],
+          "fileIds": []
+        },
+        "models": [
+          "gateway/model-a"
+        ],
+        "connectionId": "conn-opaque",
+        "mode": "server",
+        "selectedToolIds": [],
+        "temporary": false
+      }
+    },
+    "delete-reparent": {
+      "schema": "TreeMutationRequest",
+      "value": {
+        "expectedRevision": "8",
+        "mutation": {
+          "kind": "delete-message-reparent",
+          "messageId": "user-old"
+        }
+      }
+    },
+    "delta": {
+      "schema": "RunEvent",
+      "value": {
+        "eventId": "evt-opaque",
+        "generationId": "run-opaque",
+        "seq": "17",
+        "version": 1,
+        "type": "text.delta",
+        "partId": "part-1",
+        "payload": {
+          "delta": "Halo"
+        },
+        "atMs": "1791760000000"
+      }
+    },
+    "safe-view": {
+      "schema": "ConnectionView",
+      "value": {
+        "id": "conn-opaque",
+        "name": "Gateway pribadi",
+        "baseUrl": "https://api.tokengateway.ai.id/v1",
+        "providerKind": "openai-compatible",
+        "isDirect": false,
+        "isActive": true,
+        "keyMask": "sk-...abc1",
+        "hasKey": true,
+        "revision": "1",
+        "lastTest": null
+      }
+    },
+    "tool-approve": {
+      "schema": "ApprovalResponse",
+      "value": {
+        "nonce": "synthetic-nonce",
+        "action": "accepted",
+        "response": {}
+      }
+    }
+  }
+}
