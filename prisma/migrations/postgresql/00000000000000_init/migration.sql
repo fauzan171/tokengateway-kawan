@@ -53,3 +53,23 @@ CREATE TABLE "Session" (
 CREATE UNIQUE INDEX "Session_tokenHash_key" ON "Session"("tokenHash");
 CREATE INDEX "Session_userId_idx" ON "Session"("userId");
 CREATE INDEX "Session_expiresAt_idx" ON "Session"("expiresAt");
+
+CREATE TABLE "Job" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "kind" TEXT NOT NULL,
+    "payloadJson" TEXT NOT NULL,
+    "state" TEXT NOT NULL DEFAULT 'queued',
+    "attempts" INTEGER NOT NULL DEFAULT 0,
+    "maxAttempts" INTEGER NOT NULL DEFAULT 3,
+    "availableAt" TEXT NOT NULL,
+    "leaseOwner" TEXT,
+    "leaseToken" TEXT,
+    "leaseExpiresAt" TEXT,
+    "heartbeatAt" TEXT,
+    "lastError" TEXT,
+    "createdAt" TEXT NOT NULL,
+    "finishedAt" TEXT
+);
+
+CREATE INDEX "Job_state_availableAt_idx" ON "Job"("state", "availableAt");
+CREATE INDEX "Job_leaseExpiresAt_idx" ON "Job"("leaseExpiresAt");

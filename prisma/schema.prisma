@@ -43,6 +43,31 @@ model Credential {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+/// Antrean job berbasis tabel (SDD-8). Tidak ada Redis di v1.
+///
+/// Klaim memakai UPDATE bersyarat `state='queued'`; jumlah baris terpengaruh 0
+/// berarti job sudah diklaim pihak lain. Lease dijaga heartbeat dan boleh
+/// kedaluwarsa, supaya worker yang mati tidak menyandera job.
+model Job {
+  id             String    @id
+  kind           String
+  payloadJson    String
+  state          String    @default("queued") // queued | leased | running | succeeded | failed | cancelled | indeterminate
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  availableAt    DateTime  @default(now())
+  leaseOwner     String?
+  leaseToken     String?
+  leaseExpiresAt DateTime?
+  heartbeatAt    DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  finishedAt     DateTime?
+
+  @@index([state, availableAt])
+  @@index([leaseExpiresAt])
+}
+
 /// Sesi untuk pencabutan. Token mentah tidak pernah disimpan.
 model Session {
   id            String    @id
