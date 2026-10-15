@@ -24,6 +24,9 @@ export type Config = {
   databaseUrl: string;
   /** 32 byte ter-decode, siap dipakai AES-256-GCM. */
   encryptionKey: Buffer;
+  /** Kunci penandatanganan cookie sesi Auth.js. Bukan kunci enkripsi:
+   *  panjang apa pun diterima selama tidak kosong (SDD-5.1). */
+  authSecret: string;
 };
 
 type Env = Record<string, string | undefined>;
@@ -61,6 +64,19 @@ function checkEncryptionSecret(raw: string | undefined, problems: string[]): Buf
   return key;
 }
 
+/** Auth.js menerima string apa pun yang tidak kosong sebagai `AUTH_SECRET`;
+ *  aturan 32 byte hanya berlaku untuk `ENCRYPTION_SECRET`. */
+function checkAuthSecret(raw: string | undefined, problems: string[]): string {
+  const secret = raw?.trim();
+  if (!secret) {
+    problems.push(
+      "AUTH_SECRET wajib diisi: kunci penandatanganan cookie sesi (mis. `openssl rand -base64 32`).",
+    );
+    return "";
+  }
+  return secret;
+}
+
 export function loadConfig(env: Env = process.env): Config {
   const problems: string[] = [];
 
@@ -70,8 +86,9 @@ export function loadConfig(env: Env = process.env): Config {
   }
 
   const encryptionKey = checkEncryptionSecret(env["ENCRYPTION_SECRET"], problems);
+  const authSecret = checkAuthSecret(env["AUTH_SECRET"], problems);
 
   if (problems.length > 0) throw new ConfigError(problems);
 
-  return { databaseUrl: databaseUrl as string, encryptionKey };
+  return { databaseUrl: databaseUrl as string, encryptionKey, authSecret };
 }
