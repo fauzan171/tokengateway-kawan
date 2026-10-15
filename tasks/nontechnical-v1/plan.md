@@ -1,6 +1,6 @@
 # Plan — Kawan (scope nontechnical-v1)
 
-Status: rencana kerja untuk implementer. Aplikasi belum ada; tidak ada work package yang dimulai.
+Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 belum dibuka.
 Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (dipin, bukan `main`).
 
 Dokumen ini menjawab: apa dikerjakan lebih dulu, apa yang bergantung pada apa, mana yang boleh paralel, dan kapan sebuah pekerjaan boleh dimulai atau disebut selesai. Requirement ada di `prd.md`; desain teknis di `sdd.md`; keputusan cakupan di `coverage.md`.
@@ -58,6 +58,8 @@ Aturan dependency: fase tidak dimulai sebelum gate fase sebelumnya lulus, **kecu
 Kolom **Paralel** bernilai `ya` bila paket boleh dikerjakan bersamaan dengan paket lain di fase yang sama tanpa berbagi file inti. Kolom **Dep** berisi ID yang harus selesai lebih dulu.
 
 ### NT-P0 — Fondasi
+
+Status: WP-NT-P0-01 sampai WP-NT-P0-07 selesai; gate NT-P0 lulus pada 2026-10-16 (typecheck, lint, test, build, uji klaim antrean, fixture provider). Bukti per WP ada di laporan mandor, bukan di tabel ini.
 
 | WP | Isi | REQ | SDD | Dep | Paralel | Gate |
 |---|---|---|---|---|---|---|
