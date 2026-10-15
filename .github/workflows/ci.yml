@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Kualitas + migrasi SQLite
+    runs-on: ubuntu-latest
+    env:
+      # Absolut agar tidak bergantung cwd. Provider dipilih dari prefix `file:`
+      # oleh prisma7.config.ts, jadi var ini juga yang memilih schema SQLite.
+      DATABASE_URL: file:${{ github.workspace }}/ci.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # schema.sqlite.prisma gitignored, jadi harus diturunkan dulu sebelum
+      # generate/migrate. Ia turunan dari schema.prisma, bukan file terpisah.
+      - run: node scripts/make-sqlite-schema.mjs
+
+      - name: Cek migrasi identik antar provider
+        run: node scripts/check-migrations.mjs
+
+      - name: Generate klien Prisma (SQLite)
+        run: npx prisma generate
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+      - name: Migrasi SQLite
+        run: npx prisma migrate deploy
+
+  migrate-postgres:
+    name: Migrasi PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kawan
+          POSTGRES_PASSWORD: kawan
+          POSTGRES_DB: kawan
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://kawan:kawan@localhost:5432/kawan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Migrasi PostgreSQL
+        run: npx prisma migrate deploy

@@ -53,5 +53,10 @@ credentials/
 .idea/
 .vscode/*
 !.vscode/extensions.json
-EOF
-echo ok
+
+# Prisma generated client
+/src/generated/prisma
+/src/generated/prisma-sqlite
+
+# Prisma schema turunan (dihasilkan scripts/make-sqlite-schema.mjs)
+/prisma/schema.sqlite.prisma

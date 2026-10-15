@@ -1,0 +1,59 @@
+// Schema sumber kebenaran untuk Kawan.
+//
+// Satu schema, dua provider. Karena `datasource.provider` di Prisma bersifat
+// statis, nilai di bawah menunjuk ke provider PRODUKSI (PostgreSQL); SQLite
+// hanya dipakai untuk dev dan uji. Agar migrasi yang sama jalan di keduanya,
+// seluruh migration.sql ditulis dengan subset SQL portabel (lihat
+// prisma/migrations/*/migration.sql) dan tidak boleh memakai tipe atau
+// konstruksi yang hanya ada di satu provider.
+//
+// Provider yang benar-benar dipakai saat runtime ditentukan DATABASE_URL,
+// bukan oleh baris ini.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Akun pengguna Kawan. Email disimpan sudah lowercase dan ternormalisasi.
+model User {
+  id        String   @id
+  email     String   @unique
+  name      String?
+  role      String   @default("user") // user | admin
+  status    String   @default("pending") // pending | active | disabled
+  createdAt DateTime @default(now())
+
+  credential Credential?
+  sessions   Session[]
+
+  @@index([status])
+}
+
+/// Rahasia kredensial, dipisah dari User mengikuti pola baseline user/auth.
+model Credential {
+  userId       String   @id
+  passwordHash String // Argon2id
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Sesi untuk pencabutan. Token mentah tidak pernah disimpan.
+model Session {
+  id            String    @id
+  userId        String
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  userAgentHash String?
+  revokedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
