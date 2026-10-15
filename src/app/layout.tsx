@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kawan",
+  title: "Kawan — Chat AI by tokengateway.ai.id",
   description: "Chat pribadi dengan kunci API milikmu sendiri.",
 };
 
@@ -24,6 +24,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('kawan-theme');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.style.colorScheme=d?'dark':'light'}catch{}` }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
