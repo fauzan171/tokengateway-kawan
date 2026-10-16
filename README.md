@@ -1,32 +1,91 @@
-# Kawan — paket PRD, planning dan SDD
+# Kawan
 
-Kawan, by [tokengateway.ai.id](https://tokengateway.ai.id), ditargetkan sebagai pembangunan ulang full-feature Open WebUI dengan personal BYOK. Repository ini sekarang berisi **planning/design specifications**, belum implementasi aplikasi.
+Chat AI yang bisa di-self-host, ditujukan untuk pengguna nonteknis, memakai gateway
+[tokengateway.ai.id](https://tokengateway.ai.id). Kunci API milik pengguna sendiri
+(BYOK): default server mode menerima dan menyimpan key terenkripsi lalu meneruskan
+request; Direct key tetap tersimpan di browser saja. Kawan tidak menambahkan billing
+token.
 
-> **Status permintaan terbaru.** Brief terbaru meminta target pengguna nonteknis dengan chat selengkap ChatGPT untuk pemakaian pribadi dan fitur overkill dikecualikan. Paket dokumen untuk brief itu ada di **[tasks/nontechnical-v1/](tasks/nontechnical-v1/README.md)** dan menjadi scope yang direkomendasikan aktif. Paket full-parity di bawah (PRD/SDD/plan/todo/coverage full) tetap tersedia sebagai **referensi alternatif**, bukan requirement default. Paket nontechnical-v1 tidak mengklaim 100% Open WebUI; ia mengklaim 100% untuk scope terpilih yang tercantum di matriks cakupannya.
+Versi saat ini: **fondasi (fase NT-P0)**. Antarmuka, konfigurasi runtime, skema database,
+antrean job berbasis tabel, dan entry point worker sudah ada dan lulus gate NT-P0
+(typecheck, lint, test, build). Fitur chat, koneksi gateway, dan pengiriman pesan belum
+tersedia.
 
-Baseline lokal read-only: `/Users/mekari/tokengateway/open-webui`, commit `f8ae8a6c328946dc62cd0712961a0632574581bf`. Kode/aset/translations/migrations Kawan ditulis sendiri. Scope terbaru mengaktifkan seluruh domain baseline, termasuk fitur yang dikecualikan brief awal.
+Dokumen produk dan desain ada di [`tasks/nontechnical-v1/`](tasks/nontechnical-v1/README.md)
+(PRD, SDD, plan, coverage, execution prompt). Paket full-parity lama di `tasks/prd.md`,
+`tasks/sdd/`, `tasks/plan.md`, `tasks/todo.md` adalah referensi alternatif, bukan scope
+aktif.
 
-## Mulai di sini
+## Menjalankan
 
-**Brief terbaru (nonteknis, scope terpilih): [tasks/nontechnical-v1/](tasks/nontechnical-v1/README.md)** — PRD, SDD, plan, coverage, execution prompt, pemeriksa konsistensi.
+Prasyarat: Node.js 22 atau lebih baru, dan npm.
 
-Paket full-parity (referensi alternatif):
+```bash
+git clone https://github.com/fauzan171/tokengateway-kawan.git
+cd tokengateway-kawan
+npm ci
+```
 
-1. [PRD](tasks/prd.md): produk/semua mandatory requirements.
-2. [SDD engineering index](tasks/sdd/README.md): arsitektur/data/API/state/security/UI/domain/workers/ops/ADRs.
-3. [Plan dan milestones](tasks/plan.md), [backlog](tasks/todo.md).
-4. [Work orders per phase](tasks/sdd/work-orders/README.md) dan [child breakdown/Definition of Ready](tasks/sdd/10-delivery-work-orders.md).
-5. [Prompt pelaksana](tasks/execution-prompt.md): first assignment P00, kemudian task/child yang ditugaskan mandor.
+Siapkan berkas `.env` dari template, lalu isi dua rahasia:
 
-## Kontrak dan evidence
+```bash
+cp .env.example .env
+openssl rand -base64 32   # salin hasilnya ke ENCRYPTION_SECRET
+openssl rand -base64 32   # salin hasilnya ke AUTH_SECRET
+```
 
-- [Core schema contract](tasks/schema-contract.md) dan [reference inventory](tasks/reference/README.md).
-- [Kawan API JSON Schema](tasks/sdd/kawan-api-contracts.json) dan [synthetic examples](tasks/sdd/api-examples.json).
-- [Coverage](tasks/coverage.md), [coverage registry](tasks/coverage.json), [SDD contract registry](tasks/sdd/contract-registry.json).
-- [Acceptance scenarios](tasks/acceptance-scenarios.md), [engineering readiness](tasks/sdd/engineering-readiness.md), [SDD verification](tasks/sdd/sdd-verification.md).
+`DATABASE_URL` di template sudah menunjuk SQLite (`file:./dev.db`), cocok untuk
+pengembangan lokal. Untuk produksi, pakai PostgreSQL dan aktifkan baris
+`postgresql://...` yang sudah dikomentari.
 
-25 phases, 224 parent work packages, 36 starter child slices, 12 numbered SDD chapters, 10 ADRs, 59 typed JSON Schema definitions. Existing inventory: 43 ORM entities/396 fields, 581 API declarations, 421 config keys, 64 locales; runtime contracts belum semuanya diverifikasi.
+Siapkan skema database:
 
-`PROMPT.md` menyimpan brief awal. Branding/security/stack masih berlaku, tetapi exclusion list/Direct optional/urutan MVP digantikan full-parity planning aktif. `tasks/archive/byok-v1/` hanya history. Default server mode menerima dan menyimpan key terenkripsi lalu meneruskan request; Direct key tetap browser-local. Kawan tidak menambahkan billing token.
+```bash
+node scripts/make-sqlite-schema.mjs   # turunkan prisma/schema.sqlite.prisma
+npx prisma generate
+npx prisma migrate deploy
+```
 
-Build/runtime testing dilakukan saat implementasi. Konsistensi dokumen tidak membuktikan aplikasi identik 100%; baseline runtime/schema/defaults/engines/UI evidence harus ditutup sesuai gates. Branding Kawan, key privacy/security, BYOK overlay dan stack/runtime rewrite tetap declared differences.
+Jalankan:
+
+```bash
+npm run dev      # server aplikasi (Next.js) di http://localhost:3000
+npm run worker   # entry point worker, proses terpisah dari image yang sama
+```
+
+Aplikasi gagal start bila `ENCRYPTION_SECRET` atau `AUTH_SECRET` kosong atau tidak
+valid — itu perilaku yang diinginkan (SDD-1.5), bukan bug.
+
+## Perintah
+
+| Perintah | Kegunaan |
+| --- | --- |
+| `npm run dev` | Server pengembangan |
+| `npm run build` | Build produksi |
+| `npm start` | Jalankan hasil build |
+| `npm run worker` | Worker antrean job |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm test` | Unit test (Vitest) |
+| `npm run test:e2e` | End-to-end (Playwright) |
+| `node scripts/check-migrations.mjs` | Pastikan migrasi SQLite dan PostgreSQL identik |
+
+## Struktur singkat
+
+- `src/app/` — antarmuka Next.js App Router.
+- `src/lib/config/` — registry dan validasi konfigurasi runtime.
+- `src/lib/jobs/` — antrean job berbasis tabel dan logika worker. Tidak ada Redis di v1.
+- `src/worker.ts` — entry point worker.
+- `prisma/` — schema dan migrasi (dua provider: SQLite dan PostgreSQL).
+- `tasks/nontechnical-v1/` — PRD, SDD, plan, coverage, execution prompt.
+
+## Kontribusi
+
+Aturan kerja ringkas: satu basis kode, satu image; worker dijalankan sebagai entry point
+berbeda dari image yang sama. Commit memakai daftar path eksplisit, bukan `git add .`.
+Push hanya dilakukan setelah gate fase lulus. Detail peran dan alur ada di
+[`tasks/nontechnical-v1/execution-prompt.md`](tasks/nontechnical-v1/execution-prompt.md).
+
+## Lisensi
+
+Belum ditetapkan. Hubungi pemilik repo sebelum memakai ulang.
