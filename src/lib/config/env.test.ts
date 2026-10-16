@@ -1,6 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { ConfigError, loadConfig } from "./env";
+import {
+  ConfigError,
+  DEFAULT_LOGIN_RATE_LIMIT_MAX,
+  DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+  loadConfig,
+} from "./env";
 
 const SECRET = randomBytes(32).toString("base64");
 const BASE = {
@@ -59,5 +64,41 @@ describe("loadConfig", () => {
     expect(problems.join("\n")).toContain("DATABASE_URL");
     expect(problems.join("\n")).toContain("ENCRYPTION_SECRET");
     expect(problems.join("\n")).toContain("AUTH_SECRET");
+  });
+});
+
+describe("batas rate limit login", () => {
+  it("memakai bawaan aman bila variabel tidak diisi", () => {
+    const cfg = loadConfig(BASE);
+    expect(cfg.loginRateLimitMax).toBe(DEFAULT_LOGIN_RATE_LIMIT_MAX);
+    expect(cfg.loginRateLimitWindowSeconds).toBe(DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS);
+  });
+
+  it("membaca nilai yang diberikan operator", () => {
+    const cfg = loadConfig({
+      ...BASE,
+      LOGIN_RATE_LIMIT_MAX: "10",
+      LOGIN_RATE_LIMIT_WINDOW_SECONDS: "60",
+    });
+    expect(cfg.loginRateLimitMax).toBe(10);
+    expect(cfg.loginRateLimitWindowSeconds).toBe(60);
+  });
+
+  it("memperlakukan nilai kosong sebagai tidak diatur", () => {
+    const cfg = loadConfig({
+      ...BASE,
+      LOGIN_RATE_LIMIT_MAX: "   ",
+      LOGIN_RATE_LIMIT_WINDOW_SECONDS: "",
+    });
+    expect(cfg.loginRateLimitMax).toBe(DEFAULT_LOGIN_RATE_LIMIT_MAX);
+    expect(cfg.loginRateLimitWindowSeconds).toBe(DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS);
+  });
+
+  it("menolak nilai rusak dengan menyebut nama variabel", () => {
+    for (const bad of ["0", "-3", "abc", "1.5", "1e3", "Infinity"]) {
+      const problems = problemsFrom({ ...BASE, LOGIN_RATE_LIMIT_MAX: bad });
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain("LOGIN_RATE_LIMIT_MAX");
+    }
   });
 });

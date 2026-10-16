@@ -73,3 +73,12 @@ CREATE TABLE "Job" (
 
 CREATE INDEX "Job_state_availableAt_idx" ON "Job"("state", "availableAt");
 CREATE INDEX "Job_leaseExpiresAt_idx" ON "Job"("leaseExpiresAt");
+
+CREATE TABLE "LoginAttempt" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "key" TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL
+);
+
+CREATE INDEX "LoginAttempt_key_createdAt_idx" ON "LoginAttempt"("key", "createdAt");
+CREATE INDEX "LoginAttempt_createdAt_idx" ON "LoginAttempt"("createdAt");

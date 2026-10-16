@@ -27,11 +27,19 @@ export type Config = {
   /** Kunci penandatanganan cookie sesi Auth.js. Bukan kunci enkripsi:
    *  panjang apa pun diterima selama tidak kosong (SDD-5.1). */
   authSecret: string;
+  /** Jumlah percobaan login gagal yang diizinkan per jendela (REQ-NT-15). */
+  loginRateLimitMax: number;
+  /** Panjang jendela rate limit login, dalam detik. */
+  loginRateLimitWindowSeconds: number;
 };
 
 type Env = Record<string, string | undefined>;
 
 const KEY_BYTES = 32;
+
+/** Bawaan aman bila operator tidak mengatur apa pun: 5 percobaan per 15 menit. */
+export const DEFAULT_LOGIN_RATE_LIMIT_MAX = 5;
+export const DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
 
 /** Base64 apa adanya. `Buffer.from` membuang karakter asing diam-diam, jadi
  *  hasil decode di-encode ulang dan dibandingkan sebelum dipercaya. */
@@ -77,6 +85,31 @@ function checkAuthSecret(raw: string | undefined, problems: string[]): string {
   return secret;
 }
 
+/** Bilangan bulat positif untuk variabel batas. Kosong → bawaan aman; nilai
+ *  rusak (bukan angka, nol, negatif, pecahan) → masalah, agar salah ketik
+ *  tidak diam-diam melumpuhkan batas. */
+function checkPositiveInt(
+  raw: string | undefined,
+  fallback: number,
+  name: string,
+  problems: string[],
+): number {
+  const trimmed = raw?.trim();
+  if (trimmed === undefined || trimmed === "") return fallback;
+  // `Number` menerima "1e3", " 5 ", "0x10", dan Infinity; regex ini menolaknya
+  // sehingga hanya bilangan bulat desimal positif yang lolos.
+  if (!/^\d+$/.test(trimmed)) {
+    problems.push(`${name} harus bilangan bulat positif, dapat "${trimmed}".`);
+    return fallback;
+  }
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    problems.push(`${name} harus bilangan bulat positif, dapat "${trimmed}".`);
+    return fallback;
+  }
+  return value;
+}
+
 export function loadConfig(env: Env = process.env): Config {
   const problems: string[] = [];
 
@@ -88,7 +121,26 @@ export function loadConfig(env: Env = process.env): Config {
   const encryptionKey = checkEncryptionSecret(env["ENCRYPTION_SECRET"], problems);
   const authSecret = checkAuthSecret(env["AUTH_SECRET"], problems);
 
+  const loginRateLimitMax = checkPositiveInt(
+    env["LOGIN_RATE_LIMIT_MAX"],
+    DEFAULT_LOGIN_RATE_LIMIT_MAX,
+    "LOGIN_RATE_LIMIT_MAX",
+    problems,
+  );
+  const loginRateLimitWindowSeconds = checkPositiveInt(
+    env["LOGIN_RATE_LIMIT_WINDOW_SECONDS"],
+    DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    "LOGIN_RATE_LIMIT_WINDOW_SECONDS",
+    problems,
+  );
+
   if (problems.length > 0) throw new ConfigError(problems);
 
-  return { databaseUrl: databaseUrl as string, encryptionKey, authSecret };
+  return {
+    databaseUrl: databaseUrl as string,
+    encryptionKey,
+    authSecret,
+    loginRateLimitMax,
+    loginRateLimitWindowSeconds,
+  };
 }
