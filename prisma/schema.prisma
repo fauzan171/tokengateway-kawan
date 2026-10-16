@@ -31,6 +31,7 @@ model User {
   credential Credential?
   sessions   Session[]
   passwordResetTokens PasswordResetToken[]
+  chats     Chat[]
 
   @@index([status])
 }
@@ -153,6 +154,137 @@ model ModelCache {
   connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@unique([connectionId])
+}
+
+
+/// Percakapan (REQ-NT-22, SDD-2.2). KONTRAK DIBEKUKAN di awal NT-P3.
+///
+/// `currentMessageId` menunjuk leaf aktif pohon pesan; harus menunjuk pesan yang ada
+/// atau null (SDD-2.4). `modelRef` menyimpan id model yang dipakai chat ini, bukan
+/// global (REQ-NT-19); menghapus koneksi TIDAK menghapus chat (REQ-NT-09).
+model Chat {
+  id               String   @id
+  userId           String
+  title            String
+  modelRef         String?
+  currentMessageId String?
+  pinned           Int      @default(0) // 0 | 1
+  archived         Int      @default(0) // 0 | 1
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+/// Satu pesan dalam pohon (REQ-NT-25, SDD-2.2).
+///
+/// `parentId` membentuk pohon; sibling = cabang alternatif dari parent yang sama.
+/// `seq` memberi urutan stabil dalam satu chat. `contentJson` menyimpan bagian
+/// bertipe agar render tidak menebak.
+model ChatMessage {
+  id          String   @id
+  chatId      String
+  parentId    String?
+  role        String // user | assistant | system
+  contentJson String
+  status      String   @default("complete") // streaming | complete | stopped | error
+  usageJson   String?
+  seq         Int
+  createdAt   DateTime @default(now())
+
+  chat       Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  parts      ChatMessagePart[]
+  generation Generation?
+
+  @@index([chatId, seq])
+  @@index([chatId, parentId])
+}
+
+/// Bagian bertipe dari satu pesan (SDD-2.2): text | tool | image | citation.
+model ChatMessagePart {
+  id          String @id
+  messageId   String
+  kind        String
+  payloadJson String
+  ordinal     Int
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, ordinal])
+}
+
+/// Generasi = pekerjaan berdurasi, bukan milik koneksi HTTP (SDD-4.1).
+///
+/// State: queued | preparing | streaming | complete | stopped | error | indeterminate.
+/// `indeterminate` TIDAK diulang otomatis — UI menawarkan coba lagi manual, supaya
+/// tidak menggandakan permintaan berbayar (SDD-4.2).
+model Generation {
+  id                String    @id
+  chatId            String
+  userMessageId     String
+  assistantMessageId String
+  jobId             String?
+  status            String    @default("queued")
+  cancelRequestedAt DateTime?
+  errorCode         String?
+  finishReason      String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  assistantMessage ChatMessage       @relation(fields: [assistantMessageId], references: [id], onDelete: Cascade)
+  events           GenerationEvent[]
+
+  @@index([chatId, createdAt])
+  @@index([status])
+}
+
+/// Buffer event SSE untuk pemutaran ulang setelah koneksi putus (SDD-4.5).
+/// `seq` monoton per generasi; klien menyambung ulang dengan afterSeq=lastSeq.
+model GenerationEvent {
+  id           String   @id
+  generationId String
+  seq          Int
+  kind         String // meta | part | usage | done | error
+  payloadJson  String
+  createdAt    DateTime @default(now())
+
+  generation Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
+
+  @@unique([generationId, seq])
+}
+
+/// Catatan pemakaian token (REQ-NT-71, SDD-2.2).
+/// `reported` = 0 bila gateway tidak melaporkan usage — jangan diisi angka karangan.
+model UsageRecord {
+  id               String   @id
+  userId           String
+  chatId           String?
+  model            String
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  reported         Int      @default(1) // 0 | 1
+  createdAt        DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Kunci idempotensi untuk POST pesan (SDD-4.7).
+/// Kunci sama + digest sama → hasil sama; digest berbeda → 409. Unik per pengguna.
+model IdempotencyKey {
+  id           String   @id
+  userId       String
+  key          String
+  digest       String
+  responseJson String
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
 }
 
 /// Sesi untuk pencabutan. Token mentah tidak pernah disimpan.
