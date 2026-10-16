@@ -127,6 +127,28 @@ describe("createStreamParser", () => {
     expect(texts(parser.push(bytes(stream)))).toBe("");
     expect(texts(parser.flush())).toBe("akhir tanpa pemisah");
   });
+
+  it("meneruskan finish_reason dari gateway pada delta done", () => {
+    const p = createStreamParser();
+    const frame =
+      "data: " +
+      JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }) +
+      "\n\ndata: [DONE]\n\n";
+    const deltas = p.push(new TextEncoder().encode(frame));
+    const done = deltas.find((d) => d.kind === "done");
+    expect(done?.finishReason).toBe("stop");
+  });
+
+  it("finish_reason tanpa [DONE] tetap dilaporkan saat flush", () => {
+    const p = createStreamParser();
+    const frame =
+      "data: " +
+      JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "length" }] }) +
+      "\n\n";
+    p.push(new TextEncoder().encode(frame));
+    const done = p.flush().find((d) => d.kind === "done");
+    expect(done?.finishReason).toBe("length");
+  });
 });
 
 /** Indeks byte pertama `needle` di `haystack`; -1 bila tidak ada. */

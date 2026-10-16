@@ -174,8 +174,8 @@ async function streamGateway(input: {
   body: unknown;
   outbound: OutboundPolicyOptions;
   signal: AbortSignal;
-  onDelta: (delta: { kind: string; text?: string; usage?: StreamUsage }) => Promise<void>;
-}): Promise<{ usage: StreamUsage | null }> {
+  onDelta: (delta: { kind: string; text?: string; usage?: StreamUsage; finishReason?: string | null }) => Promise<void>;
+}): Promise<{ usage: StreamUsage | null; finishReason: string | null }> {
   // Validasi alamat keluar dulu (SSRF, SDD-5.3) — `fetch` langsung tetap harus
   // melewatinya, sama seperti `fetchJson`.
   let url: URL;
@@ -222,6 +222,7 @@ async function streamGateway(input: {
   const reader = response.body.getReader();
   let usage: StreamUsage | null = null;
   let sawDone = false;
+  let finishReason: string | null = null;
 
   try {
     for (;;) {
@@ -230,6 +231,7 @@ async function streamGateway(input: {
       for (const delta of parser.push(value)) {
         if (delta.kind === "done") {
           sawDone = true;
+          finishReason = delta.finishReason ?? null;
           break;
         }
         if (delta.kind === "usage" && delta.usage) usage = delta.usage;
@@ -239,7 +241,10 @@ async function streamGateway(input: {
     }
     if (!sawDone) {
       for (const delta of parser.flush()) {
-        if (delta.kind === "done") break;
+        if (delta.kind === "done") {
+          finishReason = delta.finishReason ?? null;
+          break;
+        }
         if (delta.kind === "usage" && delta.usage) usage = delta.usage;
         await input.onDelta(delta);
       }
@@ -251,7 +256,7 @@ async function streamGateway(input: {
     reader.cancel().catch(() => {});
   }
 
-  return { usage };
+  return { usage, finishReason };
 }
 
 /**
@@ -402,8 +407,9 @@ export async function runGeneration(
   let ordinal = 0;
 
   let usage: StreamUsage | null;
+  let finishReason: string | null;
   try {
-    ({ usage } = await streamGateway({
+    ({ usage, finishReason } = await streamGateway({
       url: `${baseUrl.replace(/\/+$/, "")}${CHAT_COMPLETIONS_PATH}`,
       apiKey,
       body: { model, messages, stream: true },
@@ -456,10 +462,10 @@ export async function runGeneration(
       ...(usage ? { usageJson: JSON.stringify(usage) } : {}),
     },
   });
-  await publishEvent(db, generationId, "done", { status: "complete", finishReason: null });
+  await publishEvent(db, generationId, "done", { status: "complete", finishReason });
   await db.generation.update({
     where: { id: generationId },
-    data: { status: "complete", finishedAt: now },
+    data: { status: "complete", finishedAt: now, finishReason },
   });
 
   await recordUsage(db, {

@@ -25,6 +25,8 @@ export type Delta = {
   kind: "text" | "usage" | "done";
   text?: string;
   usage?: StreamUsage;
+  /** Alasan berhenti dari gateway, bila dikirim. Terisi pada delta `done`. */
+  finishReason?: string | null;
 };
 
 export type StreamParser = {
@@ -67,10 +69,27 @@ function readUsage(payload: Record<string, unknown>): StreamUsage | null {
   };
 }
 
+/**
+ * `finish_reason` dari pilihan pertama, atau `undefined` bila belum ada.
+ *
+ * `undefined` berarti "belum berhenti" (delta tengah), `null` berarti gateway
+ * menyatakan berhenti tanpa alasan. Keduanya berbeda, jadi jangan disamakan.
+ */
+function readFinishReason(payload: Record<string, unknown>): string | null | undefined {
+  const choices = payload["choices"];
+  if (!Array.isArray(choices) || choices.length === 0) return undefined;
+  const first = choices[0];
+  if (!isRecord(first) || !("finish_reason" in first)) return undefined;
+  const reason = first["finish_reason"];
+  return typeof reason === "string" ? reason : null;
+}
+
 export function createStreamParser(): StreamParser {
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
   let done = false;
+  /** Diisi saat gateway menyatakan alasan berhenti; dibawa ke delta `done`. */
+  let finishReason: string | null = null;
 
   function handleFrame(frame: string, out: Delta[]): void {
     // Satu bingkai bisa memuat beberapa baris `data:`; masing-masing diproses
@@ -81,7 +100,7 @@ export function createStreamParser(): StreamParser {
       if (data.startsWith(" ")) data = data.slice(1);
 
       if (data === DONE_MARKER) {
-        out.push({ kind: "done" });
+        out.push({ kind: "done", finishReason });
         done = true;
         return;
       }
@@ -99,6 +118,12 @@ export function createStreamParser(): StreamParser {
 
       const usage = readUsage(payload);
       if (usage) out.push({ kind: "usage", usage });
+
+      // `finish_reason` datang di delta terakhir, SEBELUM penanda `[DONE]`.
+      // Disimpan dulu, bukan langsung menutup: menutup di sini akan melewatkan
+      // sisa bingkai dan membuat penanganan `[DONE]` tidak pernah terpakai.
+      const reason = readFinishReason(payload);
+      if (reason !== undefined) finishReason = reason;
     }
   }
 
@@ -125,6 +150,13 @@ export function createStreamParser(): StreamParser {
       const frame = buffer;
       buffer = "";
       handleFrame(frame, out);
+    }
+
+    // Stream berakhir tanpa penanda `[DONE]` tetapi gateway sempat menyatakan
+    // alasan berhenti: tetap laporkan supaya klien tahu kenapa berhenti.
+    if (final && !done && finishReason !== null) {
+      out.push({ kind: "done", finishReason });
+      done = true;
     }
     return out;
   }
