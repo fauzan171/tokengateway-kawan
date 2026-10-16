@@ -41,6 +41,12 @@ function buildAuthConfig(config: ReturnType<typeof loadConfig>): AuthConfig {
 
   return {
     secret: config.authSecret,
+    // Kawan di-self-host di domain/IP apa pun, jadi host tidak bisa di-hardcode.
+    // Tanpa ini Auth.js menolak setiap permintaan dengan `UntrustedHost` (500)
+    // kecuali berjalan di Vercel. Kepercayaan host aman di sini karena aplikasi
+    // memang dimaksudkan berjalan di belakang reverse proxy operator sendiri;
+    // operator yang butuh pembatasan dapat memakai `AUTH_URL`/`AUTH_TRUST_HOST`.
+    trustHost: true,
     session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_S },
     // Tidak ada halaman login di WP ini; WP-NT-P1-03 yang menambahkannya.
     pages: { signIn: "/masuk" },

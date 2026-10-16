@@ -1,6 +1,6 @@
 # Plan — Kawan (scope nontechnical-v1)
 
-Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 belum dibuka.
+Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 sedang dikerjakan (WP-NT-P1-01 selesai).
 Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (dipin, bukan `main`).
 
 Dokumen ini menjawab: apa dikerjakan lebih dulu, apa yang bergantung pada apa, mana yang boleh paralel, dan kapan sebuah pekerjaan boleh dimulai atau disebut selesai. Requirement ada di `prd.md`; desain teknis di `sdd.md`; keputusan cakupan di `coverage.md`.
@@ -74,6 +74,8 @@ Status: WP-NT-P0-01 sampai WP-NT-P0-07 selesai; gate NT-P0 lulus pada 2026-10-16
 **Gate NT-P0:** `build` lulus; migrasi jalan di dua provider; worker dapat mengklaim dan menyelesaikan job tiruan; fixture provider tersedia.
 
 ### NT-P1 — Auth dan akun dasar
+
+Status: WP-NT-P1-01 selesai dan gate paketnya lulus pada 2026-10-16 (typecheck, lint, 74 test, build, ditambah verifikasi runtime endpoint auth dan cookie `HttpOnly`/`SameSite=Lax`). WP-NT-P1-02 sampai WP-NT-P1-06 belum dimulai. Bukti per WP ada di laporan mandor, bukan di tabel ini.
 
 | WP | Isi | REQ | SDD | Dep | Paralel | Gate |
 |---|---|---|---|---|---|---|
