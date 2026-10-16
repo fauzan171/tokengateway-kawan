@@ -18,7 +18,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
-import { enqueue } from "@/lib/jobs/queue";
+import { startGeneration } from "./start-generation";
 import { CHAT_FIELDS, toPublicChat, type ChatRow, type PublicChat } from "./chats";
 
 const CONTENT_MAX = 100_000;
@@ -223,9 +223,6 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
         const baseSeq = last?.seq ?? 0;
 
         const userMessageId = `msg_${randomUUID()}`;
-        const assistantMessageId = `msg_${randomUUID()}`;
-        const generationId = `gen_${randomUUID()}`;
-        const jobId = `job_${randomUUID()}`;
         const contentJson = JSON.stringify({ parts: [{ kind: "text", text: content }] });
 
         await tx.chatMessage.create({
@@ -248,43 +245,13 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
             payloadJson: JSON.stringify({ text: content }),
           },
         });
-        await tx.chatMessage.create({
-          data: {
-            id: assistantMessageId,
-            chatId: input.chatId,
-            parentId: userMessageId,
-            role: "assistant",
-            contentJson: JSON.stringify({ parts: [] }),
-            status: "streaming",
-            seq: baseSeq + 2,
-          },
-        });
-        await tx.generation.create({
-          data: {
-            id: generationId,
-            chatId: input.chatId,
-            userMessageId,
-            assistantMessageId,
-            jobId,
-            status: "queued",
-          },
-        });
-        // Job dibuat di dalam transaksi yang sama (SDD-4.3 butir 1); worker
-        // tidak dapat melihat baris ini sebelum commit, jadi tidak ada balapan.
-        await enqueue(tx as unknown as Db, {
-          id: jobId,
-          kind: "chat.generate",
-          payload: { generationId },
-        });
-
-        await tx.chat.update({
-          where: { id: input.chatId },
-          data: {
-            currentMessageId: assistantMessageId,
-            updatedAt: new Date(),
-            ...(model !== null ? { modelRef: model } : {}),
-          },
-        });
+        // Placeholder assistant, Generation, dan Job dibuat oleh primitif bersama
+        // supaya regenerate/edit/continue memakai jalur yang sama persis, bukan
+        // tiga salinan yang menyimpang.
+        const { assistantMessageId, generationId } = await startGeneration(
+          tx as unknown as Db,
+          { chatId: input.chatId, userMessageId, parentId: userMessageId, model },
+        );
 
         const response: SendMessageResult = { userMessageId, assistantMessageId, generationId };
         if (idempotencyKey) {
