@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
 import { Menu, MessageCircle, Plus, Settings, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,10 +9,35 @@ import { Button } from "@/components/ui/button";
 type Theme = "system" | "light" | "dark";
 
 export default function Home() {
+  const router = useRouter();
   const [section, setSection] = useState("chat");
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const heading = useRef<HTMLHeadingElement>(null);
+
+  /**
+   * Pengalihan onboarding (REQ-NT-01): pengguna yang sudah masuk tetapi belum
+   * punya koneksi aktif diarahkan ke `/onboarding`. Pemeriksaan dilakukan di
+   * klien lewat endpoint yang sudah ada — tanpa menyentuh berkas server lain.
+   * Belum masuk (401) atau jaringan gagal dibiarkan: beranda tetap tampil.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const response = await fetch("/api/kawan/v1/connections", { signal: controller.signal });
+        if (!response.ok) return;
+        const payload = (await response.json().catch(() => null)) as
+          | { connections?: { isActive?: boolean }[] }
+          | null;
+        const hasActive = payload?.connections?.some((item) => item.isActive === true) ?? false;
+        if (!hasActive) router.replace("/onboarding");
+      } catch {
+        /* Dibiarkan: beranda tetap tampil bila pemeriksaan tidak dapat dijalankan. */
+      }
+    })();
+    return () => controller.abort();
+  }, [router]);
 
   useEffect(() => {
     try {
