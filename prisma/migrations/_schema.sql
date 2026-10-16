@@ -82,3 +82,17 @@ CREATE TABLE "LoginAttempt" (
 
 CREATE INDEX "LoginAttempt_key_createdAt_idx" ON "LoginAttempt"("key", "createdAt");
 CREATE INDEX "LoginAttempt_createdAt_idx" ON "LoginAttempt"("createdAt");
+
+CREATE TABLE "PasswordResetToken" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TEXT NOT NULL,
+    "usedAt" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "PasswordResetToken_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "PasswordResetToken_tokenHash_key" ON "PasswordResetToken"("tokenHash");
+CREATE INDEX "PasswordResetToken_userId_createdAt_idx" ON "PasswordResetToken"("userId", "createdAt");

@@ -18,10 +18,10 @@ Bukti per WP ada di dokumen ini, bukan di `plan.md` — sesuai aturan paket doku
 | WP-NT-P1-03 | selesai | `/masuk` 200, `/daftar` 200, branding tampil, E2E daftar→masuk lulus |
 | WP-NT-P1-04 | selesai | 5 percobaan gagal tercatat di tabel; percobaan ke-6 dengan sandi BENAR ditolak |
 | WP-NT-P1-05 | selesai | Dua sesi; setelah ganti sandi sesi B dicabut, sesi A tetap hidup |
-| WP-NT-P1-06 | **belum** | Belum dikerjakan |
+| WP-NT-P1-06 | selesai | Token dipakai 2× ditolak; token kedaluwarsa ditolak tanpa mengubah sandi; kedua sesi dicabut setelah reset |
 
-Gate paket (typecheck, lint, test, build, `check-migrations`) lulus.
-Gate NT-P1 **belum dibuka** karena WP-NT-P1-06 belum dikerjakan.
+Gate paket (typecheck, lint, test, build, `check-migrations`, `check_docs`) lulus.
+**Gate NT-P1 LULUS** — keenam WP selesai.
 
 ---
 
@@ -179,15 +179,43 @@ menyediakan antarmukanya.
 disertai keterangan siapa yang menyambungkan modul ke titik pakainya, atau
 tugasnya akan menghasilkan modul yatim.
 
+### 6. Instruksi mandor salah soal migrasi (WP-NT-P1-06)
+
+Brief pertama P1-06 melarang worker menyentuh migrasi init dan menyuruhnya
+membuat direktori migrasi baru, dengan alasan "migrasi yang sudah dirilis tidak
+boleh diubah". Worker **berhenti dan melaporkan** konflik tanpa menulis satu
+baris pun — dan laporannya benar.
+
+Faktanya `scripts/check-migrations.mjs` baris 85 memakai `if (sql !== reference)`:
+setiap `migration.sql` harus byte-identik dengan `_schema.sql` yang berisi skema
+**lengkap**. Direktori migrasi baru mustahil lulus. Konvensi repo ini memang
+**squash**, dan itu disengaja — commit `58f284c` menambahkan tabel `Job` dengan
+cara menambahkan ke migrasi init, dan tabel `LoginAttempt` juga begitu.
+
+Asumsi "sudah dirilis" juga keliru: repo punya 0 tag, PostgreSQL belum dipakai,
+dan `dev.db` adalah data uji yang di-ignore git.
+
+Biaya kesalahan ini: 514 detik dan $13,88 untuk satu worker yang membaca lalu
+berhenti. Itu **harga instruksi stop-and-report yang bekerja** — dia menangkap
+kesalahan mandor sebelum ada kerusakan.
+
+**Pelajaran:** brief yang melarang menyentuh berkas adalah klaim tentang repo.
+Periksa dulu, jangan salin praktik umum.
+
+**Konsekuensi yang harus ditinjau sebelum rilis pertama:** karena konvensi
+squash, database yang sudah ada tidak mendapat tabel baru saat migrasi init
+berubah. Selama pengembangan `dev.db` cukup dibangun ulang. Begitu ada
+deployment nyata (PostgreSQL produksi), konvensi ini harus diganti dengan
+migrasi tambahan — dan `check-migrations.mjs` ikut disesuaikan.
+
 ---
 
 ## Batas yang jujur
 
-- **WP-NT-P1-06 (reset sandi) belum dikerjakan.** Gate NT-P1 belum dibuka.
-- Uji E2E mengosongkan tabel `dev.db` sebelum berjalan. Itu disengaja dan
-  dicetak sebagai peringatan; jangan dijalankan pada database yang berisi data
-  sungguhan.
-- `npm test` hanya mencakup unit test. Cakupan E2E ada di `scripts/e2e_kawan.py`
-  yang dijalankan terpisah.
-- `dev.db` dipakai untuk menjalankan Kawan di VPS ini (`pm2 kawan`, port 3010).
-  Ini lingkungan pengembangan, bukan produksi: PostgreSQL belum dipakai.
+- **Fase NT-P1 selesai; gate NT-P1 lulus.** Fase berikutnya (NT-P2, koneksi gateway) **belum dibuka** — menunggu perintah pemilik produk.
+- **Pengiriman email belum ada.** REQ-NT-16 dipenuhi dengan cara yang diminta untuk mode tanpa email: tautan reset ditulis ke log admin dan UI menjelaskan keadaan itu. Bila operator mengkonfigurasi SMTP, rute hanya menulis peringatan bahwa pengirim belum dibangun — **tidak** ada email yang benar-benar terkirim.
+- Uji E2E mengosongkan tabel `dev.db` sebelum berjalan. Itu disengaja dan dicetak sebagai peringatan; jangan dijalankan pada database yang berisi data sungguhan.
+- `npm test` hanya mencakup unit test. Cakupan E2E ada di `scripts/e2e_kawan.py` yang dijalankan terpisah.
+- `dev.db` dipakai untuk menjalankan Kawan di VPS ini (`pm2 kawan`, port 3010). Ini lingkungan pengembangan, bukan produksi: PostgreSQL belum dipakai.
+- Konsekuensi konvensi migrasi squash (lihat cacat #6): database yang sudah ada tidak mendapat tabel baru; `dev.db` harus dibangun ulang. **Harus ditinjau sebelum rilis pertama.**
+- Worker P1-06 kena batas `--max-turns 100` tepat sebelum menulis laporan, sehingga laporannya kosong (exit code 1, `passed_worker_exit`). Verifikasi mandor yang menentukan: keenam gate dijalankan ulang dan lulus, dan 16 berkas hasilnya diperiksa satu per satu. Tidak ada kerusakan, tetapi **batas turn untuk tugas sebesar ini sebaiknya dinaikkan**.

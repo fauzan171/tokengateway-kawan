@@ -30,6 +30,7 @@ model User {
 
   credential Credential?
   sessions   Session[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([status])
 }
@@ -82,6 +83,25 @@ model LoginAttempt {
 
   @@index([key, createdAt])
   @@index([createdAt])
+}
+
+/// Token reset kata sandi sekali pakai (REQ-NT-16, SDD-5.1).
+///
+/// Yang disimpan hanya SHA-256 dari token acak; token mentah dikembalikan
+/// sekali ke pemanggil dan tidak pernah ditulis ke database. Pemakaian kedua
+/// ditolak lewat `usedAt`, dan kedaluwarsa dihitung dari `expiresAt` di DATA,
+/// bukan dari timer proses. Masa berlaku diatur env (lihat `env.ts`).
+model PasswordResetToken {
+  id        String    @id
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 /// Sesi untuk pencabutan. Token mentah tidak pernah disimpan.

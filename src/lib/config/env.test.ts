@@ -4,6 +4,7 @@ import {
   ConfigError,
   DEFAULT_LOGIN_RATE_LIMIT_MAX,
   DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+  DEFAULT_PASSWORD_RESET_TTL_SECONDS,
   loadConfig,
 } from "./env";
 
@@ -100,5 +101,32 @@ describe("batas rate limit login", () => {
       expect(problems).toHaveLength(1);
       expect(problems[0]).toContain("LOGIN_RATE_LIMIT_MAX");
     }
+  });
+});
+
+describe("konfigurasi reset kata sandi (REQ-NT-16)", () => {
+  it("TTL reset memakai bawaan 60 menit bila tidak diisi", () => {
+    expect(loadConfig(BASE).passwordResetTtlSeconds).toBe(DEFAULT_PASSWORD_RESET_TTL_SECONDS);
+  });
+
+  it("TTL reset dapat diatur operator dan menolak nilai rusak", () => {
+    expect(loadConfig({ ...BASE, PASSWORD_RESET_TTL_SECONDS: "900" }).passwordResetTtlSeconds).toBe(
+      900,
+    );
+    const problems = problemsFrom({ ...BASE, PASSWORD_RESET_TTL_SECONDS: "0" });
+    expect(problems[0]).toContain("PASSWORD_RESET_TTL_SECONDS");
+  });
+
+  it("email dianggap BELUM dikonfigurasi bila tidak ada variabel terkait", () => {
+    expect(loadConfig(BASE).emailConfigured).toBe(false);
+  });
+
+  it("email dianggap terkonfigurasi bila salah satu variabel diisi", () => {
+    expect(loadConfig({ ...BASE, KAWAN_SMTP_URL: "smtp://contoh.test" }).emailConfigured).toBe(true);
+    expect(loadConfig({ ...BASE, SMTP_HOST: "smtp.contoh.test" }).emailConfigured).toBe(true);
+  });
+
+  it("variabel email berisi spasi saja tidak dihitung terkonfigurasi", () => {
+    expect(loadConfig({ ...BASE, SMTP_HOST: "   " }).emailConfigured).toBe(false);
   });
 });

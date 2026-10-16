@@ -322,6 +322,17 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
           </Button>
         </form>
 
+        {mode === "login" ? (
+          <p className="mt-4 text-sm">
+            <Link
+              href="/lupa-sandi"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              Lupa kata sandi?
+            </Link>
+          </p>
+        ) : null}
+
         <p className="mt-6 text-sm text-muted-foreground">
           {mode === "login" ? (
             <>

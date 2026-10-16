@@ -75,7 +75,7 @@ Status: WP-NT-P0-01 sampai WP-NT-P0-07 selesai; gate NT-P0 lulus pada 2026-10-16
 
 ### NT-P1 — Auth dan akun dasar
 
-Status: WP-NT-P1-01 sampai WP-NT-P1-05 selesai dan gate paketnya lulus pada 2026-10-16 (typecheck, lint, 127 test, build, `check-migrations` dua provider, ditambah uji E2E mandor `scripts/e2e_kawan.py` 33/33 terhadap server produksi yang berjalan). WP-NT-P1-06 (reset sandi) belum dikerjakan, sehingga gate NT-P1 belum dibuka. Bukti per WP ada di laporan mandor, bukan di tabel ini.
+Status: **fase NT-P1 SELESAI** — WP-NT-P1-01 sampai WP-NT-P1-06 selesai dan gate paketnya lulus pada 2026-10-16 (typecheck, lint, 156 test, build, `check-migrations` dua provider, `check_docs`, ditambah uji E2E mandor `scripts/e2e_kawan.py` 33/33 dan uji alur reset lewat HTTP). Bukti per WP ada di laporan mandor (`reports/nt-p1.md`), bukan di tabel ini.
 
 | WP | Isi | REQ | SDD | Dep | Paralel | Gate | Status |
 |---|---|---|---|---|---|---|---|
@@ -84,13 +84,15 @@ Status: WP-NT-P1-01 sampai WP-NT-P1-05 selesai dan gate paketnya lulus pada 2026
 | WP-NT-P1-03 | Halaman masuk/daftar + validasi + pesan generik + atribusi branding | REQ-NT-11, SDD-7.6 | SDD-7.2 | P1-01 | ya | E2E daftar→masuk | selesai |
 | WP-NT-P1-04 | Rate limit login berbasis DB | REQ-NT-15 | SDD-5.1 | P1-01 | ya | Percobaan ke-N+1 ditolak (Auth.js selalu 302; bukti dari ada-tidaknya sesi, bukan kode status) | selesai |
 | WP-NT-P1-05 | Ganti sandi + ganti nama; pencabutan sesi lain | REQ-NT-14 | SDD-5.1 | P1-01 | ya | Sesi lain invalid setelah ganti sandi | selesai |
-| WP-NT-P1-06 | Reset sandi token sekali pakai (mode tanpa SMTP: tautan ke admin) | REQ-NT-16 | SDD-5.1 | P1-01 | ya | Token sekali pakai; kedaluwarsa ditolak | belum |
+| WP-NT-P1-06 | Reset sandi token sekali pakai (mode tanpa SMTP: tautan ke admin) | REQ-NT-16 | SDD-5.1 | P1-01 | ya | Token sekali pakai; kedaluwarsa ditolak | selesai |
 
-**Gate NT-P1:** alur daftar→masuk→logout lulus E2E; admin pertama terbukti atomik; cookie HttpOnly/SameSite terverifikasi. **Belum dibuka:** menunggu WP-NT-P1-06.
+**Gate NT-P1:** alur daftar→masuk→logout lulus E2E; admin pertama terbukti atomik; cookie HttpOnly/SameSite terverifikasi. **LULUS** — keenam WP selesai.
 
 Catatan verifikasi WP-NT-P1-04: batas bawaan 5 percobaan / 15 menit. Setelah batas terlampaui, kata sandi yang BENAR pun ditolak selama jendela berjalan — itu perilaku yang diminta, dan diuji lewat ketiadaan sesi karena Auth.js tidak pernah mengembalikan 429 di jalur `credentials`. Hitungan disimpan di tabel `LoginAttempt`, dibuktikan dengan membacanya dari koneksi database terpisah.
 
 Catatan verifikasi WP-NT-P1-05: `POST /api/account/password` mengambil token sesi dengan mendekode cookie HttpOnly di sisi server, bukan dengan menaruh `sid` di objek sesi — objek sesi ikut terkirim ke peramban lewat `/api/auth/session`, sehingga token mentah di sana akan terbaca JavaScript. Halaman `/pengaturan` disediakan sebagai antarmuka.
+
+Catatan verifikasi WP-NT-P1-06: tabel `PasswordResetToken` mengikuti konvensi **squash** repo (ditambahkan ke `_schema.sql` dan kedua salinan init), karena `check-migrations.mjs` menuntut setiap `migration.sql` identik dengan `_schema.sql` sehingga direktori migrasi baru tidak mungkin lulus. Konsekuensinya: `dev.db` yang sudah ada tidak mendapat tabel baru dan harus dibangun ulang (`rm dev.db && npx prisma migrate deploy --config prisma7.config.ts`). Aman selama belum ada deployment produksi (0 tag, PostgreSQL belum dipakai); **konsekuensi ini harus ditinjau ulang sebelum rilis pertama**. Tiga klaim inti diuji mandor lewat HTTP pada server yang berjalan: token dipakai dua kali ditolak, token kedaluwarsa ditolak tanpa mengubah sandi, dan kedua sesi pengguna dicabut setelah reset berhasil.
 
 ### NT-P2 — Koneksi gateway dan model
 

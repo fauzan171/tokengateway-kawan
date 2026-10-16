@@ -31,6 +31,19 @@ export type Config = {
   loginRateLimitMax: number;
   /** Panjang jendela rate limit login, dalam detik. */
   loginRateLimitWindowSeconds: number;
+  /** Masa berlaku tautan reset kata sandi, dalam detik (REQ-NT-16). */
+  passwordResetTtlSeconds: number;
+  /**
+   * Penanda apakah operator sudah mengonfigurasi email (REQ-NT-16, SDD-1.5).
+   *
+   * PENGIRIMAN EMAIL BELUM DIBANGUN DI v1: tidak ada kode yang mengirim pesan
+   * apa pun. Penanda ini hanya memberi tahu UI dan log bahwa operator berniat
+   * memakai email, sehingga alur reset bisa memilih cara menyampaikan tautan.
+   * Saat `false`, tautan ditulis ke log admin supaya operator dapat
+   * meneruskannya; UI mengatakan keadaan itu apa adanya, tanpa menjanjikan
+   * email terkirim.
+   */
+  emailConfigured: boolean;
 };
 
 type Env = Record<string, string | undefined>;
@@ -40,6 +53,18 @@ const KEY_BYTES = 32;
 /** Bawaan aman bila operator tidak mengatur apa pun: 5 percobaan per 15 menit. */
 export const DEFAULT_LOGIN_RATE_LIMIT_MAX = 5;
 export const DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
+
+/** Bawaan masa berlaku tautan reset: 60 menit. */
+export const DEFAULT_PASSWORD_RESET_TTL_SECONDS = 60 * 60;
+
+/**
+ * Variabel yang menandai email sudah dikonfigurasi operator (SDD-1.5).
+ *
+ * v1 belum punya pengirim email, jadi tidak ada variabel yang benar-benar
+ * dipakai untuk mengirim. Daftar ini hanya mengenali niat operator lewat nama
+ * variabel yang lazim, supaya alur reset bisa memilih cara menyampaikan tautan.
+ */
+const EMAIL_ENV_NAMES = ["KAWAN_SMTP_URL", "SMTP_HOST"] as const;
 
 /** Base64 apa adanya. `Buffer.from` membuang karakter asing diam-diam, jadi
  *  hasil decode di-encode ulang dan dibandingkan sebelum dipercaya. */
@@ -134,6 +159,18 @@ export function loadConfig(env: Env = process.env): Config {
     problems,
   );
 
+  const passwordResetTtlSeconds = checkPositiveInt(
+    env["PASSWORD_RESET_TTL_SECONDS"],
+    DEFAULT_PASSWORD_RESET_TTL_SECONDS,
+    "PASSWORD_RESET_TTL_SECONDS",
+    problems,
+  );
+
+  // Salah satu variabel email terisi (tidak hanya spasi) = operator sudah
+  // mengonfigurasi email. Tidak ada validasi lebih jauh karena v1 belum
+  // menghubungi server mana pun.
+  const emailConfigured = EMAIL_ENV_NAMES.some((name) => (env[name] ?? "").trim() !== "");
+
   if (problems.length > 0) throw new ConfigError(problems);
 
   return {
@@ -142,5 +179,7 @@ export function loadConfig(env: Env = process.env): Config {
     authSecret,
     loginRateLimitMax,
     loginRateLimitWindowSeconds,
+    passwordResetTtlSeconds,
+    emailConfigured,
   };
 }
