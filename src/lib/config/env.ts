@@ -24,6 +24,14 @@ export type Config = {
   databaseUrl: string;
   /** 32 byte ter-decode, siap dipakai AES-256-GCM. */
   encryptionKey: Buffer;
+  /**
+   * ID kunci untuk envelope dan rotasi (SDD-5.2).
+   *
+   * Envelope menyimpan keyId ini, sehingga ciphertext lama tetap terbaca
+   * setelah kunci berganti. Rotasi menambah keyId baru lalu pensiunkan yang
+   * lama — lihat `src/lib/secrets/README.md`.
+   */
+  encryptionKeyId: string;
   /** Kunci penandatanganan cookie sesi Auth.js. Bukan kunci enkripsi:
    *  panjang apa pun diterima selama tidak kosong (SDD-5.1). */
   authSecret: string;
@@ -44,6 +52,30 @@ export type Config = {
    * email terkirim.
    */
   emailConfigured: boolean;
+  /**
+   * Masa berlaku cache daftar model, dalam detik (REQ-NT-20, SDD-3.3).
+   *
+   * Cache tidak boleh menahan model baru melewati TTL ini. Dihitung dari
+   * `fetchedAt` di DATA, bukan timer proses, sehingga restart tidak
+   * memperpanjang umur cache.
+   */
+  modelCacheTtlSeconds: number;
+  /**
+   * Host yang diizinkan operator sebagai tujuan keluar, di luar aturan SSRF
+   * bawaan (SDD-5.3).
+   *
+   * Dipakai untuk gateway privat on-premise (mis. rentang `10.x`). Sengaja
+   * berupa allowlist presisi `host` atau `host:port`, BUKAN cara melonggarkan
+   * aturan global: tanpa isi, seluruh rentang privat tetap ditolak.
+   */
+  outboundAllowlist: readonly string[];
+  /**
+   * Apakah `http://` (tanpa TLS) diizinkan sebagai baseUrl gateway (SDD-5.3).
+   *
+   * Bawaan `false`: hanya `https`. Operator yang menjalankan gateway di
+   * jaringan lokal dapat menyalakannya secara sadar.
+   */
+  allowInsecureHttp: boolean;
 };
 
 type Env = Record<string, string | undefined>;
@@ -56,6 +88,38 @@ export const DEFAULT_LOGIN_RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
 
 /** Bawaan masa berlaku tautan reset: 60 menit. */
 export const DEFAULT_PASSWORD_RESET_TTL_SECONDS = 60 * 60;
+
+/** Bawaan masa berlaku cache daftar model: 10 menit (REQ-NT-20). */
+export const DEFAULT_MODEL_CACHE_TTL_SECONDS = 10 * 60;
+
+/** ID kunci bawaan saat operator belum mengatur rotasi (SDD-5.2). */
+export const DEFAULT_ENCRYPTION_KEY_ID = "v1";
+
+/** Pemisah daftar pada variabel yang menerima banyak nilai. */
+const LIST_SEPARATOR = ",";
+
+/**
+ * Daftar host allowlist (SDD-5.3).
+ *
+ * Nilai dipisah koma, dipangkas, huruf kecil, dan kosong dibuang. Tidak ada
+ * wildcard: allowlist ini untuk host atau `host:port` presisi, bukan cara
+ * melonggarkan seluruh rentang privat.
+ */
+function parseAllowlist(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(LIST_SEPARATOR)
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item !== "");
+}
+
+/** Penanda boolean dari env. Hanya `"true"`/`"1"` yang menyalakan; nilai lain
+ *  (termasuk kosong dan salah ketik) berarti mati, karena variabel ini
+ *  MELONGGARKAN aturan keamanan — gagal ke arah yang aman. */
+function checkBoolean(raw: string | undefined): boolean {
+  const value = raw?.trim().toLowerCase();
+  return value === "true" || value === "1";
+}
 
 /**
  * Variabel yang menandai email sudah dikonfigurasi operator (SDD-1.5).
@@ -166,6 +230,15 @@ export function loadConfig(env: Env = process.env): Config {
     problems,
   );
 
+  const modelCacheTtlSeconds = checkPositiveInt(
+    env["MODEL_CACHE_TTL_SECONDS"],
+    DEFAULT_MODEL_CACHE_TTL_SECONDS,
+    "MODEL_CACHE_TTL_SECONDS",
+    problems,
+  );
+
+  const encryptionKeyId = (env["ENCRYPTION_KEY_ID"] ?? "").trim() || DEFAULT_ENCRYPTION_KEY_ID;
+
   // Salah satu variabel email terisi (tidak hanya spasi) = operator sudah
   // mengonfigurasi email. Tidak ada validasi lebih jauh karena v1 belum
   // menghubungi server mana pun.
@@ -176,10 +249,14 @@ export function loadConfig(env: Env = process.env): Config {
   return {
     databaseUrl: databaseUrl as string,
     encryptionKey,
+    encryptionKeyId,
     authSecret,
     loginRateLimitMax,
     loginRateLimitWindowSeconds,
     passwordResetTtlSeconds,
     emailConfigured,
+    modelCacheTtlSeconds,
+    outboundAllowlist: parseAllowlist(env["OUTBOUND_ALLOWLIST"]),
+    allowInsecureHttp: checkBoolean(env["ALLOW_INSECURE_HTTP"]),
   };
 }

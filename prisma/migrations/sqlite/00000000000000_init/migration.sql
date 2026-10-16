@@ -96,3 +96,34 @@ CREATE TABLE "PasswordResetToken" (
 
 CREATE UNIQUE INDEX "PasswordResetToken_tokenHash_key" ON "PasswordResetToken"("tokenHash");
 CREATE INDEX "PasswordResetToken_userId_createdAt_idx" ON "PasswordResetToken"("userId", "createdAt");
+
+CREATE TABLE "Connection" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "baseUrl" TEXT NOT NULL,
+    "apiKeyEncrypted" TEXT NOT NULL,
+    "apiKeyMask" TEXT NOT NULL,
+    "keyId" TEXT NOT NULL,
+    "isActive" INTEGER NOT NULL DEFAULT 0,
+    "status" TEXT NOT NULL DEFAULT 'draft',
+    "lastTestAt" TEXT,
+    "lastTestStatus" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "Connection_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "Connection_userId_idx" ON "Connection"("userId");
+CREATE INDEX "Connection_userId_isActive_idx" ON "Connection"("userId", "isActive");
+
+CREATE TABLE "ModelCache" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "connectionId" TEXT NOT NULL,
+    "modelListJson" TEXT NOT NULL,
+    "fetchedAt" TEXT NOT NULL,
+    CONSTRAINT "ModelCache_connectionId_fkey" FOREIGN KEY ("connectionId")
+        REFERENCES "Connection" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "ModelCache_connectionId_key" ON "ModelCache"("connectionId");

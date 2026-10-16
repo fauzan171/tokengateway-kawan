@@ -104,6 +104,57 @@ model PasswordResetToken {
   @@index([userId, createdAt])
 }
 
+/// Koneksi gateway milik pengguna (REQ-NT-17, SDD-2.2).
+///
+/// KONTRAK DIBEKUKAN di akhir NT-P2: NT-P2 dan NT-P3 berbagi bentuk ini.
+/// Mengubahnya setelah NT-P3 mulai memaksa penulisan ulang pemilih model.
+///
+/// `apiKeyEncrypted` adalah envelope AES-256-GCM (SDD-5.2) dan TIDAK PERNAH
+/// keluar dari `lib/secrets`/`lib/connections` — tidak ke respons API, log,
+/// ekspor, maupun snapshot berbagi (REQ-NT-07).
+///
+/// `apiKeyMask` disimpan, bukan dihitung saat dibaca: SDD-5.2 melarang
+/// mendekripsi hanya untuk membuat mask pada operasi daftar.
+///
+/// `isActive` memakai Int 0/1, bukan Boolean: migrasi harus portabel untuk
+/// SQLite dan PostgreSQL, dan `BOOLEAN` ditolak oleh `check-migrations.mjs`.
+model Connection {
+  id              String   @id
+  userId          String
+  name            String
+  baseUrl         String
+  apiKeyEncrypted String
+  apiKeyMask      String
+  keyId           String
+  isActive        Int      @default(0) // 0 | 1
+  status          String   @default("draft") // draft | active | error
+  lastTestAt      DateTime?
+  lastTestStatus  String?
+  createdAt       DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modelCache ModelCache?
+
+  @@index([userId])
+  @@index([userId, isActive])
+}
+
+/// Cache daftar model per koneksi (REQ-NT-20, SDD-3.3).
+///
+/// Satu baris per koneksi (relasi unik). TTL diperiksa dari `fetchedAt` di
+/// DATA, bukan dari timer proses, supaya cache tidak menahan model baru
+/// melewati masa berlakunya setelah restart.
+model ModelCache {
+  id            String   @id
+  connectionId  String
+  modelListJson String
+  fetchedAt     DateTime
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId])
+}
+
 /// Sesi untuk pencabutan. Token mentah tidak pernah disimpan.
 model Session {
   id            String    @id
