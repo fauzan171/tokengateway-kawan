@@ -9,6 +9,11 @@
  * `GenerationEvent(seq, kind, payloadJson)`), jadi modul ini hanya MEMBACA —
  * tidak ada pub/sub baru. Karena `generate.ts` tidak pernah menulis `meta`,
  * event itu disintesis di sini dengan `seq` 0.
+ *
+ * Resume (WP-NT-P3-06, SDD-4.5): klien yang menyambung ulang mengirim
+ * `afterSeq=lastSeq`. Bila `afterSeq > 0`, `meta` tidak dikirim ulang dan
+ * pemutaran dimulai dari `seq > afterSeq`, sehingga tidak ada potongan yang
+ * hilang atau ganda.
  */
 
 import { ApiError, STATUS } from "@/lib/api/errors";
@@ -115,10 +120,9 @@ export type SseStreamOptions = {
   chatId: string;
   generationId: string;
   /**
-   * shortcut: diterima demi kestabilan kontrak route, TETAPI diabaikan —
-   * pemutaran ulang dari buffer (`seq > afterSeq`) dikerjakan WP-NT-P3-06.
-   * Batas: klien yang menyambung ulang menerima ulang SEMUA event dari awal,
-   * bukan hanya yang belum dimilikinya. Dinaikkan saat resume dikerjakan.
+   * `seq` terakhir yang sudah dimiliki klien (SDD-4.5). `0`/hilang → putar dari
+   * awal termasuk `meta`; `N > 0` → langsung dari `seq > N` tanpa `meta`.
+   * `N` yang melebihi seq terakhir aman: tidak melempar, hanya mengirim penutup.
    */
   afterSeq?: number;
   signal: AbortSignal;
@@ -133,6 +137,10 @@ export type SseStreamOptions = {
  */
 export function createSseStream(options: SseStreamOptions): ReadableStream<Uint8Array> {
   const { db, userId, chatId, generationId, signal } = options;
+  // `afterSeq` tak wajar (NaN, negatif, pecahan) diperlakukan sebagai 0 supaya
+  // klien yang mengirim sampah tetap mendapat stream lengkap, bukan galat.
+  const raw = options.afterSeq;
+  const afterSeq = typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
   const encoder = new TextEncoder();
   const stopped = new AbortController();
   const stop = AbortSignal.any([signal, stopped.signal]);
@@ -163,14 +171,18 @@ export function createSseStream(options: SseStreamOptions): ReadableStream<Uint8
 
       const target = await loadStreamTarget(db, { userId, chatId, generationId });
 
-      send("meta", {
-        generationId,
-        assistantMessageId: target.assistantMessageId,
-        model: target.model,
-        seq: 0,
-      });
+      // `meta` hanya untuk sambungan baru (SDD-4.5 aturan 2): resume dengan
+      // `afterSeq > 0` melanjutkan dari yang belum dimiliki klien, tanpa `meta`.
+      if (afterSeq === 0) {
+        send("meta", {
+          generationId,
+          assistantMessageId: target.assistantMessageId,
+          model: target.model,
+          seq: 0,
+        });
+      }
 
-      let lastSeq = 0;
+      let lastSeq = afterSeq;
 
       for (;;) {
         const events = await db.generationEvent.findMany({

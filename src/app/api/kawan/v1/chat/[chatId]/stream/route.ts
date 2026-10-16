@@ -10,8 +10,8 @@
  * dimulai, koneksi sudah menjadi stream dan tidak bisa lagi menjadi JSON —
  * karena itu pemeriksaan ganda (di sini dan di dalam stream) memang disengaja.
  *
- * `afterSeq` diteruskan apa adanya; pemutaran ulang dari buffer dikerjakan
- * WP-NT-P3-06 (lihat `shortcut:` di `lib/chat/sse.ts`).
+ * `afterSeq` diteruskan apa adanya; pemutaran ulang dari buffer (resume,
+ * SDD-4.5) ditangani `createSseStream` di `lib/chat/sse.ts`.
  */
 
 import { ApiError, STATUS, requestId, toErrorResponse } from "@/lib/api/errors";

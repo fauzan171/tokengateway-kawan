@@ -145,16 +145,52 @@ async function readAll(stream: ReadableStream<Uint8Array>, timeoutMs = 3_000): P
 
 type ParsedEvent = { kind: string; data: Record<string, unknown> };
 
+function parseBlock(block: string): ParsedEvent {
+  const lines = block.split("\n");
+  const kind = lines[0].replace(/^event: /, "");
+  const data = JSON.parse(lines[1].replace(/^data: /, "")) as Record<string, unknown>;
+  return { kind, data };
+}
+
 function parseEvents(text: string): ParsedEvent[] {
   return text
     .split("\n\n")
     .filter((block) => block.trim() !== "")
-    .map((block) => {
-      const lines = block.split("\n");
-      const kind = lines[0].replace(/^event: /, "");
-      const data = JSON.parse(lines[1].replace(/^data: /, "")) as Record<string, unknown>;
-      return { kind, data };
-    });
+    .map(parseBlock);
+}
+
+/**
+ * Membaca `count` event utuh lalu MEMUTUS koneksi (meniru klien yang terputus
+ * di tengah stream). Sisa buffer yang belum menjadi blok utuh dibuang.
+ */
+async function readEvents(
+  stream: ReadableStream<Uint8Array>,
+  count: number,
+  timeoutMs = 3_000,
+): Promise<ParsedEvent[]> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const out: ParsedEvent[] = [];
+  const timer = setTimeout(() => void reader.cancel(), timeoutMs);
+  let buf = "";
+  try {
+    while (out.length < count) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx = buf.indexOf("\n\n");
+      while (idx !== -1 && out.length < count) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        if (block.trim() !== "") out.push(parseBlock(block));
+        idx = buf.indexOf("\n\n");
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+    await reader.cancel().catch(() => {});
+  }
+  return out;
 }
 
 const noSignal = () => new AbortController().signal;
@@ -318,6 +354,157 @@ describe("createSseStream", () => {
         generationId: other.generationId,
       }),
     ).rejects.toMatchObject({ status: 404, code: "GENERATION_NOT_FOUND" });
+  });
+});
+
+describe("createSseStream resume (WP-NT-P3-06, SDD-4.5)", () => {
+  const seqs = (events: ParsedEvent[]) => events.map((e) => e.data.seq);
+
+  it("afterSeq=2 dari 5 event → hanya seq 3,4,5, tepat sekali, tanpa meta", async () => {
+    const { chatId, generationId } = await seedGeneration();
+    await addEvent(generationId, 1, "part", { kind: "text", text: "a" });
+    await addEvent(generationId, 2, "part", { kind: "text", text: "b" });
+    await addEvent(generationId, 3, "part", { kind: "text", text: "c" });
+    await addEvent(generationId, 4, "usage", { promptTokens: 1, completionTokens: 2, totalTokens: 3 });
+    await addEvent(generationId, 5, "done", { status: "complete", finishReason: "stop" });
+    await db.generation.update({ where: { id: generationId }, data: { status: "complete" } });
+
+    const events = parseEvents(
+      await readAll(
+        createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: 2, signal: noSignal() }),
+      ),
+    );
+
+    expect(events.map((e) => e.kind)).toEqual(["part", "usage", "done"]);
+    expect(seqs(events)).toEqual([3, 4, 5]);
+    expect(events.some((e) => e.kind === "meta")).toBe(false);
+  });
+
+  it("afterSeq=0 → semua event termasuk meta", async () => {
+    const { chatId, generationId } = await seedGeneration();
+    await addEvent(generationId, 1, "part", { kind: "text", text: "a" });
+    await addEvent(generationId, 2, "done", { status: "complete", finishReason: "stop" });
+    await db.generation.update({ where: { id: generationId }, data: { status: "complete" } });
+
+    const events = parseEvents(
+      await readAll(
+        createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: 0, signal: noSignal() }),
+      ),
+    );
+
+    expect(events.map((e) => e.kind)).toEqual(["meta", "part", "done"]);
+    expect(seqs(events)).toEqual([0, 1, 2]);
+  });
+
+  it("afterSeq = seq terakhir → tidak ada potongan lama, langsung ke event baru", async () => {
+    const { chatId, generationId } = await seedGeneration();
+    await addEvent(generationId, 1, "part", { kind: "text", text: "a" });
+    await addEvent(generationId, 2, "part", { kind: "text", text: "b" });
+
+    const stream = createSseStream({
+      db,
+      userId: state.userId,
+      chatId,
+      generationId,
+      afterSeq: 2,
+      signal: noSignal(),
+    });
+    await addEvent(generationId, 3, "part", { kind: "text", text: "c" });
+
+    const events = await readEvents(stream, 1);
+    expect(events.map((e) => e.kind)).toEqual(["part"]);
+    expect(seqs(events)).toEqual([3]);
+  });
+
+  it("afterSeq > seq terakhir → tidak melempar, langsung penutup", async () => {
+    const { chatId, generationId } = await seedGeneration({ status: "stopped" });
+    await addEvent(generationId, 1, "part", { kind: "text", text: "a" });
+
+    const events = parseEvents(
+      await readAll(
+        createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: 10, signal: noSignal() }),
+      ),
+    );
+
+    expect(events.map((e) => e.kind)).toEqual(["done"]);
+    expect(events[0]!.data.status).toBe("stopped");
+    expect(events[0]!.data.seq as number).toBeGreaterThan(1);
+  });
+
+  it("generasi terminal + afterSeq → penutup langsung, tanpa menunggu", async () => {
+    const { chatId, generationId } = await seedGeneration({ status: "complete" });
+    await addEvent(generationId, 1, "done", { status: "complete", finishReason: "stop" });
+
+    const started = Date.now();
+    const events = parseEvents(
+      await readAll(
+        createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: 1, signal: noSignal() }),
+      ),
+    );
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(events.map((e) => e.kind)).toEqual(["done"]);
+    expect(seqs(events)).toEqual([2]);
+  });
+
+  it("part/usage diputar ulang dengan isi sama, bukan hanya jenisnya", async () => {
+    const { chatId, generationId } = await seedGeneration();
+    await addEvent(generationId, 1, "part", { kind: "text", text: "halo dunia" });
+    await addEvent(generationId, 2, "usage", { promptTokens: 7, completionTokens: 9, totalTokens: 16 });
+    await addEvent(generationId, 3, "done", { status: "complete", finishReason: "stop" });
+    await db.generation.update({ where: { id: generationId }, data: { status: "complete" } });
+
+    const events = parseEvents(
+      await readAll(
+        createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: 0, signal: noSignal() }),
+      ),
+    );
+
+    expect(events[1]!.data).toEqual({ seq: 1, kind: "text", text: "halo dunia" });
+    expect(events[2]!.data).toEqual({
+      seq: 2,
+      promptTokens: 7,
+      completionTokens: 9,
+      totalTokens: 16,
+      reported: true,
+    });
+  });
+
+  it("dua sambungan (putus di tengah) → gabungan seq utuh, tanpa hilang/ganda", async () => {
+    const { chatId, generationId } = await seedGeneration();
+    await addEvent(generationId, 1, "part", { kind: "text", text: "a" });
+    await addEvent(generationId, 2, "part", { kind: "text", text: "b" });
+
+    // Sesi 1: sambung dari awal, putus setelah 3 event (meta, 1, 2).
+    const first = await readEvents(
+      createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: 0, signal: noSignal() }),
+      3,
+    );
+    const lastSeq = first[first.length - 1]!.data.seq as number;
+    expect(lastSeq).toBe(2);
+
+    // Generasi lanjut menulis 3 dan 4 sementara klien terputus.
+    await addEvent(generationId, 3, "part", { kind: "text", text: "c" });
+    await addEvent(generationId, 4, "part", { kind: "text", text: "d" });
+
+    // Sesi 2: sambung ulang dengan afterSeq=lastSeq.
+    const second = await readEvents(
+      createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: lastSeq, signal: noSignal() }),
+      2,
+    );
+    expect(seqs(second)).toEqual([3, 4]);
+
+    // Sesi 3: penutup.
+    await addEvent(generationId, 5, "done", { status: "complete", finishReason: "stop" });
+    await db.generation.update({ where: { id: generationId }, data: { status: "complete" } });
+    const third = await readEvents(
+      createSseStream({ db, userId: state.userId, chatId, generationId, afterSeq: 4, signal: noSignal() }),
+      1,
+    );
+
+    const combined = [...first, ...second, ...third].map((e) => e.data.seq as number);
+    expect(combined).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(new Set(combined).size).toBe(combined.length);
   });
 });
 
