@@ -41,10 +41,15 @@ pengembangan lokal. Untuk produksi, pakai PostgreSQL dan aktifkan baris
 Siapkan skema database:
 
 ```bash
-node scripts/make-sqlite-schema.mjs   # turunkan prisma/schema.sqlite.prisma
-npx prisma generate
+npm run db:generate   # klien Prisma SQLite DAN PostgreSQL — keduanya dibutuhkan typecheck
 npx prisma migrate deploy
 ```
+
+`db:generate` menghasilkan dua klien: `src/generated/prisma-sqlite` (dev) dan
+`src/generated/prisma` (produksi). `src/lib/db.ts` meng-import keduanya secara
+dinamis, jadi melewatkan salah satu membuat `npm run typecheck` dan `npm run build`
+gagal. Jangan panggil `prisma generate` tanpa `--schema prisma/schema.prisma` di
+langkah terakhir.
 
 Jalankan:
 

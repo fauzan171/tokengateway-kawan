@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "db:generate": "node scripts/make-sqlite-schema.mjs && prisma generate && prisma generate --schema prisma/schema.prisma",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "test": "vitest run",
