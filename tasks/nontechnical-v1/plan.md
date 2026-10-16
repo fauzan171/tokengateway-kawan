@@ -1,6 +1,6 @@
 # Plan — Kawan (scope nontechnical-v1)
 
-Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 sedang dikerjakan (WP-NT-P1-01 selesai).
+Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 dikerjakan dan WP-NT-P1-01 sampai WP-NT-P1-05 selesai — gate NT-P1 belum dibuka karena WP-NT-P1-06 belum dikerjakan.
 Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (dipin, bukan `main`).
 
 Dokumen ini menjawab: apa dikerjakan lebih dulu, apa yang bergantung pada apa, mana yang boleh paralel, dan kapan sebuah pekerjaan boleh dimulai atau disebut selesai. Requirement ada di `prd.md`; desain teknis di `sdd.md`; keputusan cakupan di `coverage.md`.
@@ -75,18 +75,22 @@ Status: WP-NT-P0-01 sampai WP-NT-P0-07 selesai; gate NT-P0 lulus pada 2026-10-16
 
 ### NT-P1 — Auth dan akun dasar
 
-Status: WP-NT-P1-01 selesai dan gate paketnya lulus pada 2026-10-16 (typecheck, lint, 74 test, build, ditambah verifikasi runtime endpoint auth dan cookie `HttpOnly`/`SameSite=Lax`). WP-NT-P1-02 sampai WP-NT-P1-06 belum dimulai. Bukti per WP ada di laporan mandor, bukan di tabel ini.
+Status: WP-NT-P1-01 sampai WP-NT-P1-05 selesai dan gate paketnya lulus pada 2026-10-16 (typecheck, lint, 127 test, build, `check-migrations` dua provider, ditambah uji E2E mandor `scripts/e2e_kawan.py` 33/33 terhadap server produksi yang berjalan). WP-NT-P1-06 (reset sandi) belum dikerjakan, sehingga gate NT-P1 belum dibuka. Bukti per WP ada di laporan mandor, bukan di tabel ini.
 
-| WP | Isi | REQ | SDD | Dep | Paralel | Gate |
-|---|---|---|---|---|---|---|
-| WP-NT-P1-01 | Auth.js Credentials + tabel `User`/`Credential`/`Session` + cookie HttpOnly/SameSite; Argon2id | REQ-NT-11, REQ-NT-13 | SDD-5.1 | P0-02 | tidak | Login/logout E2E |
-| WP-NT-P1-02 | Admin pertama atomik | REQ-NT-12 | SDD-5.1 | P1-01 | tidak | Uji konkurensi: tepat satu admin |
-| WP-NT-P1-03 | Halaman masuk/daftar + validasi + pesan generik + atribusi branding | REQ-NT-11, SDD-7.6 | SDD-7.2 | P1-01 | ya | E2E daftar→masuk |
-| WP-NT-P1-04 | Rate limit login berbasis DB | REQ-NT-15 | SDD-5.1 | P1-01 | ya | Uji 429 setelah N percobaan |
-| WP-NT-P1-05 | Ganti sandi + ganti nama; pencabutan sesi lain | REQ-NT-14 | SDD-5.1 | P1-01 | ya | Sesi lain invalid setelah ganti sandi |
-| WP-NT-P1-06 | Reset sandi token sekali pakai (mode tanpa SMTP: tautan ke admin) | REQ-NT-16 | SDD-5.1 | P1-01 | ya | Token sekali pakai; kedaluwarsa ditolak |
+| WP | Isi | REQ | SDD | Dep | Paralel | Gate | Status |
+|---|---|---|---|---|---|---|---|
+| WP-NT-P1-01 | Auth.js Credentials + tabel `User`/`Credential`/`Session` + cookie HttpOnly/SameSite; Argon2id | REQ-NT-11, REQ-NT-13 | SDD-5.1 | P0-02 | tidak | Login/logout E2E | selesai |
+| WP-NT-P1-02 | Admin pertama atomik | REQ-NT-12 | SDD-5.1 | P1-01 | tidak | Uji konkurensi: tepat satu admin | selesai |
+| WP-NT-P1-03 | Halaman masuk/daftar + validasi + pesan generik + atribusi branding | REQ-NT-11, SDD-7.6 | SDD-7.2 | P1-01 | ya | E2E daftar→masuk | selesai |
+| WP-NT-P1-04 | Rate limit login berbasis DB | REQ-NT-15 | SDD-5.1 | P1-01 | ya | Percobaan ke-N+1 ditolak (Auth.js selalu 302; bukti dari ada-tidaknya sesi, bukan kode status) | selesai |
+| WP-NT-P1-05 | Ganti sandi + ganti nama; pencabutan sesi lain | REQ-NT-14 | SDD-5.1 | P1-01 | ya | Sesi lain invalid setelah ganti sandi | selesai |
+| WP-NT-P1-06 | Reset sandi token sekali pakai (mode tanpa SMTP: tautan ke admin) | REQ-NT-16 | SDD-5.1 | P1-01 | ya | Token sekali pakai; kedaluwarsa ditolak | belum |
 
-**Gate NT-P1:** alur daftar→masuk→logout lulus E2E; admin pertama terbukti atomik; cookie HttpOnly/SameSite terverifikasi.
+**Gate NT-P1:** alur daftar→masuk→logout lulus E2E; admin pertama terbukti atomik; cookie HttpOnly/SameSite terverifikasi. **Belum dibuka:** menunggu WP-NT-P1-06.
+
+Catatan verifikasi WP-NT-P1-04: batas bawaan 5 percobaan / 15 menit. Setelah batas terlampaui, kata sandi yang BENAR pun ditolak selama jendela berjalan — itu perilaku yang diminta, dan diuji lewat ketiadaan sesi karena Auth.js tidak pernah mengembalikan 429 di jalur `credentials`. Hitungan disimpan di tabel `LoginAttempt`, dibuktikan dengan membacanya dari koneksi database terpisah.
+
+Catatan verifikasi WP-NT-P1-05: `POST /api/account/password` mengambil token sesi dengan mendekode cookie HttpOnly di sisi server, bukan dengan menaruh `sid` di objek sesi — objek sesi ikut terkirim ke peramban lewat `/api/auth/session`, sehingga token mentah di sana akan terbaca JavaScript. Halaman `/pengaturan` disediakan sebagai antarmuka.
 
 ### NT-P2 — Koneksi gateway dan model
 

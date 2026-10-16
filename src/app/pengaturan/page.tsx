@@ -1,0 +1,59 @@
+/**
+ * Halaman pengaturan akun (REQ-NT-14, SDD-7.2).
+ *
+ * Server Component tipis: memastikan pengguna sudah masuk, lalu menyerahkan
+ * formulir ke Client Component. Tanpa sesi, pengguna dialihkan ke `/masuk`.
+ */
+
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { ChangePasswordForm } from "@/components/change-password-form";
+
+export const metadata: Metadata = {
+  title: "Pengaturan — Kawan",
+  description: "Ubah kata sandi akun Kawan kamu.",
+};
+
+export default async function PengaturanPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/masuk");
+
+  return (
+    <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+      <header className="mb-7 flex flex-col gap-2">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Akun
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">Pengaturan</h1>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Masuk sebagai {session.user.email}.
+        </p>
+      </header>
+
+      <section aria-labelledby="ganti-sandi-title" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 id="ganti-sandi-title" className="text-lg font-semibold tracking-tight">
+            Ganti kata sandi
+          </h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Setelah kata sandi berganti, semua perangkat lain yang masih masuk akan
+            dikeluarkan. Perangkat ini tetap masuk.
+          </p>
+        </div>
+        <ChangePasswordForm />
+      </section>
+
+      <footer className="mt-auto pt-8">
+        <a
+          href="https://tokengateway.ai.id"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+        >
+          by tokengateway.ai.id
+        </a>
+      </footer>
+    </main>
+  );
+}
