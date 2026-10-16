@@ -68,6 +68,22 @@ model Job {
   @@index([leaseExpiresAt])
 }
 
+/// Percobaan login gagal untuk pembatas laju berbasis tabel (REQ-NT-15, SDD-5.1).
+///
+/// Hitungan sengaja disimpan di database, bukan di memori proses: dengan
+/// begitu ia bertahan setelah restart dan terlihat oleh setiap proses yang
+/// memakai database yang sama. `key` adalah email ternormalisasi ditambah hash
+/// alamat IP — alamat IP mentah tidak pernah disimpan. Baris kedaluwarsa
+/// dibuang oleh `pruneAttempts`, bukan oleh timer proses.
+model LoginAttempt {
+  id        String   @id
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([createdAt])
+}
+
 /// Sesi untuk pencabutan. Token mentah tidak pernah disimpan.
 model Session {
   id            String    @id
