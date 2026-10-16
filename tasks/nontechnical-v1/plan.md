@@ -110,6 +110,10 @@ Catatan verifikasi WP-NT-P1-06: tabel `PasswordResetToken` mengikuti konvensi **
 
 **Gate NT-P2 (pembekuan kontrak):** onboarding E2E lulus; key tidak pernah kembali ke browser (uji canary); kontrak `Connection`/`ModelCache` dibekukan dan dicatat sebagai revisi dokumen bila berubah.
 
+**Kontrak dibekukan 2026-10-16 sebelum WP mana pun dikerjakan** (commit `d1bee88`): tabel `Connection` dan `ModelCache`, plus variabel konfigurasi `ENCRYPTION_KEY_ID`, `MODEL_CACHE_TTL_SECONDS`, `OUTBOUND_ALLOWLIST`, `ALLOW_INSECURE_HTTP`. Dibekukan mandor, bukan diserahkan ke worker, karena (a) peringatan kontrak di atas dan (b) konvensi migrasi SQUASH repo ini membuat dua WP yang sama-sama butuh tabel baru selalu bentrok di tiga berkas yang sama.
+
+**Catatan ketergantungan WP-NT-P2-08 dan WP-NT-P2-09.** Keduanya menyentuh pemilih model **di dalam chat**, sedangkan tabel `Chat` (beserta `Chat.modelRef`) baru dibuat di NT-P3 — saat kontrak NT-P2 dibekukan, tabel itu belum ada. Gate keduanya pun menuntut hal yang hanya bisa dibuktikan bila chat ada ("Buka chat lama memakai model tersimpan", "model tanpa visi → tak ada tombol gambar"). Karena itu keduanya **dipindahkan ke NT-P3**, ditempatkan setelah pohon pesan dan composer berdiri, dan tetap memakai `GET /api/kawan/v1/models` yang dibangun di NT-P2. Membangun komponennya sekarang akan menghasilkan komponen yatim tanpa tempat pakai.
+
 ### NT-P3 — Chat inti
 
 | WP | Isi | REQ | SDD | Dep | Paralel | Gate |
