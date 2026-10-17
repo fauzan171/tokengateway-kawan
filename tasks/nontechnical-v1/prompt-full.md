@@ -1,5 +1,7 @@
 # Prompt eksekusi penuh — Kawan sampai 100%
 
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
+
 Status: dokumen bantu, bukan bagian rantai otoritas.
 Dibuat: 2026-10-17, setelah audit branch `feat/nt-p1-auth`. Diperbarui 2026-10-17 setelah
 konsolidasi selesai dan dokumen basi dibersihkan.
@@ -37,7 +39,7 @@ melaporkan pertentangannya, bukan memilih diam-diam.
    tanpa WP, laporkan sebelum mulai.
 5. tasks/nontechnical-v1/verification.md dan execution-prompt.md — bentuk bukti, peran,
    aturan commit.
-6. tasks/nontechnical-v1/handoff-prompts.md §5 (dokumen ini).
+6. tasks/nontechnical-v1/handoff-prompts.md §4 (riwayat transisi agen).
 
 Jangan menulis kode pada balasan pertama. Laporkan dulu ringkasan pemahaman dan daftar WP
 yang akan dikerjakan, per fase.
@@ -55,8 +57,7 @@ Verifikasi ulang semuanya sebelum mulai; jangan percaya bagian ini buta.
 - `src/components/chat-view.tsx` hanya punya kirim dan stop. Tidak ada edit, regenerate,
   continue, pemilih cabang, pesan sistem, ganti judul, pemilih model, maupun tombol coba
   lagi.
-- `src/lib/chat/usage.ts` tidak dipakai siapa pun kecuali usage.test.ts sendiri; jalur hidup
-  adalah recordUsage internal di generate.ts.
+- Konsolidasi 17 Oktober 2026: generasi memakai `recordUsage` dari `src/lib/chat/usage.ts`; implementasi duplikat di generate.ts dihapus.
 - README.md, plan.md, dan handoff-prompts.md sudah diselaraskan dengan keadaan `main`;
   teks "fitur chat belum tersedia" di src/app/page.tsx sudah diganti.
 - .github/workflows/ci.yml tidak punya job e2e. Snapshot Playwright darwin-only.
@@ -81,7 +82,7 @@ Verifikasi ulang semuanya sebelum mulai; jangan percaya bagian ini buta.
 
 ### Tahap 0 — Konsolidasi (wajib pertama)
 
-1. Merge `origin/feat/nt-p1-auth` ke `main` (atau rebase bila riwayat lebih rapi).
+1. Konsolidasi historis sudah selesai. Periksa git status/log; jangan mengulang merge branch lama.
 2. Selesaikan konflik. Setelah merge, jalankan ulang seluruh verifikasi di atas main:
    `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`,
    `node scripts/check-migrations.mjs`, `npx prisma migrate deploy` untuk SQLite dan
@@ -101,10 +102,7 @@ Verifikasi ulang semuanya sebelum mulai; jangan percaya bagian ini buta.
 
 Kerjakan berurutan, satu worker per berkas.
 
-1. WP-NT-P3-15 — pilih satu implementasi usage. Pertahankan yang dipakai jalur hidup.
-   Bila usage.ts memang fondasi untuk NT-P4 (ringkasan pemakaian), sambungkan sekarang ke
-   satu route dan hapus duplikatnya di generate.ts; bila tidak, hapus usage.ts beserta
-   tesnya. Jangan biarkan dua implementasi.
+1. WP-NT-P3-15 — konsolidasi selesai 17 Oktober 2026: generate.ts memakai recordUsage dari usage.ts. Jangan menghapus implementasi yang kini dipakai generasi. Bukti pada laporan audit scope dan test generate/usage.
 2. WP-NT-P2-08 — pemilih model di UI. Komponen memanggil `GET /api/kawan/v1/models`,
    menampilkan daftar model dari koneksi aktif, dan mengirim `modelRef` saat membuat chat.
    Tanpa ini `Chat.modelRef` selalu null dan generate.ts selalu memakai DEFAULT_MODEL.
@@ -196,7 +194,7 @@ Gate NT-P10: seluruh suite lulus, tidak ada rahasia di log, README akurat, tag r
 1. Tambahkan job e2e ke .github/workflows/ci.yml. Snapshot Playwright saat ini darwin-only;
    buat snapshot lintas platform atau ganti ke assertion struktural yang tidak bergantung
    pada piksel, lalu rebaseline.
-2. Jalankan `python3 tools/check_docs.py` dan perbaiki temuannya.
+2. Jalankan `python3 tasks/nontechnical-v1/tools/check_docs.py` dan perbaiki temuannya.
 3. Perbarui plan.md, coverage.md, dan README.md ke keadaan akhir.
 4. Laporkan ringkasan akhir: WP selesai, gate yang lulus beserta perintahnya, WP yang
    tertahan beserta alasannya, dan pertanyaan terbuka PRD §8.4 yang masih menunggu pemilik

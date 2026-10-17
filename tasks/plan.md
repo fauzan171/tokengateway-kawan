@@ -1,5 +1,7 @@
 # Kawan — rencana full-feature parity Open WebUI
 
+> Referensi historis. Untuk pekerjaan baru baca [scope aktif](ACTIVE-SCOPE.md). Instruksi full-parity di bawah bukan scope default.
+
 Status: planning v2; implementasi belum dimulai. Instruksi user terbaru menggantikan pembatasan fitur pada brief awal.
 
 ## Dokumen aktif

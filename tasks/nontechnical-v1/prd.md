@@ -1,5 +1,7 @@
 # PRD — Kawan (scope nontechnical-v1)
 
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
+
 **Penulis**: tim produk tokengateway.ai.id
 **Tanggal**: 14 Oktober 2026
 **Status**: Draft untuk implementasi
@@ -66,7 +68,7 @@ Belum ada wawancara pengguna formal pada tahap ini. Karena itu bagian pasar/peng
 3. **Menjadi perantara LLM dengan saldo sendiri.** Kawan tidak menyediakan kredit model.
 4. **Klaim identik ChatGPT.** Yang disasar adalah rasa familiar, bukan kesamaan piksel atau nama fitur.
 5. **Fitur enterprise**: SCIM, LDAP, RBAC granular per grup/resource, multi-tenant organisasi. Dikecualikan pada v1.
-6. **Eksekusi kode arbitrer, terminal, plugin Python, worker otonom, subagent, pipeline evaluator.** Dikecualikan karena risiko dan karena bukan kebutuhan pengguna nonteknis.
+6. **Eksekusi tanpa sandbox dan plugin Python di server terpercaya tetap dilarang.** Worker otonom dan alat browser/kode masuk scope agen sesuai `../ACTIVE-SCOPE.md`; subagent dan pipeline evaluator bukan prasyarat rilis awal.
 7. **Multi-node dengan Redis sampai benar-benar dibutuhkan.** v1 dirancang untuk satu instance aplikasi + satu worker; penskalaan dicatat sebagai jalur lanjutan, bukan prasyarat.
 8. **MCP tingkat lanjut** ditunda kecuali terbukti esensial (lihat `coverage.md`).
 9. **Mode Direct (key hanya di browser)** ditunda pada v1, tetapi keputusan defaultnya dicatat terbuka: mode server menangani kredensial.
@@ -379,5 +381,5 @@ Default berikut dipilih agar pekerjaan tidak tertahan. Perubahan memerlukan kepu
 |---|---|---|---|
 | Apakah email reset sandi dikonfigurasi pada rilis pertama? | Pemilik produk | Sebelum v1.0-beta | Tautan reset ditampilkan ke admin bila SMTP belum ada |
 | Mesin embedding mana yang menjadi rujukan uji? | Mandor teknis | Sebelum v1.0-beta | Fallback kata kunci diuji lebih dulu |
-| Apakah repo publik Kawan sudah ada? | Pemilik produk | Sebelum rilis | Metadata About memakai nilai konfigurasi env, bukan URL karangan |
+| URL repo publik | Sudah tercatat | Selesai | https://github.com/fauzan171/tokengateway-kawan; metadata runtime tetap dari env |
 | Batas ukuran unggahan default? | Pemilik produk | Sebelum v1.0-beta | 25 MB per file |

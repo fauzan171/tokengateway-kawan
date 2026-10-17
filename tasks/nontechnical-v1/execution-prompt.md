@@ -1,6 +1,8 @@
 # Execution prompt — Kawan (scope nontechnical-v1)
 
-Status: instruksi kerja. **Aplikasi belum ada.** Perintah seperti `npm start`, `npm run dev`, atau `npm run build` **belum bisa dijalankan sekarang** karena proyek belum di-bootstrap. Semua perintah di bawah menjadi nyata hanya setelah work package `WP-NT-P0-01` (bootstrap) selesai dan skrip benar-benar ada di `package.json`.
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
+
+Status: instruksi kerja untuk baseline chat. Bootstrap selesai dan perintah `npm run dev`, `npm run build`, `npm start` tersedia di package.json (start memerlukan build). UI chat masih parsial; urutan berikutnya mengikuti scope aktif.
 
 Dokumen ini mengatur cara kerja mandor dan worker. Requirement ada di `prd.md`; desain di `sdd.md`; urutan kerja dan ID paket di `plan.md`; keputusan cakupan di `coverage.md`.
 
@@ -12,7 +14,7 @@ Urutan otoritas: instruksi terbaru pemilik produk → `prd.md` → `sdd.md` → 
 
 - Paket full-parity lama (`tasks/prd.md`, `tasks/plan.md`, `tasks/sdd/`, `tasks/todo.md`, `tasks/coverage.*`) adalah **referensi alternatif**, bukan task aktif. Jangan mengerjakan isinya.
 - `tasks/archive/` hanya riwayat.
-- **Penugasan pertama: hanya `NT-P0`.** Setelah gate `NT-P0` lulus, fase berikutnya dibuka sesuai `plan.md` dan instruksi pemilik produk.
+- **Fondasi NT-P0 sudah tersedia.** Tugas berikutnya adalah AG-P0 pada scope aktif, bukan bootstrap ulang.
 - Pemilik produk dapat memerintahkan "lanjut semua fase" dengan checkpoint; tanpa perintah itu, setiap fase dibuka terpisah.
 
 ---

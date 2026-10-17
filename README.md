@@ -3,19 +3,24 @@
 Chat AI yang bisa di-self-host, ditujukan untuk pengguna nonteknis, memakai gateway
 [tokengateway.ai.id](https://tokengateway.ai.id). Kunci API milik pengguna sendiri
 (BYOK): default server mode menerima dan menyimpan key terenkripsi lalu meneruskan
-request; Direct key tetap tersimpan di browser saja. Kawan tidak menambahkan billing
+request; Mode Direct (key hanya di browser) belum diimplementasikan. Kawan tidak menambahkan billing
 token.
 
-Status saat ini: **NT-P0 sampai NT-P3 selesai** (fondasi, auth, koneksi gateway, chat
-inti). Yang sudah jalan: daftar/masuk akun, onboarding koneksi gateway, pemilih model,
-kirim pesan, streaming SSE dengan resume `afterSeq`, stop, regenerate, edit, continue,
-pesan sistem, dan judul otomatis. Fase NT-P4 dan seterusnya (riwayat, folder, berbagi,
-ekspor, render markdown, lampiran, dokumen/RAG) belum dikerjakan.
+Arah produk aktif: **pengalaman agen seperti Manus**, dengan gateway BYOK dan
+antarmuka untuk pengguna nonteknis. Baca [scope aktif](tasks/ACTIVE-SCOPE.md) sebelum
+menjalankan prompt atau plan lama. [SDD agen lengkap](tasks/agent-v1/README.md) dan
+[prompt Hermes → Claude Code](tasks/agent-v1/HERMES-PROMPT.md) menjadi panduan kelanjutan. Kemampuan agen belum diimplementasikan; belum ada
+klaim kesetaraan 100% dengan Manus.
 
-Dokumen produk dan desain ada di [`tasks/nontechnical-v1/`](tasks/nontechnical-v1/README.md)
-(PRD, SDD, plan, coverage, execution prompt). Paket full-parity lama di `tasks/prd.md`,
-`tasks/sdd/`, `tasks/plan.md`, `tasks/todo.md` adalah referensi alternatif, bukan scope
-aktif.
+Status kode: fondasi/auth dan backend koneksi/chat tersedia. Backend menyediakan
+streaming SSE, edit, regenerate, continue, pesan sistem dan judul; UI chat masih
+parsial dan belum menghubungkan seluruh kemampuan tersebut. Riwayat di UI, render
+markdown, lampiran, RAG, task agent, browser, sandbox dan artefak belum tersedia.
+NT-P3 belum lulus sebagai pengalaman end-to-end lengkap.
+
+Paket [`tasks/nontechnical-v1/`](tasks/nontechnical-v1/README.md) adalah baseline
+chat yang direvisi oleh scope aktif. Paket full-parity Open WebUI lainnya bersifat
+historis. Temuan dan batas verifikasi ada di [laporan audit](tasks/nontechnical-v1/reports/scope-audit-2026-10-17.md).
 
 ## Menjalankan
 

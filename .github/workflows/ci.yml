@@ -30,8 +30,14 @@ jobs:
       - name: Cek migrasi identik antar provider
         run: node scripts/check-migrations.mjs
 
-      - name: Generate klien Prisma (SQLite)
-        run: npx prisma generate
+      - name: Generate kedua klien Prisma
+        run: npm run db:generate
+
+      - name: Cek dokumen baseline
+        run: python3 tasks/nontechnical-v1/tools/check_docs.py
+
+      - name: Cek SDD agen
+        run: python3 tasks/agent-v1/check_docs.py
 
       - run: npm run typecheck
       - run: npm run lint

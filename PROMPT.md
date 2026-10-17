@@ -1,5 +1,7 @@
 # Prompt — Bangun Kawan (BYOK Chat AI Platform, by tokengateway.ai.id)
 
+> Referensi historis. Untuk pekerjaan baru baca [scope aktif](tasks/ACTIVE-SCOPE.md). Instruksi full-parity di bawah bukan scope default.
+
 Kamu senior full-stack developer. Bangun **Kawan** (kawan.ai.id) — platform web chat AI open-source dengan konsep **BYOK (Bring Your Own Key)**, persis konsep open-webui: siapa pun bisa pakai Kawan sebagai antarmuka chat, tinggal masukkan **URL gateway + API key** miliknya sendiri. Kawan tidak menyimpan API key provider, tidak menjadi perantara LLM — dia murni klien chat yang berdiri di domain terpisah dari gateway mana pun.
 
 Kawan adalah produk resmi **by tokengateway.ai.id** — branding itu tampil di UI (lihat bagian Branding).

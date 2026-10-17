@@ -1,6 +1,8 @@
 # Coverage — matriks cakupan fitur (scope nontechnical-v1)
 
-Status: keputusan cakupan. Aplikasi belum ada. Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (`open-webui` 0.12.0), tersedia read-only di `/Users/mekari/tokengateway/open-webui`.
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
+
+Status: matriks desain baseline chat; bukan bukti implementasi. Backend chat tersedia, UI NT-P3 masih parsial. Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (`open-webui` 0.12.0), tersedia read-only di `/Users/mekari/tokengateway/open-webui`.
 
 ## Cara membaca matriks ini
 
@@ -14,7 +16,7 @@ Kolom **Sumber** menyebut lokasi baseline yang diverifikasi secara lokal (bukan 
 
 ## Aturan klaim
 
-Paket ini **tidak** mengklaim 100% Open WebUI. Angka yang dipegang: 100% untuk baris `include` di tabel di bawah. Baris `defer`/`exclude` tidak dihitung sebagai tercakup, dan tidak ada baris yang dihitung dua kali.
+Paket ini **tidak** mengklaim 100% Open WebUI. Target desain: seluruh baris `include` yang belum diubah scope aktif. Tidak ada klaim cakupan implementasi 100%. Baris `defer`/`exclude` tidak dihitung sebagai tercakup, dan tidak ada baris yang dihitung dua kali.
 
 ## Matriks
 
@@ -51,8 +53,8 @@ Paket ini **tidak** mengklaim 100% Open WebUI. Angka yang dipegang: 100% untuk b
 | COV-29 | Knowledge base / collections penuh | `routers/knowledge.py`, `models/knowledge.py` | exclude | Workspace tingkat lanjut | — | — |
 | COV-30 | Web search | `routers/retrieval.py` (`/process/web/search`) | include (gated) | Berguna, tapi harus dikonfigurasi | REQ-NT-51..53 | Uji gated |
 | COV-31 | Prompt tersimpan (slash commands) | `routers/prompts.py` | include (pribadi) | Produktivitas dasar | REQ-NT-62..64 | E2E |
-| COV-32 | Skills | `routers/skills.py`, `models/skills.py` | exclude | Tingkat lanjut | — | — |
-| COV-33 | Tools / functions / pipelines / valves | `routers/tools.py`, `routers/functions.py`, `routers/pipelines.py` | exclude | Eksekusi kode; risiko dan kompleksitas | — | — |
+| COV-32 | Skills | `routers/skills.py`, `models/skills.py` | defer | Skill agen masuk AG-09; tidak menyalin implementasi Open WebUI | — | Gate AG-09 pada scope aktif |
+| COV-33 | Tools / functions / pipelines / valves | `routers/tools.py`, `routers/functions.py`, `routers/pipelines.py` | defer (diganti scope agen) | Tool tervalidasi AG-03/07 masuk inti; plugin server/pipelines tetap exclude | — | Gate AG-P2/AG-P3 |
 | COV-34 | MCP / MCPO / OpenAPI tool server | `utils/mcp/`, `src/lib/components/chat/ToolServersModal.svelte` | defer | Bukan kebutuhan v1; ditinjau ulang bila esensial | — | — |
 | COV-35 | Image generation | `routers/images.py` (`/generations`, `/edit`) | include (gated) | Kebutuhan umum | REQ-NT-65 | Uji gated |
 | COV-36 | Audio STT/TTS | `routers/audio/__init__.py` (`/transcriptions`, `/speech`) | include (gated) | Dikte dan baca jawaban | REQ-NT-67, 68 | Uji gated |
@@ -61,10 +63,10 @@ Paket ini **tidak** mengklaim 100% Open WebUI. Angka yang dipegang: 100% untuk b
 | COV-39 | Channels (messaging) | `routers/channels.py` | exclude | Sosial/kolaborasi; di luar target | — | — |
 | COV-40 | Notes (editor kolaboratif) | `routers/notes.py` | exclude | CRDT/Yjs; di luar target | — | — |
 | COV-41 | Calendar | `routers/calendar.py` | exclude | Di luar target | — | — |
-| COV-42 | Automations / scheduler | `routers/automations.py` | exclude | Worker otonom; di luar target | — | — |
+| COV-42 | Automations / scheduler | `routers/automations.py` | defer | Task otonom masuk AG-01..03; scheduler lanjutan AG-09 | — | Gate AG-P1/AG-P2; scheduler terpisah |
 | COV-43 | Evaluations / arena | `routers/evaluations.py` | exclude | Di luar target | — | — |
 | COV-44 | Analytics admin penuh | `routers/analytics.py` | exclude | Digantikan status sistem sederhana | REQ-NT-77 | — |
-| COV-45 | Terminal / code execution | `routers/terminals.py`, `utils/code_interpreter.py` | exclude | Eksekusi arbitrer; risiko keamanan | — | — |
+| COV-45 | Terminal / code execution | `routers/terminals.py`, `utils/code_interpreter.py` | defer (diganti scope agen) | Kode sandbox AG-07 masuk inti; terminal server terpercaya tetap dilarang | — | Gate isolasi AG-P3 |
 | COV-46 | Playground | `src/routes/(app)/playground/` | exclude | Untuk pengguna teknis | — | — |
 | COV-47 | Workspace (models/prompts/tools admin) | `src/routes/(app)/workspace/` | exclude | Tingkat lanjut | — | — |
 | COV-48 | Admin settings penuh (421 key) | `routers/configs.py`; `src/routes/(app)/admin/settings/` | exclude | Digantikan konfigurasi env + halaman admin dasar | REQ-NT-77 | — |

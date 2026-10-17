@@ -1,8 +1,10 @@
 # Paket dokumen Kawan — scope nontechnical-v1
 
-Status: dokumen perencanaan dan laporan implementasi. Fase NT-P0 sampai NT-P3 sudah dikerjakan dan di-merge ke `main`; fase NT-P4 sampai NT-P10 belum. Kode aplikasi ada di akar repo ini (`src/`), bukan di paket dokumen.
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
 
-Paket ini menjawab permintaan terbaru pemilik produk: PRD lengkap dan SDD detail yang siap dibagikan ke implementer, dengan target pengguna **nonteknis**, pengalaman chat selengkap ChatGPT untuk pemakaian pribadi, dan **BYOK gateway sebagai jalur default**. Fitur yang dianggap overkill untuk target ini dikecualikan secara eksplisit, bukan dihapus diam-diam.
+Status: dokumen perencanaan dan laporan implementasi. Fondasi NT-P0/NT-P1 dan backend NT-P2/NT-P3 sudah di-merge; UI NT-P3 dan gate end-to-end belum lengkap. NT-P4 sampai NT-P10 belum selesai. Kode aplikasi ada di akar repo ini (`src/`), bukan di paket dokumen.
+
+Paket ini menyimpan baseline chat sebelum revisi arah Manus: PRD lengkap dan SDD detail yang siap dibagikan ke implementer, dengan target pengguna **nonteknis**, pengalaman chat selengkap ChatGPT untuk pemakaian pribadi, dan **BYOK gateway sebagai jalur default**. Fitur yang dianggap overkill untuk target ini dikecualikan secara eksplisit, bukan dihapus diam-diam.
 
 ## Baseline
 
@@ -18,13 +20,15 @@ Paket ini **tidak** mengikuti branch `main` referensi secara otomatis. Semua ang
 
 Paket ini **bukan** klaim 100% Open WebUI. Angka cakupan di sini berarti:
 
-- 100% untuk **scope terpilih** yang didefinisikan di `prd.md` dan dipetakan di `coverage.md`.
+- target cakupan untuk **scope terpilih** yang didefinisikan di `prd.md` dan dipetakan di `coverage.md`.
 - Fitur di luar scope terdaftar sebagai `defer` atau `exclude` dengan alasan, sehingga tidak ada klaim tersembunyi.
 - Kawan **bukan** klon identik ChatGPT dan **tidak** menjanjikan perilaku yang identik dengan ChatGPT.
 
 Paket full-parity lama di `tasks/prd.md`, `tasks/plan.md`, `tasks/sdd/`, `tasks/todo.md`, `tasks/coverage.*`, dan seterusnya tetap ada apa adanya sebagai referensi alternatif. Paket lama itu bukan requirement default untuk brief terbaru.
 
 ## Urutan baca dan precedence
+
+Baca `../ACTIVE-SCOPE.md` terlebih dahulu; daftar di bawah adalah urutan baseline.
 
 1. `prd.md` — dokumen produk: masalah, pengguna, tujuan, metrik, requirement per domain, alur, acceptance, rencana rilis.
 2. `sdd.md` — dokumen desain teknis: arsitektur, kepemilikan schema, kontrak API, lifecycle SSE, auth/secret, upload/RAG/security, UI/aksesibilitas/mobile, testing/deploy/backup.
@@ -44,7 +48,7 @@ Bila ada konflik antar dokumen: requirement produk di `prd.md` menang atas detai
 | `plan.md` | Milestone, dependency, work package paralel, DoR/DoD, handoff. |
 | `coverage.md` | Matriks feature sumber dengan keputusan include/defer/exclude. |
 | `execution-prompt.md` | Instruksi worker dan quality gate. |
-| `prompt-full.md` | Prompt eksekusi penuh: satu perintah untuk menyelesaikan NT-P4 sampai NT-P10 setelah konsolidasi NT-P0..NT-P3. |
+| `prompt-full.md` | Prompt baseline chat; urutan fase tunduk pada scope aktif dan tidak wajib dihabiskan sebelum agen. |
 | `handoff-prompts.md` | Prompt handoff per peran (mandor, worker, pemilik produk). |
 | `reports/` | Laporan per fase dan per work package (`nt-p1.md`, `nt-p1-01.md`, dst). |
 | `tools/check_docs.py` | Pemeriksa konsistensi dokumen berbasis Python stdlib (tanpa framework). |

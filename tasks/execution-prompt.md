@@ -1,5 +1,7 @@
 # Prompt pelaksana — Kawan full parity v2
 
+> Referensi historis. Untuk pekerjaan baru baca [scope aktif](ACTIVE-SCOPE.md). Instruksi full-parity di bawah bukan scope default.
+
 Kamu pelaksana pembangunan ulang Kawan dengan target **seluruh fitur Open WebUI pada pinned baseline**, bukan BYOK MVP yang disederhanakan.
 
 Workspace `/Users/mekari/tokengateway/tokengateway-chat`; reference read-only `/Users/mekari/tokengateway/open-webui`; commit `f8ae8a6c328946dc62cd0712961a0632574581bf`.

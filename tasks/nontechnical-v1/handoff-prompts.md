@@ -1,5 +1,7 @@
 # Handoff prompts — Kawan (scope nontechnical-v1)
 
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
+
 Status: dokumen bantu. Bukan bagian rantai otoritas (PRD → SDD → plan → execution-prompt).
 Isinya empat prompt siap tempel untuk agen lain, plus satu putusan kelayakan.
 
@@ -7,7 +9,7 @@ Dibuat: 2026-10-16, setelah gate NT-P0 lulus.
 
 ---
 
-## 0. Putusan kelayakan (jawaban pertanyaan 2)
+## 0. Putusan kelayakan historis sebelum revisi scope
 
 **SDD lengkap untuk lingkup yang dinyatakan? Ya.** Semua REQ-NT punya penempatan di
 `coverage.md`, keputusan arsitektur terkunci di tabel SDD-10, dan non-goal ditulis eksplisit
@@ -26,7 +28,7 @@ multi-agen, VM per sesi. Kawan mengecualikan tepat hal itu di tiga tempat:
   peninjauan "bila segmen teknis menjadi prioritas dan kontrol sandbox tersedia".
 
 Menambah jalur Manus berarti mengubah PRD, bukan menambah dokumen. Itu keputusan pemilik
-produk. Prompt di bagian 3 disiapkan untuk itu; jangan jalankan sebelum keputusan diambil.
+produk. Prompt di bagian 4 disiapkan untuk itu; jangan jalankan sebelum keputusan diambil.
 
 ---
 
@@ -111,7 +113,7 @@ Keadaan saat ini (per 2026-10-17, `main` = `ad32864`):
   heartbeat), `src/lib/chat/` (pohon pesan, kirim, edit, regenerate, continue, stop, SSE
   dengan `afterSeq`, judul otomatis, usage), dan route `src/app/api/kawan/v1/{chat,connections,models}`.
 - Yang masih terbuka dari NT-P3 dan harus ditutup sebelum NT-P4: WP-NT-P3-11 (UI chat
-  lengkap), WP-NT-P3-14 (pemetaan galat provider di UI), WP-NT-P3-15 (dedupe `UsageRecord`),
+  lengkap), WP-NT-P3-14 (pemetaan galat provider di UI),
   serta WP-NT-P2-08 dan WP-NT-P2-09 yang dipindahkan ke NT-P3 (pemilih model di dalam chat,
   matriks kapabilitas). Rinciannya ada di `prompt-full.md` Tahap 1.
 
@@ -138,10 +140,7 @@ Peringatan kontrak: NT-P2 dan NT-P3 berbagi kontrak koneksi. Bentuk Connection d
 dibekukan di akhir NT-P2. Mengubahnya setelah NT-P3 mulai memaksa penulisan ulang pemilih
 model. Jangan mengubah bentuk itu tanpa keputusan pemilik produk.
 
-Peringatan migrasi: repo ini memakai konvensi SQUASH. Tabel baru masuk ke
-`prisma/migrations/_schema.sql` dan kedua salinan `00000000000000_init/migration.sql`
-harus identik byte-per-byte dengan berkas itu. `dev.db` lama tidak mendapat tabel baru dan
-harus dibangun ulang.
+Peringatan migrasi: snapshot init adalah riwayat development. Jangan mengubah migrasi yang telah diterapkan atau menghapus database pengguna. Perubahan schema berikutnya memerlukan migrasi additive dan perbaikan checker terlebih dahulu.
 
 Jangan membuka fase berikutnya tanpa perintah pemilik produk. Setiap fase dibuka terpisah
 kecuali pemilik produk memerintahkan "lanjut semua fase" dengan checkpoint.
@@ -185,10 +184,9 @@ Batas:
 
 ---
 
-## 4. Prompt untuk membuka jalur Manus (hanya setelah keputusan pemilik produk)
+## 4. Riwayat prompt transisi Manus (keputusan diambil 17 Oktober 2026)
 
-Jangan jalankan sebelum pemilik produk memutuskan mengubah arah. Prompt ini menyentuh PRD,
-dan itu wewenang pemilik produk.
+Pemilik produk telah meminta arah Manus. Keputusan aktif dan urutan baru ada di `../ACTIVE-SCOPE.md`. Prompt berikut disimpan sebagai riwayat, bukan instruksi untuk meminta persetujuan ulang atau menunggu NT-P10.
 
 ```
 Pemilik produk memutuskan Kawan memperluas arah ke kemampuan agen otonom setara Manus:

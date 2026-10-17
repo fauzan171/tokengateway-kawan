@@ -8,13 +8,11 @@ strategi sesi. Sumbernya `README.md` dan `tasks/nontechnical-v1/README.md`.
 Kawan adalah chat AI yang bisa di-self-host, ditujukan untuk pengguna nonteknis,
 memakai gateway [tokengateway.ai.id](https://tokengateway.ai.id). Model BYOK:
 mode server default menerima dan menyimpan kunci API pengguna dalam bentuk
-terenkripsi lalu meneruskan request, sedangkan Direct key tetap tersimpan di
-browser saja. Kawan tidak menambahkan billing token.
+terenkripsi lalu meneruskan request, sedangkan mode Direct (key hanya di browser) belum tersedia. Kawan tidak menambahkan billing token.
 
-Versi saat ini adalah **fondasi (fase NT-P0)**: antarmuka, konfigurasi runtime,
-skema database, antrean job berbasis tabel, dan entry point worker sudah ada dan
-lulus gate NT-P0 (typecheck, lint, test, build). Fitur chat, koneksi gateway, dan
-pengiriman pesan belum tersedia.
+Status: fondasi dan backend auth/koneksi/chat tersedia; UI chat masih parsial.
+Arah agen seperti Manus dan prioritas implementasi kini mengikuti
+[scope aktif](../tasks/ACTIVE-SCOPE.md). Browser, sandbox dan lifecycle task belum ada.
 
 Struktur direktori utama:
 
@@ -25,8 +23,8 @@ Struktur direktori utama:
 - `prisma/` — schema dan migrasi dengan dua provider: SQLite dan PostgreSQL.
 - `tasks/nontechnical-v1/` — PRD, SDD, plan, coverage, execution prompt.
 
-Paket dokumen aktif ada di `tasks/nontechnical-v1/`, dengan urutan baca dan
-precedence: `prd.md` (produk) → `sdd.md` (desain teknis) → `plan.md` (milestone
+Scope aktif ada di `tasks/ACTIVE-SCOPE.md`, yang mendahului baseline
+`tasks/nontechnical-v1/`. Urutan baca baseline: `prd.md` (produk) → `sdd.md` (desain teknis) → `plan.md` (milestone
 dan work package) → `coverage.md` (matriks include/defer/exclude) →
 `execution-prompt.md` (instruksi worker dan quality gate). Bila terjadi konflik
 antar dokumen, requirement produk menang atas detail teknis, `sdd.md` menang atas
@@ -70,6 +68,4 @@ mengembalikan `null` sehingga Auth.js membuang cookie sesi — token yang dicabu
 atau nonaktif gagal secara tertutup (fail closed). Selain itu, identitas pada
 setiap permintaan selalu dimuat ulang dari database: role, nama, email, dan
 status tidak pernah dipercaya dari klaim token lama karena klaim bisa basi
-(SDD-5.1). Kombinasi ini memberi keuntungan stateless JWT (tanpa lookup sesi
-penuh pada setiap permintaan) tanpa mengorbankan kemampuan pencabutan instan
-yang biasanya hilang bila memakai JWT murni tanpa sisi server.
+(SDD-5.1). Kombinasi ini memakai JWT sebagai pembawa identitas sekaligus lookup sesi dan pengguna pada setiap validasi berikutnya. Jadi jalur autentikasi ini tetap bergantung pada database; JWT tidak menghilangkan lookup server.

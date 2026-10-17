@@ -1,6 +1,10 @@
 # SDD — Kawan (scope nontechnical-v1)
 
-Status: spesifikasi desain untuk implementasi. Aplikasi belum ada; tidak ada kode di paket ini.
+> Untuk implementasi agen, gunakan [SDD agen lengkap](../agent-v1/README.md); dokumen ini adalah baseline chat yang tidak bertentangan.
+
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
+
+Status: spesifikasi desain untuk implementasi. Kode aplikasi ada di akar repo; backend chat sudah tersedia, UI NT-P3 masih parsial. Bagian target di bawah bukan klaim implementasi.
 Baseline referensi: `https://github.com/open-webui/open-webui`, commit `f8ae8a6c328946dc62cd0712961a0632574581bf`, versi paket 0.12.0, tersedia read-only di `/Users/mekari/tokengateway/open-webui`.
 
 Dokumen ini adalah Software Design Description: kontrak diselesaikan sebelum coding. Requirement produk ada di `prd.md`; keputusan cakupan per fitur ada di `coverage.md`; urutan kerja ada di `plan.md`.
@@ -41,7 +45,7 @@ Prinsip:
 2. **Satu database relasional sebagai sumber kebenaran.** SQLite untuk dev/pengguna tunggal; PostgreSQL untuk produksi. Schema dikelola Prisma dengan SQL migrasi yang ditulis sendiri.
 3. **Tidak ada Redis di v1.** Job diklaim dari tabel `Job` dengan lease berbasis DB. Redis dicatat sebagai jalur lanjutan bila ada bukti beban (lihat SDD-1.6).
 4. **Boundary proses mengikuti perbedaan kepercayaan dan sumber daya**, bukan perbedaan domain. Worker memisahkan pekerjaan yang berjalan lama atau memakan memori dari permintaan HTTP.
-5. **Tidak ada eksekusi kode arbitrer, tidak ada plugin Python, tidak ada terminal.** Ini keputusan scope dari `prd.md` 4.2, dan menghilangkan seluruh kelas risiko sandbox.
+5. **Eksekusi kode dan browser agen hanya melalui sandbox terisolasi.** Tidak ada plugin Python atau terminal arbitrer di proses web/worker terpercaya; detail batas kepercayaan di `../ACTIVE-SCOPE.md`.
 
 **Mengapa bukan full-parity multi-service:** paket full-parity lama membutuhkan Redis, worker Python terisolasi, vector service, socket gateway. Untuk scope terpilih, itu semua menambah biaya operasional tanpa melayani pengguna nonteknis. `prd.md` 4.2 nomor 7 mencatat penundaan ini secara eksplisit.
 
@@ -375,7 +379,7 @@ queued --> preparing --> streaming --> complete
 3. Worker membuka stream ke gateway, menulis potongan ke `ChatMessagePart` dan memperbarui `ChatMessage.status='streaming'`.
 4. Setiap potongan juga dipublikasikan sebagai event SSE bernomor (`seq`).
 5. Selesai → `complete`; stop → `stopped` dengan partial tersimpan; galat → `error` dengan `errorCode`.
-6. Heartbeat worker memperpanjang lease; lease kedaluwarsa → job kembali `queued` untuk worker lain, tetapi hanya bila belum ada bukti output dikirim. Bila ragu → `indeterminate`.
+6. Heartbeat worker memperpanjang lease; lease kedaluwarsa → job kembali `queued` untuk worker lain, hanya untuk pekerjaan lokal yang idempoten. Chat/embedding tidak diulang otomatis: tidak adanya output bukan bukti provider belum menerima request; hasil ambigu → `indeterminate`.
 
 **WAJIB** Klaim job menggunakan `WHERE state='queued'` dan token lease, bukan hanya `UPDATE ... SET leaseOwner` (race condition klasik).
 
@@ -474,7 +478,7 @@ v1:<keyId>:<nonce-b64url>:<ciphertext-b64url>:<tag-b64url>
 
 1. Skema hanya `https` (dan `http` hanya bila operator mengizinkan eksplisit untuk pengembangan).
 2. Resolusi DNS sebelum koneksi; tolak alamat loopback, link-local, dan rentang metadata cloud (`169.254.0.0/16`, `::1`, `127.0.0.0/8`) kecuali diizinkan operator lewat allowlist presisi.
-3. Larang redirect lintas host; bila redirect terjadi, validasi ulang target.
+3. Klien gateway JSON dan streaming menolak seluruh redirect (`redirect: "error"`). Operator mengisi URL endpoint akhir. Dukungan redirect kelak wajib memvalidasi tiap target sebelum koneksi.
 4. Batas waktu koneksi dan total; batas ukuran respons.
 5. Tolak URL dengan kredensial tertanam (`user:pass@`).
 
@@ -606,9 +610,9 @@ Alur: pertanyaan → ambil 5–8 potongan teratas → susun konteks dengan penan
 
 | Kind | Pemilik | Idempoten | Catatan |
 |---|---|---|---|
-| `chat.generate` | `lib/chat` | Ya (via Idempotency-Key) | Stream ke SSE |
+| `chat.generate` | `lib/chat` | Tidak untuk efek provider | Idempotency-Key hanya dedup request lokal; hasil ambigu → indeterminate |
 | `document.extract` | `lib/rag` | Ya (per documentId) | Bisa dicoba ulang aman |
-| `document.embed` | `lib/rag` | Ya (per chunk) | Lanjut dari chunk terakhir |
+| `document.embed` | `lib/rag` | Tidak dijamin untuk efek provider | Tidak retry otomatis tanpa bukti aman |
 | `usage.aggregate` | `lib/chat` | Ya | Harian |
 | `storage.cleanup` | `lib/storage` | Ya | Berkas yatim |
 | `email.send` | `lib/auth` | Tidak dijamin | Bila SMTP dikonfigurasi |
@@ -708,4 +712,4 @@ Setiap work package menyertakan: perintah yang dijalankan, exit code, hasil ring
 | Enkripsi server default, Direct ditunda | Direct default | Bila pengguna menuntut key tidak menyentuh server |
 | RAG dengan fallback kata kunci | Wajib embedding | Bila kualitas retrieval kata kunci terbukti tidak cukup |
 | Satu model per pesan di v1 | Multi-model sejak awal | Bila kebutuhan perbandingan model muncul |
-| Tanpa eksekusi kode/plugin/terminal | Parity penuh | Bila segmen teknis menjadi prioritas dan kontrol sandbox tersedia |
+| Kode/browser hanya di sandbox terisolasi; plugin server tetap dilarang | Eksekusi di worker terpercaya ditolak | Gate AG-P3 pada scope aktif wajib sebelum fitur diaktifkan |

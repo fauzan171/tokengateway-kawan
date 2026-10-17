@@ -1,5 +1,7 @@
 # Hasil pemeriksaan konsistensi dokumen
 
+Hasil 14 Oktober di bawah adalah historis. Pemeriksaan 17 Oktober mencakup 13 dokumen, 79 requirement, 94 work package, 64 baris coverage, 0 peringatan dan 0 pelanggaran. Ini tidak memverifikasi semantic parity atau implementasi agen. Lihat [scope aktif](../ACTIVE-SCOPE.md) dan [audit terbaru](reports/scope-audit-2026-10-17.md).
+
 Perintah:
 
 ```bash
