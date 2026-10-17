@@ -16,6 +16,7 @@ import { logger } from "@/lib/api/logger";
 import { loadConfig } from "@/lib/config/env";
 import { closeDb, getDb } from "@/lib/db";
 import { createWorker, type JobHandler } from "@/lib/jobs/worker";
+import { runGeneration } from "@/lib/chat/generate";
 
 const IDLE_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -23,12 +24,17 @@ const SHUTDOWN_GRACE_MS = 10_000;
 const FORCE_EXIT_MS = 30_000;
 
 /**
- * Handler per kind didaftarkan di sini saat kind-nya benar-benar lahir
- * (`chat.generate` di P3-04, `document.extract` di P6-03, dan seterusnya).
- * Selama kosong, job yang diklaim ditandai `failed` dengan pesan jelas —
- * bukan dijalankan setengah jalan dan bukan menggantung di `leased`.
+ * Handler per kind didaftarkan di sini saat kind-nya benar-benar lahir.
  */
-const handlers: Record<string, JobHandler> = {};
+const handlers: Record<string, JobHandler> = {
+  "chat.generate": async (claim, signal) => {
+    const payload = JSON.parse(claim.payloadJson || "{}") as { generationId?: string };
+    if (!payload.generationId) throw new Error("Payload job chat.generate tidak memiliki generationId.");
+    const config = loadConfig();
+    const db = await getDb(config.databaseUrl);
+    await runGeneration(db, config, payload.generationId, signal);
+  },
+};
 
 async function main(): Promise<void> {
   const config = loadConfig();

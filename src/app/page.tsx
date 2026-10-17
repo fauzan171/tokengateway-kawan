@@ -1,17 +1,43 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { Menu, MessageCircle, Plus, Settings, Sparkles, X } from "lucide-react";
+import { Menu, MessageCircle, Plus, Settings, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChatView } from "@/components/chat-view";
 
 type Theme = "system" | "light" | "dark";
 
 export default function Home() {
+  const router = useRouter();
   const [section, setSection] = useState("chat");
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
-  const heading = useRef<HTMLHeadingElement>(null);
+
+  /**
+   * Pengalihan onboarding (REQ-NT-01): pengguna yang sudah masuk tetapi belum
+   * punya koneksi aktif diarahkan ke `/onboarding`. Pemeriksaan dilakukan di
+   * klien lewat endpoint yang sudah ada — tanpa menyentuh berkas server lain.
+   * Belum masuk (401) atau jaringan gagal dibiarkan: beranda tetap tampil.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const response = await fetch("/api/kawan/v1/connections", { signal: controller.signal });
+        if (!response.ok) return;
+        const payload = (await response.json().catch(() => null)) as
+          | { connections?: { isActive?: boolean }[] }
+          | null;
+        const hasActive = payload?.connections?.some((item) => item.isActive === true) ?? false;
+        if (!hasActive) router.replace("/onboarding");
+      } catch {
+        /* Dibiarkan: beranda tetap tampil bila pemeriksaan tidak dapat dijalankan. */
+      }
+    })();
+    return () => controller.abort();
+  }, [router]);
 
   useEffect(() => {
     try {
@@ -75,14 +101,7 @@ export default function Home() {
         </header>
         <main id="content" className="flex flex-1 flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
           {section === "chat" ? (
-            <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-12">
-              <div className="mb-6 flex size-14 items-center justify-center rounded-2xl border bg-muted"><Sparkles aria-hidden className="size-6" /></div>
-              <p className="mb-3 text-sm text-muted-foreground">TEMAN BERPIKIR, SETIAP HARI</p>
-              <h1 ref={heading} className="text-4xl font-semibold tracking-tight sm:text-5xl">Ide besar mulai<br />dari obrolan kecil.</h1>
-              <p className="mt-5 max-w-lg leading-7 text-muted-foreground">Selamat datang di Kawan. Ruang pribadi untuk bertanya, menulis, dan menjelajahi ide bersama AI dengan kunci API milikmu sendiri.</p>
-              <div className="mt-10 grid gap-3 sm:grid-cols-3">{["Susun ide jadi rencana", "Pelajari hal baru", "Temukan kata yang pas"].map(text => <div key={text} className="rounded-2xl border p-5 text-sm">{text}</div>)}</div>
-              <div className="mt-8 rounded-2xl border bg-muted/40 p-5" role="status"><p className="font-medium">Ruangmu sudah siap. Koneksi menyusul.</p><p className="mt-2 text-sm leading-6 text-muted-foreground">Fitur koneksi gateway dan pengiriman pesan belum tersedia pada versi ini. Tidak ada pesan atau API key yang dikirim.</p></div>
-            </div>
+            <ChatView />
           ) : section === "settings" ? (
             <section className="mx-auto w-full max-w-3xl py-12"><Settings aria-hidden className="mb-5 size-7" /><h1 className="text-3xl font-semibold">Buat nyaman ruangmu.</h1><p className="mt-3 text-muted-foreground">Sesuaikan tampilan Kawan dengan caramu bekerja.</p><div className="mt-10 rounded-2xl border p-6"><label htmlFor="theme" className="block font-medium">Tema tampilan</label><p className="mt-2 text-sm text-muted-foreground">Pilihan tersimpan di perangkat ini jika penyimpanan browser tersedia.</p><select id="theme" value={theme} onChange={event => { const value = event.target.value as Theme; setTheme(value); try { localStorage.setItem("kawan-theme", value); } catch { /* Theme remains usable without storage. */ } }} className="mt-5 min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"><option value="system">Ikuti sistem</option><option value="light">Terang</option><option value="dark">Gelap</option></select></div></section>
           ) : (

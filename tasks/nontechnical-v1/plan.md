@@ -1,6 +1,6 @@
 # Plan — Kawan (scope nontechnical-v1)
 
-Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 belum dibuka.
+Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 dikerjakan dan WP-NT-P1-01 sampai WP-NT-P1-05 selesai — gate NT-P1 belum dibuka karena WP-NT-P1-06 belum dikerjakan.
 Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (dipin, bukan `main`).
 
 Dokumen ini menjawab: apa dikerjakan lebih dulu, apa yang bergantung pada apa, mana yang boleh paralel, dan kapan sebuah pekerjaan boleh dimulai atau disebut selesai. Requirement ada di `prd.md`; desain teknis di `sdd.md`; keputusan cakupan di `coverage.md`.
@@ -75,16 +75,24 @@ Status: WP-NT-P0-01 sampai WP-NT-P0-07 selesai; gate NT-P0 lulus pada 2026-10-16
 
 ### NT-P1 — Auth dan akun dasar
 
-| WP | Isi | REQ | SDD | Dep | Paralel | Gate |
-|---|---|---|---|---|---|---|
-| WP-NT-P1-01 | Auth.js Credentials + tabel `User`/`Credential`/`Session` + cookie HttpOnly/SameSite; Argon2id | REQ-NT-11, REQ-NT-13 | SDD-5.1 | P0-02 | tidak | Login/logout E2E |
-| WP-NT-P1-02 | Admin pertama atomik | REQ-NT-12 | SDD-5.1 | P1-01 | tidak | Uji konkurensi: tepat satu admin |
-| WP-NT-P1-03 | Halaman masuk/daftar + validasi + pesan generik + atribusi branding | REQ-NT-11, SDD-7.6 | SDD-7.2 | P1-01 | ya | E2E daftar→masuk |
-| WP-NT-P1-04 | Rate limit login berbasis DB | REQ-NT-15 | SDD-5.1 | P1-01 | ya | Uji 429 setelah N percobaan |
-| WP-NT-P1-05 | Ganti sandi + ganti nama; pencabutan sesi lain | REQ-NT-14 | SDD-5.1 | P1-01 | ya | Sesi lain invalid setelah ganti sandi |
-| WP-NT-P1-06 | Reset sandi token sekali pakai (mode tanpa SMTP: tautan ke admin) | REQ-NT-16 | SDD-5.1 | P1-01 | ya | Token sekali pakai; kedaluwarsa ditolak |
+Status: **fase NT-P1 SELESAI** — WP-NT-P1-01 sampai WP-NT-P1-06 selesai dan gate paketnya lulus pada 2026-10-16 (typecheck, lint, 156 test, build, `check-migrations` dua provider, `check_docs`, ditambah uji E2E mandor `scripts/e2e_kawan.py` 33/33 dan uji alur reset lewat HTTP). Bukti per WP ada di laporan mandor (`reports/nt-p1.md`), bukan di tabel ini.
 
-**Gate NT-P1:** alur daftar→masuk→logout lulus E2E; admin pertama terbukti atomik; cookie HttpOnly/SameSite terverifikasi.
+| WP | Isi | REQ | SDD | Dep | Paralel | Gate | Status |
+|---|---|---|---|---|---|---|---|
+| WP-NT-P1-01 | Auth.js Credentials + tabel `User`/`Credential`/`Session` + cookie HttpOnly/SameSite; Argon2id | REQ-NT-11, REQ-NT-13 | SDD-5.1 | P0-02 | tidak | Login/logout E2E | selesai |
+| WP-NT-P1-02 | Admin pertama atomik | REQ-NT-12 | SDD-5.1 | P1-01 | tidak | Uji konkurensi: tepat satu admin | selesai |
+| WP-NT-P1-03 | Halaman masuk/daftar + validasi + pesan generik + atribusi branding | REQ-NT-11, SDD-7.6 | SDD-7.2 | P1-01 | ya | E2E daftar→masuk | selesai |
+| WP-NT-P1-04 | Rate limit login berbasis DB | REQ-NT-15 | SDD-5.1 | P1-01 | ya | Percobaan ke-N+1 ditolak (Auth.js selalu 302; bukti dari ada-tidaknya sesi, bukan kode status) | selesai |
+| WP-NT-P1-05 | Ganti sandi + ganti nama; pencabutan sesi lain | REQ-NT-14 | SDD-5.1 | P1-01 | ya | Sesi lain invalid setelah ganti sandi | selesai |
+| WP-NT-P1-06 | Reset sandi token sekali pakai (mode tanpa SMTP: tautan ke admin) | REQ-NT-16 | SDD-5.1 | P1-01 | ya | Token sekali pakai; kedaluwarsa ditolak | selesai |
+
+**Gate NT-P1:** alur daftar→masuk→logout lulus E2E; admin pertama terbukti atomik; cookie HttpOnly/SameSite terverifikasi. **LULUS** — keenam WP selesai.
+
+Catatan verifikasi WP-NT-P1-04: batas bawaan 5 percobaan / 15 menit. Setelah batas terlampaui, kata sandi yang BENAR pun ditolak selama jendela berjalan — itu perilaku yang diminta, dan diuji lewat ketiadaan sesi karena Auth.js tidak pernah mengembalikan 429 di jalur `credentials`. Hitungan disimpan di tabel `LoginAttempt`, dibuktikan dengan membacanya dari koneksi database terpisah.
+
+Catatan verifikasi WP-NT-P1-05: `POST /api/account/password` mengambil token sesi dengan mendekode cookie HttpOnly di sisi server, bukan dengan menaruh `sid` di objek sesi — objek sesi ikut terkirim ke peramban lewat `/api/auth/session`, sehingga token mentah di sana akan terbaca JavaScript. Halaman `/pengaturan` disediakan sebagai antarmuka.
+
+Catatan verifikasi WP-NT-P1-06: tabel `PasswordResetToken` mengikuti konvensi **squash** repo (ditambahkan ke `_schema.sql` dan kedua salinan init), karena `check-migrations.mjs` menuntut setiap `migration.sql` identik dengan `_schema.sql` sehingga direktori migrasi baru tidak mungkin lulus. Konsekuensinya: `dev.db` yang sudah ada tidak mendapat tabel baru dan harus dibangun ulang (`rm dev.db && npx prisma migrate deploy --config prisma7.config.ts`). Aman selama belum ada deployment produksi (0 tag, PostgreSQL belum dipakai); **konsekuensi ini harus ditinjau ulang sebelum rilis pertama**. Tiga klaim inti diuji mandor lewat HTTP pada server yang berjalan: token dipakai dua kali ditolak, token kedaluwarsa ditolak tanpa mengubah sandi, dan kedua sesi pengguna dicabut setelah reset berhasil.
 
 ### NT-P2 — Koneksi gateway dan model
 
@@ -101,6 +109,10 @@ Status: WP-NT-P0-01 sampai WP-NT-P0-07 selesai; gate NT-P0 lulus pada 2026-10-16
 | WP-NT-P2-09 | Capability matrix: sembunyikan kontrol tak tersedia | REQ-NT-21, REQ-NT-69 | SDD-3.3 | P2-05 | ya | Uji: model tanpa visi → tak ada tombol gambar |
 
 **Gate NT-P2 (pembekuan kontrak):** onboarding E2E lulus; key tidak pernah kembali ke browser (uji canary); kontrak `Connection`/`ModelCache` dibekukan dan dicatat sebagai revisi dokumen bila berubah.
+
+**Kontrak dibekukan 2026-10-16 sebelum WP mana pun dikerjakan** (commit `d1bee88`): tabel `Connection` dan `ModelCache`, plus variabel konfigurasi `ENCRYPTION_KEY_ID`, `MODEL_CACHE_TTL_SECONDS`, `OUTBOUND_ALLOWLIST`, `ALLOW_INSECURE_HTTP`. Dibekukan mandor, bukan diserahkan ke worker, karena (a) peringatan kontrak di atas dan (b) konvensi migrasi SQUASH repo ini membuat dua WP yang sama-sama butuh tabel baru selalu bentrok di tiga berkas yang sama.
+
+**Catatan ketergantungan WP-NT-P2-08 dan WP-NT-P2-09.** Keduanya menyentuh pemilih model **di dalam chat**, sedangkan tabel `Chat` (beserta `Chat.modelRef`) baru dibuat di NT-P3 — saat kontrak NT-P2 dibekukan, tabel itu belum ada. Gate keduanya pun menuntut hal yang hanya bisa dibuktikan bila chat ada ("Buka chat lama memakai model tersimpan", "model tanpa visi → tak ada tombol gambar"). Karena itu keduanya **dipindahkan ke NT-P3**, ditempatkan setelah pohon pesan dan composer berdiri, dan tetap memakai `GET /api/kawan/v1/models` yang dibangun di NT-P2. Membangun komponennya sekarang akan menghasilkan komponen yatim tanpa tempat pakai.
 
 ### NT-P3 — Chat inti
 
