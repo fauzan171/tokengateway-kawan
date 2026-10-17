@@ -32,6 +32,7 @@ import {
 } from "@/lib/providers/errors";
 import { CONNECTION_API_KEY_PURPOSE, decryptSecret } from "@/lib/secrets";
 import { StopRequested, stopIfRequested } from "./stop";
+import { recordUsage } from "./usage";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
 
@@ -206,6 +207,7 @@ async function streamGateway(input: {
       headers,
       body: JSON.stringify(input.body),
       signal: combined,
+      redirect: "error",
     });
   } catch (err) {
     if (input.signal.aborted) throw err;
@@ -300,37 +302,6 @@ export async function publishEvent(
       },
     });
     return seq;
-  });
-}
-
-export type UsageInput = {
-  userId: string;
-  chatId: string | null;
-  model: string;
-  /** `false` bila gateway tidak melaporkan usage → token dikosongkan. */
-  reported: boolean;
-  promptTokens?: number | null;
-  completionTokens?: number | null;
-  totalTokens?: number | null;
-};
-
-/**
- * Mencatat pemakaian (REQ-NT-71). Bila gateway tidak melaporkan usage,
- * `reported=0` dan angka token dibiarkan kosong — TIDAK diisi nol karangan.
- */
-export async function recordUsage(db: Db, input: UsageInput): Promise<void> {
-  const reported = input.reported;
-  await db.usageRecord.create({
-    data: {
-      id: randomUUID(),
-      userId: input.userId,
-      chatId: input.chatId,
-      model: input.model,
-      promptTokens: reported ? (input.promptTokens ?? null) : null,
-      completionTokens: reported ? (input.completionTokens ?? null) : null,
-      totalTokens: reported ? (input.totalTokens ?? null) : null,
-      reported: reported ? 1 : 0,
-    },
   });
 }
 
@@ -516,9 +487,6 @@ export async function runGeneration(
     userId: chat.userId,
     chatId: generation.chatId,
     model,
-    reported: usage !== null,
-    promptTokens: usage?.promptTokens ?? null,
-    completionTokens: usage?.completionTokens ?? null,
-    totalTokens: usage?.totalTokens ?? null,
+    usage,
   });
 }

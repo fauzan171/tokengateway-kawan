@@ -47,6 +47,8 @@ export async function fetchJson<T>(
       headers: options.headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal,
+      // Redirect tidak boleh melewati validasi egress atau meneruskan kredensial.
+      redirect: "error",
     });
   } catch (err) {
     if (err instanceof Error && err.name === "TimeoutError") {

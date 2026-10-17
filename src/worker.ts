@@ -17,6 +17,7 @@ import { loadConfig } from "@/lib/config/env";
 import { closeDb, getDb } from "@/lib/db";
 import { createWorker, type JobHandler } from "@/lib/jobs/worker";
 import { runGeneration } from "@/lib/chat/generate";
+import { reconcileGenerations } from "@/lib/chat/recovery";
 
 const IDLE_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -52,9 +53,11 @@ async function main(): Promise<void> {
     handlers,
     idleMs: IDLE_MS,
     shutdownGraceMs: SHUTDOWN_GRACE_MS,
+    beforeClaim: () => reconcileGenerations(db),
   });
 
   const controller = new AbortController();
+  let force: ReturnType<typeof setTimeout> | undefined;
   const shutdown = (signal: NodeJS.Signals) => {
     if (controller.signal.aborted) {
       logger.warn(
@@ -64,20 +67,20 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     log("shutdown", { signal });
+    force = setTimeout(() => process.exit(1), FORCE_EXIT_MS);
+    force.unref();
     worker.stop();
     controller.abort();
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const force = setTimeout(() => process.exit(1), FORCE_EXIT_MS);
-  force.unref();
-
   log("started", { kinds: Object.keys(handlers) });
   await worker.run(controller.signal);
 
-  clearTimeout(force);
+  await reconcileGenerations(db);
   await closeDb();
+  clearTimeout(force);
   log("stopped");
 }
 

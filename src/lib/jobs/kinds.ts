@@ -20,9 +20,7 @@ export const JOB_KINDS = [
 export type JobKind = (typeof JOB_KINDS)[number];
 
 const IDEMPOTENT: ReadonlySet<string> = new Set<JobKind>([
-  "chat.generate",
   "document.extract",
-  "document.embed",
   "usage.aggregate",
   "storage.cleanup",
 ]);

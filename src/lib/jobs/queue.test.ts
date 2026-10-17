@@ -93,7 +93,7 @@ describe("klaim job", () => {
   });
 
   it("job yang sudah habis percobaan tidak diklaim", async () => {
-    const id = await enqueue(db, { kind: "chat.generate", payload: {}, maxAttempts: 1 });
+    const id = await enqueue(db, { kind: "document.extract", payload: {}, maxAttempts: 1 });
     const first = await claim(db, { workerId: workerId(0), id });
     expect(first).not.toBeNull();
 
@@ -117,10 +117,10 @@ describe("lease", () => {
     const after = (await db.job.findUniqueOrThrow({ where: { id } })).leaseExpiresAt!;
     expect(after.getTime()).toBe(now.getTime() + 60_000);
 
-    // Worker lain mengklaim ulang setelah lease habis: token lama tidak berlaku.
+    // Lease habis mencabut token lama; chat tidak diklaim ulang otomatis.
     expect(await releaseExpired(db, new Date(after.getTime() + 1))).toEqual({
-      requeued: 1,
-      indeterminate: 0,
+      requeued: 0,
+      indeterminate: 1,
     });
     expect(await heartbeat(db, held!, 60_000, new Date(after.getTime() + 2))).toBe(false);
   });
@@ -139,8 +139,22 @@ describe("lease", () => {
 });
 
 describe("percobaan ulang dan idempotensi", () => {
+  for (const kind of ["chat.generate", "document.embed"]) {
+    it(`${kind}: lease habis tidak mengulang panggilan provider berbayar`, async () => {
+      const id = await enqueue(db, { kind, payload: {} });
+      await claim(db, { workerId: workerId(0), id, leaseMs: 0 });
+      expect(await releaseExpired(db, new Date(Date.now() + 1000))).toEqual({ requeued: 0, indeterminate: 1 });
+      expect(await claim(db, { workerId: workerId(1), id })).toBeNull();
+    });
+    it(`${kind}: kegagalan ambigu tidak diulang otomatis`, async () => {
+      const id = await enqueue(db, { kind, payload: {} });
+      const held = await claim(db, { workerId: workerId(0), id });
+      expect(await fail(db, held!, new Error("connection lost"))).toBe("indeterminate");
+      expect(await claim(db, { workerId: workerId(1), id })).toBeNull();
+    });
+  }
   it("gagal dengan sisa percobaan: kembali queued dengan backoff ke depan", async () => {
-    const id = await enqueue(db, { kind: "document.embed", payload: {}, maxAttempts: 3 });
+    const id = await enqueue(db, { kind: "document.extract", payload: {}, maxAttempts: 3 });
     const held = await claim(db, { workerId: workerId(0), id });
     const now = new Date();
 
@@ -246,6 +260,27 @@ describe("worker", () => {
     const row = await db.job.findUniqueOrThrow({ where: { id } });
     expect(row.state).toBe("queued");
     expect(row.lastError).toBe("agregasi meledak");
+    expect(row.leaseToken).toBeNull();
+  });
+
+  it("shutdown handler kooperatif juga menutup lease sebagai indeterminate", async () => {
+    const id = await enqueue(db, { kind: "chat.generate", payload: {} });
+    let started = false;
+    const worker = createWorker({
+      db, workerId: workerId(3), idleMs: 1,
+      handlers: {
+        "chat.generate": async (_job, signal) => {
+          started = true;
+          await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+        },
+      },
+    });
+    const loop = worker.run(new AbortController().signal);
+    await until(async () => started);
+    worker.stop();
+    await loop;
+    const row = await db.job.findUniqueOrThrow({ where: { id } });
+    expect(row.state).toBe("indeterminate");
     expect(row.leaseToken).toBeNull();
   });
 
