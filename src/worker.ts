@@ -55,6 +55,7 @@ async function main(): Promise<void> {
   });
 
   const controller = new AbortController();
+  let force: NodeJS.Timeout | undefined;
   const shutdown = (signal: NodeJS.Signals) => {
     if (controller.signal.aborted) {
       logger.warn(
@@ -66,17 +67,18 @@ async function main(): Promise<void> {
     log("shutdown", { signal });
     worker.stop();
     controller.abort();
+    // Deadline force-exit baru aktif saat shutdown pertama: operasi normal
+    // tidak boleh membawa timer yang mematikan proses.
+    force = setTimeout(() => process.exit(1), FORCE_EXIT_MS);
+    force.unref();
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const force = setTimeout(() => process.exit(1), FORCE_EXIT_MS);
-  force.unref();
-
   log("started", { kinds: Object.keys(handlers) });
   await worker.run(controller.signal);
 
-  clearTimeout(force);
+  if (force) clearTimeout(force);
   await closeDb();
   log("stopped");
 }
