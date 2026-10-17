@@ -31,6 +31,7 @@ import {
   fromUpstreamStatus,
 } from "@/lib/providers/errors";
 import { CONNECTION_API_KEY_PURPOSE, decryptSecret } from "@/lib/secrets";
+import { StopRequested, stopIfRequested } from "./stop";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
 
@@ -174,6 +175,8 @@ async function streamGateway(input: {
   body: unknown;
   outbound: OutboundPolicyOptions;
   signal: AbortSignal;
+  /** Dipanggil sekali per potongan; `true` → pembatalan diminta pengguna. */
+  shouldStop: () => Promise<boolean>;
   onDelta: (delta: { kind: string; text?: string; usage?: StreamUsage; finishReason?: string | null }) => Promise<void>;
 }): Promise<{ usage: StreamUsage | null; finishReason: string | null }> {
   // Validasi alamat keluar dulu (SSRF, SDD-5.3) — `fetch` langsung tetap harus
@@ -228,6 +231,10 @@ async function streamGateway(input: {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      // Setiap potongan diperiksa (SDD-4.6): begitu `cancelRequestedAt` terisi,
+      // potongan yang baru dibaca ini TIDAK ditulis dan koneksi ditutup —
+      // tidak ada token yang tersimpan setelah pembatalan.
+      if (await input.shouldStop()) throw new StopRequested();
       for (const delta of parser.push(value)) {
         if (delta.kind === "done") {
           sawDone = true;
@@ -250,9 +257,12 @@ async function streamGateway(input: {
       }
     }
   } catch (err) {
-    if (input.signal.aborted) throw err;
+    // Pembatalan (dari luar atau karena stop) bukan galat generasi: teruskan
+    // apa adanya supaya pemanggil membedakannya dari kegagalan gateway.
+    if (input.signal.aborted || err instanceof StopRequested) throw err;
     throw transportError(err);
   } finally {
+    // Menutup koneksi ke gateway — juga jalur pembatalan (SDD-4.6).
     reader.cancel().catch(() => {});
   }
 
@@ -321,6 +331,34 @@ export async function recordUsage(db: Db, input: UsageInput): Promise<void> {
       totalTokens: reported ? (input.totalTokens ?? null) : null,
       reported: reported ? 1 : 0,
     },
+  });
+}
+
+/**
+ * Menutup generasi yang dihentikan pengguna (SDD-4.6): event `done` berstatus
+ * `stopped`, partial yang sudah terkumpul disimpan, status jadi `stopped`.
+ * Tidak ada token setelah pembatalan karena loop sudah berhenti.
+ */
+async function stopGeneration(
+  db: Db,
+  generationId: string,
+  assistantMessageId: string,
+  partialText: string,
+  now: Date,
+): Promise<void> {
+  const contentJson =
+    partialText === ""
+      ? JSON.stringify({ parts: [] })
+      : JSON.stringify({ parts: [{ kind: "text", text: partialText }] });
+
+  await db.chatMessage.update({
+    where: { id: assistantMessageId },
+    data: { status: "stopped", contentJson },
+  });
+  await publishEvent(db, generationId, "done", { status: "stopped" });
+  await db.generation.update({
+    where: { id: generationId },
+    data: { status: "stopped", finishedAt: now },
   });
 }
 
@@ -418,6 +456,7 @@ export async function runGeneration(
         allowlist: config.outboundAllowlist,
       },
       signal,
+      shouldStop: () => stopIfRequested(db, generationId),
       onDelta: async (delta) => {
         if (delta.kind === "text" && delta.text) {
           text += delta.text;
@@ -439,6 +478,11 @@ export async function runGeneration(
   } catch (err) {
     // Worker berhenti: bukan galat generasi; penanganan stop menutupnya nanti.
     if (signal.aborted) return;
+    // Pembatalan pengguna: simpan partial, tutup `stopped` (SDD-4.6).
+    if (err instanceof StopRequested) {
+      await stopGeneration(db, generationId, generation.assistantMessageId, text, new Date());
+      return;
+    }
     if (err instanceof GenerationError) {
       await failGeneration(db, generationId, generation.assistantMessageId, err, text, new Date());
       return;

@@ -181,6 +181,31 @@ describe("runGeneration", () => {
     expect(body.messages).toEqual([{ role: "user", content: "Halo" }]);
   });
 
+  it("pembatalan sebelum potongan pertama: stopped, tanpa token (SDD-4.6)", async () => {
+    const { assistantMessageId, generationId } = await seedGeneration("usage-present");
+    // Bendera dipasang sebelum worker mulai: pemeriksaan pertama langsung
+    // menghentikan loop, jadi tidak ada token yang ditulis.
+    await db.generation.update({
+      where: { id: generationId },
+      data: { status: "streaming", cancelRequestedAt: new Date() },
+    });
+
+    await run(generationId);
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({ where: { id: assistantMessageId } });
+    expect(assistant.status).toBe("stopped");
+    expect(await db.chatMessagePart.count({ where: { messageId: assistantMessageId } })).toBe(0);
+
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("stopped");
+    expect(generation.finishedAt).not.toBeNull();
+
+    const done = await db.generationEvent.findFirstOrThrow({
+      where: { generationId, kind: "done" },
+    });
+    expect(JSON.parse(done.payloadJson)).toEqual({ status: "stopped" });
+  });
+
   it("koneksi tanpa kunci yang cocok → galat setup, tidak menulis event", async () => {
     await db.connection.deleteMany({ where: { userId } });
     const chat = await createChat(db, { userId });
