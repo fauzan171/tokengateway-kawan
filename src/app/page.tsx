@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
 import { Menu, MessageCircle, Plus, Settings, X } from "lucide-react";
@@ -72,7 +72,7 @@ export default function Home() {
           <Button key={id} variant="ghost" className="h-11 w-full justify-start" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
         ))}
       </nav>
-      <div className="mt-10 border-t pt-5 text-sm text-muted-foreground"><p>Ruang untuk ide berikutnya.</p><p className="mt-2 text-xs">Percakapanmu akan muncul di sini setelah fitur chat tersedia.</p></div>
+      <div className="mt-10 border-t pt-5 text-sm text-muted-foreground"><p>Ruang untuk ide berikutnya.</p><p className="mt-2 text-xs">Daftar percakapan dan folder akan muncul di sini.</p></div>
       <a className="mt-auto pt-8 text-xs text-muted-foreground underline-offset-4 hover:underline" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
     </div>
   );
@@ -97,7 +97,7 @@ export default function Home() {
             </Dialog.Root>
             <span className="text-sm font-medium">{section === "chat" ? "Percakapan baru" : section === "settings" ? "Pengaturan" : "Tentang Kawan"}</span>
           </div>
-          <span className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">Pratinjau</span>
+          <span className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">Beta</span>
         </header>
         <main id="content" className="flex flex-1 flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
           {section === "chat" ? (
@@ -105,7 +105,7 @@ export default function Home() {
           ) : section === "settings" ? (
             <section className="mx-auto w-full max-w-3xl py-12"><Settings aria-hidden className="mb-5 size-7" /><h1 className="text-3xl font-semibold">Buat nyaman ruangmu.</h1><p className="mt-3 text-muted-foreground">Sesuaikan tampilan Kawan dengan caramu bekerja.</p><div className="mt-10 rounded-2xl border p-6"><label htmlFor="theme" className="block font-medium">Tema tampilan</label><p className="mt-2 text-sm text-muted-foreground">Pilihan tersimpan di perangkat ini jika penyimpanan browser tersedia.</p><select id="theme" value={theme} onChange={event => { const value = event.target.value as Theme; setTheme(value); try { localStorage.setItem("kawan-theme", value); } catch { /* Theme remains usable without storage. */ } }} className="mt-5 min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"><option value="system">Ikuti sistem</option><option value="light">Terang</option><option value="dark">Gelap</option></select></div></section>
           ) : (
-            <section className="mx-auto w-full max-w-3xl py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">Chat pribadi dengan kunci API milikmu sendiri. Versi 0.1.0 — fondasi antarmuka; fitur chat belum tersedia.</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-block underline">by tokengateway.ai.id</a></section>
+            <section className="mx-auto w-full max-w-3xl py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">Chat pribadi dengan kunci API milikmu sendiri. Versi 0.1.0 — chat, streaming, dan pengaturan dasar sudah tersedia.</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-block underline">by tokengateway.ai.id</a></section>
           )}
           <footer className="text-center text-xs leading-6 text-muted-foreground">Kawan · Ruang untuk percakapan bermakna</footer>
         </main>

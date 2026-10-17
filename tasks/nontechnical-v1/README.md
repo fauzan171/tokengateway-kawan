@@ -1,6 +1,6 @@
 # Paket dokumen Kawan — scope nontechnical-v1
 
-Status: dokumen perencanaan aktif untuk brief terbaru. Aplikasi belum ada; tidak ada satu baris kode implementasi di paket ini.
+Status: dokumen perencanaan dan laporan implementasi. Fase NT-P0 sampai NT-P3 sudah dikerjakan dan di-merge ke `main`; fase NT-P4 sampai NT-P10 belum. Kode aplikasi ada di akar repo ini (`src/`), bukan di paket dokumen.
 
 Paket ini menjawab permintaan terbaru pemilik produk: PRD lengkap dan SDD detail yang siap dibagikan ke implementer, dengan target pengguna **nonteknis**, pengalaman chat selengkap ChatGPT untuk pemakaian pribadi, dan **BYOK gateway sebagai jalur default**. Fitur yang dianggap overkill untuk target ini dikecualikan secara eksplisit, bukan dihapus diam-diam.
 
@@ -44,6 +44,9 @@ Bila ada konflik antar dokumen: requirement produk di `prd.md` menang atas detai
 | `plan.md` | Milestone, dependency, work package paralel, DoR/DoD, handoff. |
 | `coverage.md` | Matriks feature sumber dengan keputusan include/defer/exclude. |
 | `execution-prompt.md` | Instruksi worker dan quality gate. |
+| `prompt-full.md` | Prompt eksekusi penuh: satu perintah untuk menyelesaikan NT-P4 sampai NT-P10 setelah konsolidasi NT-P0..NT-P3. |
+| `handoff-prompts.md` | Prompt handoff per peran (mandor, worker, pemilik produk). |
+| `reports/` | Laporan per fase dan per work package (`nt-p1.md`, `nt-p1-01.md`, dst). |
 | `tools/check_docs.py` | Pemeriksa konsistensi dokumen berbasis Python stdlib (tanpa framework). |
 | `verification.md` | Hasil jalannya pemeriksa konsistensi (output nyata). |
 

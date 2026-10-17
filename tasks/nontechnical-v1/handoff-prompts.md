@@ -100,48 +100,48 @@ produk → prd.md → sdd.md → plan.md → execution-prompt.md.
 Repositori sudah di GitHub: https://github.com/fauzan171/tokengateway-kawan.git
 (branch default `main`). Clone bila kamu bekerja di mesin lain.
 
-Keadaan saat ini:
-- Fase NT-P0 (Fondasi) selesai; WP-NT-P0-01 sampai WP-NT-P0-07 lulus; gate NT-P0 lulus
-  pada 2026-10-16 (typecheck, lint, test, build, uji klaim antrean, fixture provider).
-  Bukti per WP ada di laporan mandor, bukan di plan.md.
-- WP-NT-P1-01 sudah dikerjakan dan di-push (commit `4bab04a`). Isinya fondasi auth di
-  `src/lib/auth/`: `password.ts` (Argon2id), `users.ts` (buat akun + admin pertama di satu
-  transaksi), `session-store.ts` (buku besar sesi untuk pencabutan; tabel hanya menyimpan
-  SHA-256 id sesi), `session.ts` (konfigurasi Auth.js, strategi JWT, callback `jwt` memuat
-  ulang role/status dari database).
-  Verifikasi yang sudah lulus: `npm run typecheck`, `npm run lint`, `npm test` (42 lulus),
-  `npm run build`.
-- Yang **belum** ada dari NT-P1-01, dan harus kamu tutup sebelum menganggap WP ini selesai:
-  route handler Auth.js (`src/app/api/auth/[...nextauth]/route.ts`), dan unit test untuk
-  keempat berkas auth (termasuk bukti admin pertama atomik di bawah dua transaksi bersamaan,
-  serta `isSessionValid` menolak token yang dicabut dan token milik pengguna lain).
-- plan.md baris status belum diperbarui untuk NT-P1-01. Perbarui.
+Keadaan saat ini (per 2026-10-17, `main` = `ad32864`):
+- NT-P0 (fondasi), NT-P1 (auth), NT-P2 (koneksi gateway + model), dan NT-P3 (chat inti)
+  sudah dikerjakan dan di-merge ke `main`. Gate NT-P1 lulus 2026-10-16 (typecheck, lint,
+  156 test, build, `check-migrations` dua provider, `check_docs`, E2E `scripts/e2e_kawan.py`
+  33/33). Bukti per WP ada di `reports/`, bukan di plan.md.
+- Kode yang sudah ada: `src/lib/auth/` (Argon2id, admin pertama atomik, buku besar sesi),
+  `src/lib/connections/` (envelope AES-256-GCM, cache model), `src/lib/net/policy.ts`
+  (kebijakan egress + resolver yang bisa disuntik), `src/lib/jobs/` (antrean tabel, lease,
+  heartbeat), `src/lib/chat/` (pohon pesan, kirim, edit, regenerate, continue, stop, SSE
+  dengan `afterSeq`, judul otomatis, usage), dan route `src/app/api/kawan/v1/{chat,connections,models}`.
+- Yang masih terbuka dari NT-P3 dan harus ditutup sebelum NT-P4: WP-NT-P3-11 (UI chat
+  lengkap), WP-NT-P3-14 (pemetaan galat provider di UI), WP-NT-P3-15 (dedupe `UsageRecord`),
+  serta WP-NT-P2-08 dan WP-NT-P2-09 yang dipindahkan ke NT-P3 (pemilih model di dalam chat,
+  matriks kapabilitas). Rinciannya ada di `prompt-full.md` Tahap 1.
 
 Tugasmu sekarang:
-1. Baca prd.md bagian auth dan akun, sdd.md SDD-5.1 dan SDD-7.2, coverage.md untuk REQ-NT
-   yang bertanda NT-P1, dan plan.md blok NT-P1. Baca juga execution-prompt.md bagian 2
-   (peran) dan bagian 6 (commit dan push).
-2. Periksa dulu apa yang sudah ada di `src/lib/auth/` sebelum menugaskan apa pun. Jangan
-   menyuruh worker menulis ulang berkas yang sudah lulus verifikasi.
-3. Tentukan WP NT-P1 mana yang ready: dependency lulus, DoR terpenuhi, kontrak tidak sedang
-   berubah. Urutan ketergantungan: WP-NT-P1-01 (Auth.js Credentials + User/Credential/Session
-   + cookie HttpOnly/SameSite + Argon2id) membuka jalan; WP-NT-P1-02 (admin pertama, atomik)
-   bergantung pada 01 — perhatikan bahwa logika admin pertama sudah ada di `users.ts`, jadi
-   sisa WP-NT-P1-02 mungkin hanya bukti/pengujian, bukan penulisan ulang; WP-NT-P1-03 sampai
-   06 boleh paralel setelah 01.
-4. Pecah WP menjadi child work package bila menyentuh lebih dari 5 berkas inti atau lebih
+1. Baca `prompt-full.md` sampai habis. Itu rencana eksekusi yang mengikat, bukan ringkasan.
+2. Baca prd.md, sdd.md, plan.md, dan coverage.md untuk fase yang sedang dibuka. Baca juga
+   execution-prompt.md bagian 2 (peran) dan bagian 6 (commit dan push).
+3. Periksa dulu apa yang sudah ada di `src/lib/` dan `src/app/api/` sebelum menugaskan apa
+   pun. Jangan menyuruh worker menulis ulang berkas yang sudah lulus verifikasi.
+4. Tentukan WP yang ready: dependency lulus, DoR terpenuhi, kontrak tidak sedang berubah.
+5. Pecah WP menjadi child work package bila menyentuh lebih dari 5 berkas inti atau lebih
    dari satu subsistem.
-5. Tugaskan worker dengan batas eksplisit: berkas yang boleh disentuh, kontrak yang dipakai,
+6. Tugaskan worker dengan batas eksplisit: berkas yang boleh disentuh, kontrak yang dipakai,
    perintah verifikasi. Jangan biarkan dua worker menyentuh berkas yang sama.
-6. Setelah semua WP NT-P1 selesai, jalankan gate NT-P1: alur daftar → masuk → keluar lulus
-   end-to-end, admin pertama terbukti atomik, cookie HttpOnly/SameSite terverifikasi.
-7. Setelah gate lulus: commit dengan daftar path eksplisit (jangan pernah `git add .`),
+7. Setelah semua WP satu fase selesai, jalankan gate fase itu. Gate yang berlaku:
+   `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`,
+   `node scripts/check-migrations.mjs`, `python3 tasks/nontechnical-v1/tools/check_docs.py`.
+   Tidak ada skrip `npm run check` di repo ini.
+8. Setelah gate lulus: commit dengan daftar path eksplisit (jangan pernah `git add .`),
    lalu push. Worker tidak push; kamu yang push.
-8. Perbarui status di plan.md dan tulis laporan mandor dengan bukti per WP.
+9. Perbarui status di plan.md dan tulis laporan mandor di `reports/` dengan bukti per WP.
 
 Peringatan kontrak: NT-P2 dan NT-P3 berbagi kontrak koneksi. Bentuk Connection dan ModelCache
 dibekukan di akhir NT-P2. Mengubahnya setelah NT-P3 mulai memaksa penulisan ulang pemilih
-model. Jangan mengubah bentuk itu selama NT-P2 tanpa keputusan pemilik produk.
+model. Jangan mengubah bentuk itu tanpa keputusan pemilik produk.
+
+Peringatan migrasi: repo ini memakai konvensi SQUASH. Tabel baru masuk ke
+`prisma/migrations/_schema.sql` dan kedua salinan `00000000000000_init/migration.sql`
+harus identik byte-per-byte dengan berkas itu. `dev.db` lama tidak mendapat tabel baru dan
+harus dibangun ulang.
 
 Jangan membuka fase berikutnya tanpa perintah pemilik produk. Setiap fase dibuka terpisah
 kecuali pemilik produk memerintahkan "lanjut semua fase" dengan checkpoint.

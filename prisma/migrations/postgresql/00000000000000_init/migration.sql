@@ -190,6 +190,7 @@ CREATE TABLE "Generation" (
         REFERENCES "ChatMessage" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+CREATE UNIQUE INDEX "Generation_assistantMessageId_key" ON "Generation"("assistantMessageId");
 CREATE INDEX "Generation_chatId_createdAt_idx" ON "Generation"("chatId", "createdAt");
 CREATE INDEX "Generation_status_idx" ON "Generation"("status");
 

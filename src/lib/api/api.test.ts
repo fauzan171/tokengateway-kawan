@@ -3,6 +3,9 @@ import { ApiError, REQUEST_ID_HEADER, STATUS, errorEnvelope, requestId, toErrorR
 import { fetchJson } from "./http";
 import { REDACTED, createLogger, redact } from "./logger";
 
+/** Allowlist eksplisit: tes ini menguji penerjemahan galat, bukan resolusi DNS. */
+const OUTBOUND = { allowInsecureHttp: false, allowlist: ["api.example.test"] };
+
 const CANARY = "sk-canary-9f3a2b";
 
 describe("redact", () => {
@@ -159,13 +162,13 @@ describe("fetchJson", () => {
   it("menerjemahkan timeout menjadi 504 dan balasan rusak menjadi 502", async () => {
     const spy = vi.spyOn(globalThis, "fetch");
     spy.mockRejectedValueOnce(Object.assign(new Error("timeout"), { name: "TimeoutError" }));
-    await expect(fetchJson("https://api.example.test/v1/models")).rejects.toMatchObject({
+    await expect(fetchJson("https://api.example.test/v1/models", { outbound: OUTBOUND })).rejects.toMatchObject({
       status: STATUS.GATEWAY_TIMEOUT,
       code: "UPSTREAM_TIMEOUT",
     });
 
     spy.mockResolvedValueOnce(new Response("<html>bukan json</html>", { status: 200 }));
-    await expect(fetchJson("https://api.example.test/v1/models")).rejects.toMatchObject({
+    await expect(fetchJson("https://api.example.test/v1/models", { outbound: OUTBOUND })).rejects.toMatchObject({
       status: STATUS.BAD_GATEWAY,
       code: "UPSTREAM_BAD_RESPONSE",
       details: { upstreamStatus: 200 },
@@ -176,7 +179,7 @@ describe("fetchJson", () => {
   it("mengembalikan status dan data apa adanya saat balasan sah", async () => {
     const spy = vi.spyOn(globalThis, "fetch");
     spy.mockResolvedValueOnce(Response.json({ data: [{ id: "gpt-4o-mini" }] }, { status: 200 }));
-    await expect(fetchJson("https://api.example.test/v1/models")).resolves.toEqual({
+    await expect(fetchJson("https://api.example.test/v1/models", { outbound: OUTBOUND })).resolves.toEqual({
       status: 200,
       data: { data: [{ id: "gpt-4o-mini" }] },
     });

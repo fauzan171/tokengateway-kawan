@@ -1,6 +1,6 @@
 # Plan — Kawan (scope nontechnical-v1)
 
-Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 dikerjakan dan WP-NT-P1-01 sampai WP-NT-P1-05 selesai — gate NT-P1 belum dibuka karena WP-NT-P1-06 belum dikerjakan.
+Status: rencana kerja untuk implementer. NT-P0, NT-P1, NT-P2, dan NT-P3 sudah dikerjakan dan di-merge ke `main` (HEAD `ad32864`). Gate NT-P1 lulus 2026-10-16. Sisa NT-P3 yang belum ditutup (WP-NT-P3-11, WP-NT-P3-14, WP-NT-P3-15, ditambah WP-NT-P2-08 dan WP-NT-P2-09 yang dipindahkan) dirinci di `prompt-full.md` Tahap 1. NT-P4 dan seterusnya belum dimulai.
 Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (dipin, bukan `main`).
 
 Dokumen ini menjawab: apa dikerjakan lebih dulu, apa yang bergantung pada apa, mana yang boleh paralel, dan kapan sebuah pekerjaan boleh dimulai atau disebut selesai. Requirement ada di `prd.md`; desain teknis di `sdd.md`; keputusan cakupan di `coverage.md`.

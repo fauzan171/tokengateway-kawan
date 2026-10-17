@@ -6,10 +6,11 @@ Chat AI yang bisa di-self-host, ditujukan untuk pengguna nonteknis, memakai gate
 request; Direct key tetap tersimpan di browser saja. Kawan tidak menambahkan billing
 token.
 
-Versi saat ini: **fondasi (fase NT-P0)**. Antarmuka, konfigurasi runtime, skema database,
-antrean job berbasis tabel, dan entry point worker sudah ada dan lulus gate NT-P0
-(typecheck, lint, test, build). Fitur chat, koneksi gateway, dan pengiriman pesan belum
-tersedia.
+Status saat ini: **NT-P0 sampai NT-P3 selesai** (fondasi, auth, koneksi gateway, chat
+inti). Yang sudah jalan: daftar/masuk akun, onboarding koneksi gateway, pemilih model,
+kirim pesan, streaming SSE dengan resume `afterSeq`, stop, regenerate, edit, continue,
+pesan sistem, dan judul otomatis. Fase NT-P4 dan seterusnya (riwayat, folder, berbagi,
+ekspor, render markdown, lampiran, dokumen/RAG) belum dikerjakan.
 
 Dokumen produk dan desain ada di [`tasks/nontechnical-v1/`](tasks/nontechnical-v1/README.md)
 (PRD, SDD, plan, coverage, execution prompt). Paket full-parity lama di `tasks/prd.md`,

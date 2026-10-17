@@ -31,6 +31,7 @@ model User {
   credential Credential?
   sessions   Session[]
   passwordResetTokens PasswordResetToken[]
+  connections Connection[]
   chats     Chat[]
 
   @@index([status])
@@ -225,7 +226,7 @@ model Generation {
   id                String    @id
   chatId            String
   userMessageId     String
-  assistantMessageId String
+  assistantMessageId String    @unique
   jobId             String?
   status            String    @default("queued")
   cancelRequestedAt DateTime?
