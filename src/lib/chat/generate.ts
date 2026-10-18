@@ -31,6 +31,9 @@ import {
   fromUpstreamStatus,
 } from "@/lib/providers/errors";
 import { CONNECTION_API_KEY_PURPOSE, decryptSecret } from "@/lib/secrets";
+import { buildContext } from "@/lib/documents/context";
+import { readEmbeddingConfig } from "@/lib/documents/embed";
+import { retrieveChunks } from "@/lib/documents/retrieve";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
@@ -456,6 +459,36 @@ export async function runGeneration(
     generation.assistantMessageId,
   );
 
+  // Konteks rujukan dokumen (WP-NT-P6-07, SDD-6.2/6.3). Kegagalan retrieval
+  // tidak boleh menggagalkan chat: tangkap, lanjut tanpa konteks.
+  const lastUser = [...messages].reverse().find((message) => message.role === "user");
+  const query =
+    lastUser === undefined
+      ? ""
+      : typeof lastUser.content === "string"
+        ? lastUser.content
+        : lastUser.content
+            .map((part) => (part.type === "text" ? part.text : ""))
+            .join(" ");
+
+  let contextSystem: string | null = null;
+  let keywordOnly = false;
+  if (query.trim() !== "") {
+    const embedding = readEmbeddingConfig();
+    try {
+      const chunks = await retrieveChunks(db, {
+        userId: chat.userId,
+        query,
+        limit: 6,
+        ...(embedding ? { embedding } : {}),
+      });
+      contextSystem = buildContext(chunks).system;
+      keywordOnly = !embedding && chunks.length > 0;
+    } catch {
+      // Dokumen rusak/provider embedding mati: jawab tanpa rujukan.
+    }
+  }
+
   const active = await getActiveConnection(db, chat.userId);
   if (!active) throw new GenerationSetupError("Belum ada koneksi aktif.");
 
@@ -464,13 +497,35 @@ export async function runGeneration(
   let text = "";
   let ordinal = 0;
 
+  if (keywordOnly) {
+    try {
+      await db.chatMessagePart.create({
+        data: {
+          id: randomUUID(),
+          messageId: generation.assistantMessageId,
+          kind: "note",
+          payloadJson: JSON.stringify({ code: "keyword-only" }),
+          ordinal: ordinal++,
+        },
+      });
+    } catch {
+      // Catatan hanya informasi; jangan gagalkan generasi.
+    }
+  }
+
   let usage: StreamUsage | null;
   let finishReason: string | null;
   try {
     ({ usage, finishReason } = await streamGateway({
       url: `${baseUrl.replace(/\/+$/, "")}${CHAT_COMPLETIONS_PATH}`,
       apiKey,
-      body: { model, messages, stream: true },
+      body: {
+        model,
+        messages: contextSystem
+          ? [{ role: "system", content: contextSystem }, ...messages]
+          : messages,
+        stream: true,
+      },
       outbound: {
         allowInsecureHttp: config.allowInsecureHttp,
         allowlist: config.outboundAllowlist,
@@ -513,10 +568,11 @@ export async function runGeneration(
   if (signal.aborted) return;
 
   const now = new Date();
-  const contentJson =
-    text === ""
-      ? JSON.stringify({ parts: [] })
-      : JSON.stringify({ parts: [{ kind: "text", text }] });
+  // Catatan ikut di `contentJson` karena UI membacanya dari sana (bagian `note`).
+  const notePart = keywordOnly ? [{ kind: "note", code: "keyword-only" }] : [];
+  const contentJson = JSON.stringify({
+    parts: [...notePart, ...(text === "" ? [] : [{ kind: "text", text }])],
+  });
 
   await db.chatMessage.update({
     where: { id: generation.assistantMessageId },

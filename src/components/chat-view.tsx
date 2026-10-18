@@ -76,6 +76,16 @@ function parseImages(contentJson: string): { mime: string; dataUrl: string }[] {
   return [];
 }
 
+function parseNote(contentJson: string): string | null {
+  try {
+    const data = JSON.parse(contentJson);
+    if (!Array.isArray(data?.parts)) return null;
+    const note = data.parts.find((p: { kind?: string; code?: string }) => p?.kind === "note");
+    return note?.code === "keyword-only" ? "keyword-only" : null;
+  } catch {}
+  return null;
+}
+
 function findLeaf(messages: readonly TreeNode[], startId: string): string {
   let curr = startId;
   while (true) {
@@ -425,6 +435,7 @@ export function ChatView({
           activeMessages.map((m) => {
             const text = parseText(m.contentJson);
             const images = parseImages(m.contentJson);
+            const note = parseNote(m.contentJson);
             const siblings = siblingsOf(messages, m.id);
             const sibIdx = siblings.findIndex((s) => s.id === m.id);
             const hasSiblings = siblings.length > 1;
@@ -437,6 +448,11 @@ export function ChatView({
                   m.role === "user" ? "items-end" : "items-start"
                 }`}
               >
+                {note === "keyword-only" && !isEditing && (
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    Pencarian dokumen memakai kata kunci karena embedding belum dikonfigurasi; hasil bisa kurang tepat.
+                  </p>
+                )}
                 {isEditing ? (
                   <div className="w-full max-w-[85%] rounded-2xl border bg-background p-3 shadow-xs space-y-2">
                     <textarea
