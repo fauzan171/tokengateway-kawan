@@ -11,6 +11,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "check:docs": "python3 tasks/nontechnical-v1/tools/check_docs.py",
+    "check:licenses": "node scripts/check-licenses.mjs",
     "worker": "tsx --env-file-if-exists=.env src/worker.ts"
   },
   "dependencies": {

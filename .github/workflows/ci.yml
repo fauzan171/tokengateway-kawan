@@ -23,6 +23,11 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # Setelah `npm ci`: pemeriksa lisensi membaca package-lock.json dan,
+      # untuk paket yang tidak menulis field `license`, manifest di node_modules.
+      - name: Cek lisensi dependensi
+        run: npm run check:licenses
+
       # schema.sqlite.prisma gitignored, jadi harus diturunkan dulu sebelum
       # generate/migrate. Ia turunan dari schema.prisma, bukan file terpisah.
       - run: node scripts/make-sqlite-schema.mjs
@@ -35,6 +40,10 @@ jobs:
 
       - run: npm run typecheck
       - run: npm run lint
+
+      - name: Cek konsistensi dokumen
+        run: npm run check:docs
+
       - run: npm test
       - run: npm run build
 

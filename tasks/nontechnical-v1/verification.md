@@ -37,3 +37,23 @@ Ini **bukan** bukti aplikasi berjalan dan **bukan** bukti kesetaraan perilaku de
 ## Catatan pengecualian
 
 Paket infrastruktur dan audit (`WP-NT-P0-0x`, `WP-NT-P2-04`, `WP-NT-P5-09`, `WP-NT-P5-10`, `WP-NT-P10-0x`) boleh tidak merujuk requirement langsung karena ia mendukung banyak requirement sekaligus; pengecualian ini didaftarkan eksplisit di dalam script agar tidak menjadi celah yang menyembunyikan paket yang lupa dipetakan.
+
+## Suite keamanan (SDD-9.3, WP-NT-P10-02)
+
+Perintah yang bisa dijalankan ulang, semuanya harus exit `0`:
+
+```bash
+npx tsc --noEmit -p tsconfig.json
+npx eslint src/security/
+npx vitest run src/security/
+npm run check:docs
+npm run check:licenses
+```
+
+Peta uji per butir SDD-9.3 ada di `src/security/README.md`. Suite ini memakai
+SQLite sementara dari `tests/helpers/auth-db.ts` dan resolver DNS palsu, jadi
+tidak menyentuh jaringan maupun database pengembang.
+
+`npm run check:docs` dan `npm run check:licenses` juga dipasang di
+`.github/workflows/ci.yml` (job `check`), sehingga konsistensi dokumen dan
+lisensi diperiksa di CI, bukan hanya di laptop.
