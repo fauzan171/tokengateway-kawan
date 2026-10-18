@@ -35,13 +35,13 @@ function makeConfig(): Config {
     encryptionKey: Buffer.alloc(32, 7),
     encryptionKeyId: "v1",
     authSecret: "rahasia-sesi-uji",
-    nodeEnv: "test",
-    port: 3000,
-    trustProxy: false,
-    appUrl: "http://localhost:3000",
-    rateLimitMaxAttempts: 5,
-    rateLimitWindowSeconds: 60,
-    outboundAllowedHosts: [],
+    loginRateLimitMax: 5,
+    loginRateLimitWindowSeconds: 900,
+    passwordResetTtlSeconds: 3600,
+    emailConfigured: false,
+    modelCacheTtlSeconds: 600,
+    outboundAllowlist: [],
+    allowInsecureHttp: false,
   };
 }
 

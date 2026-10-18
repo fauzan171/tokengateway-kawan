@@ -230,3 +230,76 @@ export async function listChats(db: Db, userId: string): Promise<PublicChat[]> {
   });
   return rows.map(toPublicChat);
 }
+
+function chatNotFound(): ApiError {
+  return new ApiError({ status: STATUS.NOT_FOUND, code: "CHAT_NOT_FOUND", message: "Chat tidak ditemukan." });
+}
+
+function normalizeFlag(value: unknown, field: string): number {
+  if (value === true) return 1;
+  if (value === false) return 0;
+  throw badRequest("INVALID_FIELD", `${field} harus boolean.`);
+}
+
+export type UpdateChatInput = {
+  title?: unknown;
+  folderId?: unknown;
+  pinned?: unknown;
+  archived?: unknown;
+};
+
+/**
+ * Ubah judul, folder, pin, atau arsip (REQ-NT-33/34/35, SDD-3.5).
+ * Field yang tidak dikirim tidak disentuh. Chat milik pengguna lain → 404.
+ */
+export async function updateChat(
+  db: Db,
+  userId: string,
+  chatId: string,
+  input: UpdateChatInput,
+): Promise<PublicChat> {
+  const data: Record<string, unknown> = {};
+
+  if ("title" in input) data.title = normalizeTitle(input.title);
+
+  if ("folderId" in input) {
+    const raw = input.folderId;
+    if (raw === null) {
+      data.folderId = null;
+    } else if (typeof raw === "string" && raw.trim() !== "") {
+      const folder = await db.folder.findFirst({
+        where: { id: raw.trim(), userId },
+        select: { id: true },
+      });
+      if (!folder) throw badRequest("INVALID_FOLDER", "Folder tidak ditemukan.");
+      data.folderId = raw.trim();
+    } else if (typeof raw === "string") {
+      data.folderId = null;
+    } else {
+      throw badRequest("INVALID_FOLDER", "folderId harus teks atau null.");
+    }
+  }
+
+  if ("pinned" in input) data.pinned = normalizeFlag(input.pinned, "pinned");
+  if ("archived" in input) data.archived = normalizeFlag(input.archived, "archived");
+
+  if (Object.keys(data).length === 0) {
+    throw badRequest("EMPTY_UPDATE", "Tidak ada field yang diubah.");
+  }
+
+  const result = await db.chat.updateMany({ where: { id: chatId, userId }, data });
+  if (result.count === 0) throw chatNotFound();
+
+  const row = (await db.chat.findFirst({
+    where: { id: chatId, userId },
+    select: CHAT_FIELDS,
+  })) as ChatRow | null;
+  if (!row) throw chatNotFound();
+  return toPublicChat(row);
+}
+
+/** Hapus chat beserta pesan, generasi, dan tautan berbaginya (cascade FK). */
+export async function deleteChat(db: Db, userId: string, chatId: string): Promise<void> {
+  const result = await db.chat.deleteMany({ where: { id: chatId, userId } });
+  if (result.count === 0) throw chatNotFound();
+}
