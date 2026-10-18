@@ -48,11 +48,14 @@ function licenseOf(path, meta) {
 
 const denied = [];
 const missing = [];
+/** Sebaran lisensi untuk catatan review (docs/license-review.md). */
+const sebaran = new Map();
 
 for (const [path, meta] of entries) {
   const license = licenseOf(path, meta);
   if (!license) missing.push(path);
   else if (DENY.some((pattern) => pattern.test(license))) denied.push(`${path}: ${license}`);
+  if (license) sebaran.set(license, (sebaran.get(license) ?? 0) + 1);
 }
 
 for (const [title, rows] of [
@@ -67,3 +70,7 @@ for (const [title, rows] of [
 if (missing.length > 0 || denied.length > 0) process.exit(1);
 
 console.log(`Lisensi dependensi: ${entries.length} paket, 0 ditolak, 0 tanpa lisensi.`);
+console.log(`Lisensi unik (${sebaran.size}):`);
+for (const [license, jumlah] of [...sebaran].sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${String(jumlah).padStart(5)}  ${license}`);
+}

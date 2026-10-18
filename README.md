@@ -74,6 +74,9 @@ valid — itu perilaku yang diinginkan (SDD-1.5), bukan bug.
 | `npm test` | Unit test (Vitest) |
 | `npm run test:e2e` | End-to-end (Playwright) |
 | `node scripts/check-migrations.mjs` | Pastikan migrasi SQLite dan PostgreSQL identik |
+| `npm run check:docs` | Konsistensi dokumen requirement ↔ work package |
+| `npm run check:licenses` | Lisensi dependensi (nol GPL/AGPL) |
+| `./scripts/backup.sh` / `./scripts/restore.sh` | Backup & restore — lihat `docs/operator.md` |
 
 ## Struktur singkat
 
