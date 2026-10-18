@@ -36,7 +36,7 @@ import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
 
 /** Model cadangan bila chat belum pernah memilih model. */
-export const DEFAULT_MODEL = "gpt-4o-mini";
+export const DEFAULT_MODEL = "deepseek-v4.1-flash";
 
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
 

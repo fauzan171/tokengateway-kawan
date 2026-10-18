@@ -1,44 +1,213 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Send, Square, AlertCircle } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  Send,
+  Square,
+  AlertCircle,
+  Copy,
+  Check,
+  Pencil,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  type TreeNode,
+  buildAncestryPath,
+  siblingsOf,
+} from "@/lib/chat/tree";
 
-interface MessageItem {
-  id: string;
-  role: "user" | "assistant" | "system";
-  text: string;
-  status?: string;
+interface ErrorState {
+  message: string;
+  retryable?: boolean;
+  assistantId?: string;
+}
+
+function mapProviderError(code?: string, rawMsg?: string): { message: string; retryable: boolean } {
+  if (code === "UNAUTHORIZED" || rawMsg?.includes("401") || rawMsg?.toLowerCase().includes("unauthorized")) {
+    return { message: "Key ditolak oleh gateway.", retryable: false };
+  }
+  if (code === "FORBIDDEN" || rawMsg?.includes("403")) {
+    return { message: "Gateway menolak permintaan ini.", retryable: false };
+  }
+  if (rawMsg?.includes("429") || rawMsg?.toLowerCase().includes("banyak permintaan")) {
+    return { message: "Terlalu banyak permintaan. Coba lagi sebentar.", retryable: true };
+  }
+  if (code === "TIMEOUT" || rawMsg?.toLowerCase().includes("timeout")) {
+    return { message: "Gateway tidak merespons.", retryable: true };
+  }
+  if (code === "UPSTREAM_ERROR" || rawMsg?.includes("500") || rawMsg?.includes("502") || rawMsg?.includes("503")) {
+    return { message: "Gateway sedang bermasalah.", retryable: true };
+  }
+  if (rawMsg?.toLowerCase().includes("terputus") || rawMsg?.toLowerCase().includes("network")) {
+    return { message: "Koneksi terputus.", retryable: true };
+  }
+  return { message: rawMsg || "Terjadi kesalahan.", retryable: true };
+}
+
+function parseText(contentJson: string): string {
+  try {
+    const data = JSON.parse(contentJson);
+    if (data?.parts && Array.isArray(data.parts)) {
+      return data.parts.map((p: { text?: string }) => p.text || "").join("");
+    }
+  } catch {}
+  return "";
+}
+
+function findLeaf(messages: readonly TreeNode[], startId: string): string {
+  let curr = startId;
+  while (true) {
+    const children = messages
+      .filter((m) => m.parentId === curr)
+      .sort((a, b) => a.seq - b.seq);
+    if (children.length === 0) break;
+    curr = children[children.length - 1].id;
+  }
+  return curr;
 }
 
 export function ChatView() {
-  const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [messages, setMessages] = useState<TreeNode[]>([]);
+  const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [chatId, setChatId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeGenId, setActiveGenId] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<ErrorState | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, []);
+
+  const refreshChat = useCallback(async (id: string, preferredLeaf?: string | null) => {
+    try {
+      const res = await fetch(`/api/kawan/v1/chat/${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data.messages)) {
+        setMessages(data.messages);
+        const leaf = preferredLeaf !== undefined ? preferredLeaf : data.chat?.currentMessageId ?? null;
+        setActiveLeafId(leaf);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (chatId) {
+      refreshChat(chatId);
+    }
+  }, [chatId, refreshChat]);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, activeLeafId, isStreaming, scrollToBottom]);
 
   async function ensureChat(): Promise<string> {
     if (chatId) return chatId;
     const res = await fetch("/api/kawan/v1/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Obrolan Baru" }),
+      body: JSON.stringify({ title: "Obrolan Baru", model: "deepseek-v4.1-flash" }),
     });
     if (!res.ok) throw new Error("Gagal membuat percakapan");
     const data = await res.json();
     setChatId(data.id);
     return data.id;
+  }
+
+  async function streamSSE(
+    activeId: string,
+    generationId: string,
+    assistantMessageId: string
+  ) {
+    setIsStreaming(true);
+    setActiveGenId(generationId);
+    setErrorState(null);
+
+    try {
+      const streamRes = await fetch(
+        `/api/kawan/v1/chat/${activeId}/stream?generationId=${generationId}&afterSeq=0`,
+        { headers: { Accept: "text/event-stream" } }
+      );
+
+      if (!streamRes.ok || !streamRes.body) {
+        throw new Error("Gagal membuka aliran balasan AI");
+      }
+
+      const reader = streamRes.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+
+        for (const frame of frames) {
+          const lines = frame.split("\n");
+          let eventType = "message";
+          let dataStr = "";
+          for (const line of lines) {
+            if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+            else if (line.startsWith("data: ")) dataStr = line.slice(6).trim();
+          }
+
+          if (eventType === "part" && dataStr) {
+            try {
+              const payload = JSON.parse(dataStr);
+              if (payload.kind === "text" && payload.text) {
+                setMessages((prev) =>
+                  prev.map((msg) => {
+                    if (msg.id !== assistantMessageId) return msg;
+                    const prevText = parseText(msg.contentJson);
+                    const nextText = prevText + payload.text;
+                    return {
+                      ...msg,
+                      contentJson: JSON.stringify({ parts: [{ kind: "text", text: nextText }] }),
+                    };
+                  })
+                );
+              }
+            } catch {}
+          } else if (eventType === "done") {
+            setIsStreaming(false);
+            setActiveGenId(null);
+            await refreshChat(activeId, assistantMessageId);
+            return;
+          } else if (eventType === "error") {
+            setIsStreaming(false);
+            setActiveGenId(null);
+            try {
+              const errPayload = JSON.parse(dataStr);
+              const mapped = mapProviderError(errPayload.code, errPayload.message);
+              setErrorState({ ...mapped, assistantId: assistantMessageId });
+            } catch {
+              setErrorState({ message: "Generasi gagal.", retryable: true, assistantId: assistantMessageId });
+            }
+            await refreshChat(activeId, assistantMessageId);
+            return;
+          }
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat menerima balasan";
+      const mapped = mapProviderError(undefined, msg);
+      setErrorState({ ...mapped, assistantId: assistantMessageId });
+    } finally {
+      setIsStreaming(false);
+      setActiveGenId(null);
+      await refreshChat(activeId, assistantMessageId);
+    }
   }
 
   async function handleSend(e?: React.FormEvent) {
@@ -47,29 +216,16 @@ export function ChatView() {
 
     const userText = input.trim();
     setInput("");
-    setErrorMsg(null);
-
-    const tempUserMsg: MessageItem = {
-      id: "u_" + Date.now(),
-      role: "user",
-      text: userText,
-    };
-    const tempAssistantMsg: MessageItem = {
-      id: "a_" + Date.now(),
-      role: "assistant",
-      text: "",
-      status: "streaming",
-    };
-
-    setMessages((prev) => [...prev, tempUserMsg, tempAssistantMsg]);
-    setIsStreaming(true);
+    setErrorState(null);
 
     try {
       const activeId = await ensureChat();
+      const parentId = activeLeafId;
+
       const sendRes = await fetch(`/api/kawan/v1/chat/${activeId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userText }),
+        body: JSON.stringify({ content: userText, parentId }),
       });
 
       if (!sendRes.ok) {
@@ -77,44 +233,35 @@ export function ChatView() {
         throw new Error(err.message || "Gagal mengirim pesan");
       }
 
-      const { generationId, assistantMessageId } = await sendRes.json();
-      setActiveGenId(generationId);
+      const { generationId, assistantMessageId, userMessageId } = await sendRes.json();
 
-      // Connect to SSE stream
-      const eventSource = new EventSource(
-        `/api/kawan/v1/chat/${activeId}/stream?generationId=${generationId}&afterSeq=0`
-      );
+      // Optimistic append
+      const userNode: TreeNode = {
+        id: userMessageId,
+        chatId: activeId,
+        parentId,
+        role: "user",
+        seq: messages.length + 1,
+        status: "complete",
+        contentJson: JSON.stringify({ parts: [{ kind: "text", text: userText }] }),
+      };
+      const assistantNode: TreeNode = {
+        id: assistantMessageId,
+        chatId: activeId,
+        parentId: userMessageId,
+        role: "assistant",
+        seq: messages.length + 2,
+        status: "streaming",
+        contentJson: JSON.stringify({ parts: [{ kind: "text", text: "" }] }),
+      };
 
-      eventSource.addEventListener("part", (e) => {
-        try {
-          const payload = JSON.parse(e.data);
-          if (payload.kind === "text" && payload.text) {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === tempAssistantMsg.id
-                  ? { ...msg, text: msg.text + payload.text, id: assistantMessageId }
-                  : msg
-              )
-            );
-          }
-        } catch {}
-      });
+      setMessages((prev) => [...prev, userNode, assistantNode]);
+      setActiveLeafId(assistantMessageId);
 
-      eventSource.addEventListener("done", () => {
-        setIsStreaming(false);
-        setActiveGenId(null);
-        eventSource.close();
-      });
-
-      eventSource.addEventListener("error", () => {
-        setIsStreaming(false);
-        setActiveGenId(null);
-        eventSource.close();
-      });
-
+      await streamSSE(activeId, generationId, assistantMessageId);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat chat";
-      setErrorMsg(msg);
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat mengirim pesan";
+      setErrorState({ message: msg, retryable: false });
       setIsStreaming(false);
       setActiveGenId(null);
     }
@@ -131,51 +278,272 @@ export function ChatView() {
     } catch {}
   }
 
+  async function handleCopy(id: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {}
+  }
+
+  async function handleRegenerate(messageId: string) {
+    if (!chatId || isStreaming) return;
+    setErrorState(null);
+    try {
+      const res = await fetch(`/api/kawan/v1/chat/${chatId}/messages/${messageId}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Gagal melakukan regenerasi balasan");
+      }
+
+      const { generationId, assistantMessageId } = await res.json();
+      await refreshChat(chatId, assistantMessageId);
+      await streamSSE(chatId, generationId, assistantMessageId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal melakukan regenerasi";
+      const mapped = mapProviderError(undefined, msg);
+      setErrorState({ ...mapped, assistantId: messageId });
+    }
+  }
+
+  async function handleEditSubmit(messageId: string) {
+    if (!chatId || !editText.trim() || isStreaming) return;
+    setErrorState(null);
+    const content = editText.trim();
+    try {
+      const res = await fetch(`/api/kawan/v1/chat/${chatId}/messages/${messageId}/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, mode: "branch" }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Gagal mengedit pesan");
+      }
+
+      setEditingId(null);
+      setEditText("");
+
+      const data = await res.json();
+      const { generationId, assistantMessageId, currentMessageId } = data;
+      await refreshChat(chatId, currentMessageId || assistantMessageId);
+
+      if (generationId && assistantMessageId) {
+        await streamSSE(chatId, generationId, assistantMessageId);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal mengedit pesan";
+      setErrorState({ message: msg, retryable: false });
+    }
+  }
+
+  function handleSwitchBranch(targetSiblingId: string) {
+    const leaf = findLeaf(messages, targetSiblingId);
+    setActiveLeafId(leaf);
+  }
+
+  // Active ancestry path
+  let activeMessages: TreeNode[] = [];
+  try {
+    if (messages.length > 0) {
+      activeMessages = activeLeafId ? buildAncestryPath(messages, activeLeafId) : messages;
+    }
+  } catch {
+    activeMessages = messages;
+  }
+
   return (
     <div className="flex flex-1 flex-col h-[calc(100dvh-5rem)] max-w-4xl w-full mx-auto p-4">
       {/* Area Pesan */}
       <div className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4">
-        {messages.length === 0 ? (
+        {activeMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-8">
             <h2 className="text-2xl font-semibold mb-2">Mulai percakapan dengan AI</h2>
             <p className="text-sm max-w-md">Ketik pesanmu di bawah. AI akan membalas menggunakan API gateway yang terhubung.</p>
           </div>
         ) : (
-          messages.map((m) => (
-            <div
-              key={m.id}
-              className={`flex flex-col ${
-                m.role === "user" ? "items-end" : "items-start"
-              }`}
-            >
+          activeMessages.map((m) => {
+            const text = parseText(m.contentJson);
+            const siblings = siblingsOf(messages, m.id);
+            const sibIdx = siblings.findIndex((s) => s.id === m.id);
+            const hasSiblings = siblings.length > 1;
+            const isEditing = editingId === m.id;
+
+            return (
               <div
-                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                  m.role === "user"
-                    ? "bg-primary text-primary-foreground ml-auto"
-                    : "bg-muted border border-border text-foreground"
+                key={m.id}
+                className={`group flex flex-col ${
+                  m.role === "user" ? "items-end" : "items-start"
                 }`}
               >
-                {m.text ? (
-                  <p className="whitespace-pre-wrap">{m.text}</p>
-                ) : m.status === "streaming" ? (
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
-                    <span className="size-2 rounded-full bg-primary animate-pulse" />
-                    Sedang berpikir...
-                  </span>
+                {isEditing ? (
+                  <div className="w-full max-w-[85%] rounded-2xl border bg-background p-3 shadow-xs space-y-2">
+                    <textarea
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      className="w-full resize-none bg-transparent p-1 text-sm outline-none min-h-[72px]"
+                      rows={3}
+                      autoFocus
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingId(null);
+                          setEditText("");
+                        }}
+                      >
+                        <X className="size-3.5 mr-1" />
+                        Batal
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleEditSubmit(m.id)}
+                        disabled={!editText.trim() || isStreaming}
+                      >
+                        Simpan & Cabang
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
-                  <span className="text-muted-foreground italic">Tidak ada balasan</span>
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      m.role === "user"
+                        ? "bg-primary text-primary-foreground ml-auto"
+                        : "bg-muted border border-border text-foreground"
+                    }`}
+                  >
+                    {text ? (
+                      <p className="whitespace-pre-wrap">{text}</p>
+                    ) : m.status === "streaming" ? (
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
+                        <span className="size-2 rounded-full bg-primary animate-pulse" />
+                        Sedang berpikir...
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground italic">Tidak ada balasan</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Sibling navigation & Action buttons */}
+                {!isEditing && (
+                  <div
+                    className={`flex items-center gap-2 mt-1 px-1 text-xs text-muted-foreground ${
+                      m.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    {hasSiblings && (
+                      <div className="inline-flex items-center gap-1 bg-muted/60 rounded-md px-1.5 py-0.5 border text-[11px]">
+                        <button
+                          type="button"
+                          aria-label="Cabang sebelumnya"
+                          disabled={sibIdx <= 0 || isStreaming}
+                          onClick={() => handleSwitchBranch(siblings[sibIdx - 1].id)}
+                          className="hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeft className="size-3" />
+                        </button>
+                        <span>
+                          {sibIdx + 1} / {siblings.length}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Cabang berikutnya"
+                          disabled={sibIdx >= siblings.length - 1 || isStreaming}
+                          onClick={() => handleSwitchBranch(siblings[sibIdx + 1].id)}
+                          className="hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronRight className="size-3" />
+                        </button>
+                      </div>
+                    )}
+
+                    {text && (
+                      <button
+                        type="button"
+                        aria-label="Salin pesan"
+                        onClick={() => handleCopy(m.id, text)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-foreground"
+                        title="Salin"
+                      >
+                        {copiedId === m.id ? (
+                          <Check className="size-3.5 text-green-600" />
+                        ) : (
+                          <Copy className="size-3.5" />
+                        )}
+                      </button>
+                    )}
+
+                    {m.role === "user" && (
+                      <button
+                        type="button"
+                        aria-label="Edit pesan"
+                        disabled={isStreaming}
+                        onClick={() => {
+                          setEditingId(m.id);
+                          setEditText(text);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-foreground disabled:opacity-0"
+                        title="Edit pesan"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                    )}
+
+                    {m.role === "assistant" && (
+                      <button
+                        type="button"
+                        aria-label="Regenerasi balasan"
+                        disabled={isStreaming}
+                        onClick={() => handleRegenerate(m.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-foreground disabled:opacity-0"
+                        title="Regenerasi balasan"
+                      >
+                        <RotateCcw className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {errorMsg && (
-        <div className="mb-3 flex items-center gap-2 p-3 text-sm rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
-          <AlertCircle className="size-4 shrink-0" />
-          <span>{errorMsg}</span>
+      {errorState && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-3 flex items-center justify-between gap-2 p-3 text-sm rounded-lg bg-destructive/10 text-destructive border border-destructive/20"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{errorState.message}</span>
+          </div>
+          {errorState.retryable && errorState.assistantId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs border-destructive/30 hover:bg-destructive/10 text-destructive"
+              onClick={() => {
+                const id = errorState.assistantId!;
+                setErrorState(null);
+                handleRegenerate(id);
+              }}
+            >
+              <RotateCcw className="size-3 mr-1" />
+              Coba lagi
+            </Button>
+          )}
         </div>
       )}
 
@@ -205,6 +573,7 @@ export function ChatView() {
                 className="size-9 rounded-xl p-0"
                 onClick={handleStop}
                 title="Hentikan balasan"
+                aria-label="Hentikan balasan"
               >
                 <Square className="size-4 fill-current" />
               </Button>
@@ -215,6 +584,7 @@ export function ChatView() {
                 className="size-9 rounded-xl p-0"
                 disabled={!input.trim()}
                 title="Kirim pesan"
+                aria-label="Kirim pesan"
               >
                 <Send className="size-4" />
               </Button>
