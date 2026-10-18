@@ -78,6 +78,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
       content: body["content"],
       parentId: body["parentId"],
       model: body["model"],
+      attachments: body["attachments"],
       idempotencyKey: request.headers.get(IDEMPOTENCY_HEADER),
     });
 

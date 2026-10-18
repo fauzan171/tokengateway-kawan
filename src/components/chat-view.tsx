@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  ImagePlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,9 @@ import {
   buildAncestryPath,
   siblingsOf,
 } from "@/lib/chat/tree";
+import { IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/chat/content";
+
+const DEFAULT_MODEL = "deepseek-v4.1-flash";
 
 interface ErrorState {
   message: string;
@@ -59,6 +63,19 @@ function parseText(contentJson: string): string {
   return "";
 }
 
+function parseImages(contentJson: string): { mime: string; dataUrl: string }[] {
+  try {
+    const data = JSON.parse(contentJson);
+    if (Array.isArray(data?.parts)) {
+      return data.parts.filter(
+        (p: { kind?: string; dataUrl?: string }) =>
+          p?.kind === "image" && typeof p.dataUrl === "string",
+      );
+    }
+  } catch {}
+  return [];
+}
+
 function findLeaf(messages: readonly TreeNode[], startId: string): string {
   let curr = startId;
   while (true) {
@@ -88,7 +105,28 @@ export function ChatView({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [attachments, setAttachments] = useState<{ mime: string; dataUrl: string }[]>([]);
+  const [modelRef, setModelRef] = useState(DEFAULT_MODEL);
+  const [vision, setVision] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Tombol lampiran hanya muncul bila model yang dipakai chat ini mengumumkan visi
+  // (REQ-NT-46: model tanpa visi tidak menampilkan tombol, bukan tombol mati).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/kawan/v1/models")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data?.models)) return;
+        const model = data.models.find((m: { id?: string }) => m.id === modelRef);
+        setVision(model?.capabilities?.vision === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [modelRef]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -103,6 +141,7 @@ export function ChatView({
         setMessages(data.messages);
         const leaf = preferredLeaf !== undefined ? preferredLeaf : data.chat?.currentMessageId ?? null;
         setActiveLeafId(leaf);
+        if (typeof data.chat?.modelRef === "string") setModelRef(data.chat.modelRef);
       }
     } catch {}
   }, []);
@@ -220,10 +259,12 @@ export function ChatView({
 
   async function handleSend(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (!input.trim() || isStreaming) return;
+    if ((!input.trim() && attachments.length === 0) || isStreaming) return;
 
     const userText = input.trim();
+    const sending = attachments;
     setInput("");
+    setAttachments([]);
     setErrorState(null);
 
     try {
@@ -233,7 +274,11 @@ export function ChatView({
       const sendRes = await fetch(`/api/kawan/v1/chat/${activeId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userText, parentId }),
+        body: JSON.stringify({
+          content: userText || "(gambar)",
+          parentId,
+          attachments: sending,
+        }),
       });
 
       if (!sendRes.ok) {
@@ -251,7 +296,7 @@ export function ChatView({
         role: "user",
         seq: messages.length + 1,
         status: "complete",
-        contentJson: JSON.stringify({ parts: [{ kind: "text", text: userText }] }),
+        contentJson: JSON.stringify({ parts: [{ kind: "text", text: userText || "(gambar)" }, ...sending] }),
       };
       const assistantNode: TreeNode = {
         id: assistantMessageId,
@@ -378,6 +423,7 @@ export function ChatView({
         ) : (
           activeMessages.map((m) => {
             const text = parseText(m.contentJson);
+            const images = parseImages(m.contentJson);
             const siblings = siblingsOf(messages, m.id);
             const sibIdx = siblings.findIndex((s) => s.id === m.id);
             const hasSiblings = siblings.length > 1;
@@ -428,13 +474,27 @@ export function ChatView({
                         : "bg-muted border border-border text-foreground"
                     }`}
                   >
+                    {images.length > 0 && (
+                      <ul className="mb-2 flex flex-wrap gap-2">
+                        {images.map((image, index) => (
+                          <li key={`${image.mime}-${index}`}>
+                            {/* eslint-disable-next-line @next/next/no-img-element -- data URL attachment, not an optimizable asset */}
+                            <img
+                              src={image.dataUrl}
+                              alt={`Lampiran ${index + 1}`}
+                              className="max-h-56 rounded-lg border object-contain"
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {text ? (
                       m.role === "assistant" ? (
                         <Markdown text={text} />
                       ) : (
                         <p className="whitespace-pre-wrap">{text}</p>
                       )
-                    ) : m.status === "streaming" ? (
+                    ) : images.length > 0 ? null : m.status === "streaming" ? (
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
                         <span className="size-2 rounded-full bg-primary animate-pulse" />
                         Sedang berpikir...
@@ -561,7 +621,70 @@ export function ChatView({
 
       {/* Input Composer */}
       <form onSubmit={handleSend} className="relative mt-auto pt-2">
+        {attachments.length > 0 && (
+          <ul className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((file, index) => (
+              <li key={`${file.mime}-${index}`} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element -- data URL preview, not an optimizable asset */}
+                <img
+                  src={file.dataUrl}
+                  alt={`Lampiran ${index + 1}`}
+                  className="size-16 rounded-lg border object-cover"
+                />
+                <button
+                  type="button"
+                  aria-label={`Hapus lampiran ${index + 1}`}
+                  onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                  className="absolute -right-1.5 -top-1.5 rounded-full border bg-background p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="relative flex items-center rounded-2xl border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+          {vision && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={IMAGE_MIMES.join(",")}
+                multiple
+                className="sr-only"
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  e.target.value = "";
+                  const picked: { mime: string; dataUrl: string }[] = [];
+                  for (const file of files) {
+                    if (!(IMAGE_MIMES as readonly string[]).includes(file.type)) continue;
+                    if (file.size > MAX_IMAGE_BYTES) {
+                      setErrorState({ message: "Ukuran gambar melebihi 4 MB.", retryable: false });
+                      continue;
+                    }
+                    const dataUrl = await new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(String(reader.result));
+                      reader.onerror = () => reject(reader.error);
+                      reader.readAsDataURL(file);
+                    }).catch(() => "");
+                    if (dataUrl) picked.push({ mime: file.type, dataUrl });
+                  }
+                  setAttachments((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
+                }}
+              />
+              <button
+                type="button"
+                aria-label="Lampirkan gambar"
+                title="Lampirkan gambar"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming}
+                className="ml-2 rounded-lg p-2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                <ImagePlus className="size-4" />
+              </button>
+            </>
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

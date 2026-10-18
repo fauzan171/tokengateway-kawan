@@ -19,6 +19,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
 import { startGeneration } from "./start-generation";
+import { validateAttachments } from "./attachments";
 import { CHAT_FIELDS, toPublicChat, type ChatRow, type PublicChat } from "./chats";
 
 const CONTENT_MAX = 100_000;
@@ -101,8 +102,10 @@ export function idempotencyDigest(input: {
   content: string;
   parentId: string | null;
   model: string | null;
+  attachments?: readonly { mime: string; dataUrl: string }[];
 }): string {
-  const canonical = JSON.stringify([input.content, input.parentId, input.model]);
+  const images = (input.attachments ?? []).map((a) => [a.mime, a.dataUrl]);
+  const canonical = JSON.stringify([input.content, input.parentId, input.model, images]);
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -123,6 +126,8 @@ export type SendMessageInput = {
   content: unknown;
   parentId: unknown;
   model: unknown;
+  /** Lampiran gambar dari body; divalidasi `validateAttachments`. */
+  attachments?: unknown;
   /** Nilai header `Idempotency-Key`; `null` bila tidak dikirim. */
   idempotencyKey: string | null;
 };
@@ -178,8 +183,9 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
   const content = normalizeContent(input.content);
   const parentId = normalizeParentId(input.parentId);
   const model = normalizeModel(input.model);
+  const images = validateAttachments(input.attachments);
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
-  const digest = idempotencyDigest({ content, parentId, model });
+  const digest = idempotencyDigest({ content, parentId, model, attachments: images });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -223,7 +229,9 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
         const baseSeq = last?.seq ?? 0;
 
         const userMessageId = `msg_${randomUUID()}`;
-        const contentJson = JSON.stringify({ parts: [{ kind: "text", text: content }] });
+        const contentJson = JSON.stringify({
+          parts: [{ kind: "text", text: content }, ...images],
+        });
 
         await tx.chatMessage.create({
           data: {
@@ -245,6 +253,17 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
             payloadJson: JSON.stringify({ text: content }),
           },
         });
+        for (const [index, image] of images.entries()) {
+          await tx.chatMessagePart.create({
+            data: {
+              id: randomUUID(),
+              messageId: userMessageId,
+              kind: "image",
+              ordinal: index + 1,
+              payloadJson: JSON.stringify({ mime: image.mime, dataUrl: image.dataUrl }),
+            },
+          });
+        }
         // Placeholder assistant, Generation, dan Job dibuat oleh primitif bersama
         // supaya regenerate/edit/continue memakai jalur yang sama persis, bukan
         // tiga salinan yang menyimpang.

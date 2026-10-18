@@ -32,6 +32,7 @@ import {
 } from "@/lib/providers/errors";
 import { CONNECTION_API_KEY_PURPOSE, decryptSecret } from "@/lib/secrets";
 import { StopRequested, stopIfRequested } from "./stop";
+import { imageParts } from "./content";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
 
@@ -72,7 +73,11 @@ export class GenerationSetupError extends Error {
   }
 }
 
-type ChatCompletionMessage = { role: string; content: string };
+type GatewayContent =
+  | string
+  | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+
+type ChatCompletionMessage = { role: string; content: GatewayContent };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -108,8 +113,23 @@ function buildMessages(
 ): ChatCompletionMessage[] {
   return path
     .filter((node) => node.id !== assistantMessageId)
-    .map((node) => ({ role: node.role, content: messageText(node.contentJson) }))
-    .filter((message) => message.content !== "");
+    .map((node) => {
+      const text = messageText(node.contentJson);
+      const images = imageParts(node.contentJson);
+      // Gateway gaya OpenAI: teks + gambar dalam satu array; tanpa gambar tetap string.
+      const content: GatewayContent =
+        images.length === 0
+          ? text
+          : [
+              ...(text ? [{ type: "text" as const, text }] : []),
+              ...images.map((image) => ({
+                type: "image_url" as const,
+                image_url: { url: image.dataUrl },
+              })),
+            ];
+      return { role: node.role, content };
+    })
+    .filter((message) => message.content !== "" && (message.content as unknown[]).length !== 0);
 }
 
 /**
