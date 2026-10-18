@@ -5,6 +5,7 @@
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Markdown } from "@/components/markdown";
 import { getPublicShare } from "@/lib/chat/share";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
@@ -50,7 +51,11 @@ export default async function SharePage({ params }: PageProps) {
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {message.role === "user" ? "Kamu" : "Kawan"}
             </span>
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>
+            {message.role === "user" ? (
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>
+            ) : (
+              <Markdown text={message.text} />
+            )}
           </li>
         ))}
       </ol>

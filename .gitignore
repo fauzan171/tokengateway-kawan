@@ -60,3 +60,4 @@ credentials/
 
 # Prisma schema turunan (dihasilkan scripts/make-sqlite-schema.mjs)
 /prisma/schema.sqlite.prisma
+e2e/.tmp

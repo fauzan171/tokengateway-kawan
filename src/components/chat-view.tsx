@@ -414,7 +414,8 @@ export function ChatView({
   return (
     <div className="flex flex-1 flex-col h-[calc(100dvh-5rem)] max-w-4xl w-full mx-auto p-4">
       {/* Area Pesan */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4">
+      {/* Pesan baru diumumkan pembaca layar tanpa memindahkan fokus (WCAG 4.1.3). */}
+      <div role="log" aria-live="polite" aria-relevant="additions" className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4">
         {activeMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-8">
             <h2 className="text-2xl font-semibold mb-2">Mulai percakapan dengan AI</h2>
