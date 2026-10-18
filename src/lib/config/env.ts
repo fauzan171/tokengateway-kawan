@@ -76,6 +76,8 @@ export type Config = {
    * jaringan lokal dapat menyalakannya secara sadar.
    */
   allowInsecureHttp: boolean;
+  /** Batas ukuran berkas dokumen yang boleh diunggah, dalam byte (REQ-NT-60). */
+  maxUploadBytes: number;
 };
 
 type Env = Record<string, string | undefined>;
@@ -91,6 +93,9 @@ export const DEFAULT_PASSWORD_RESET_TTL_SECONDS = 60 * 60;
 
 /** Bawaan masa berlaku cache daftar model: 10 menit (REQ-NT-20). */
 export const DEFAULT_MODEL_CACHE_TTL_SECONDS = 10 * 60;
+
+/** Bawaan batas unggah dokumen: 10 MB (REQ-NT-60). */
+export const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** ID kunci bawaan saat operator belum mengatur rotasi (SDD-5.2). */
 export const DEFAULT_ENCRYPTION_KEY_ID = "v1";
@@ -237,6 +242,13 @@ export function loadConfig(env: Env = process.env): Config {
     problems,
   );
 
+  const maxUploadBytes = checkPositiveInt(
+    env["MAX_UPLOAD_BYTES"],
+    DEFAULT_MAX_UPLOAD_BYTES,
+    "MAX_UPLOAD_BYTES",
+    problems,
+  );
+
   const encryptionKeyId = (env["ENCRYPTION_KEY_ID"] ?? "").trim() || DEFAULT_ENCRYPTION_KEY_ID;
 
   // Salah satu variabel email terisi (tidak hanya spasi) = operator sudah
@@ -258,5 +270,6 @@ export function loadConfig(env: Env = process.env): Config {
     modelCacheTtlSeconds,
     outboundAllowlist: parseAllowlist(env["OUTBOUND_ALLOWLIST"]),
     allowInsecureHttp: checkBoolean(env["ALLOW_INSECURE_HTTP"]),
+    maxUploadBytes,
   };
 }

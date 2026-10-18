@@ -42,6 +42,7 @@ function makeConfig(): Config {
     modelCacheTtlSeconds: 600,
     outboundAllowlist: [],
     allowInsecureHttp: false,
+    maxUploadBytes: 10 * 1024 * 1024,
   };
 }
 

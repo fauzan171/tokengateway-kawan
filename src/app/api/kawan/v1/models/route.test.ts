@@ -55,6 +55,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     modelCacheTtlSeconds: 600,
     outboundAllowlist: ["gateway.contoh.test"],
     allowInsecureHttp: false,
+    maxUploadBytes: 10 * 1024 * 1024,
     ...overrides,
   };
 }
