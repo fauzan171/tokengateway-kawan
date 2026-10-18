@@ -18,6 +18,7 @@ import { closeDb, getDb } from "@/lib/db";
 import { createWorker, type JobHandler } from "@/lib/jobs/worker";
 import { runGeneration } from "@/lib/chat/generate";
 import { runExtract } from "@/lib/documents/run-extract";
+import { cleanupOrphans } from "@/lib/documents/remove";
 
 const IDLE_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -41,6 +42,15 @@ const handlers: Record<string, JobHandler> = {
     const config = loadConfig();
     const db = await getDb(config.databaseUrl);
     await runExtract(db, payload.documentId, signal);
+  },
+  "storage.cleanup": async () => {
+    const config = loadConfig();
+    const db = await getDb(config.databaseUrl);
+    const result = await cleanupOrphans(db);
+    logger.info(
+      { requestId: "storage.cleanup", route: "worker", latencyMs: 0, result: "selesai" },
+      result,
+    );
   },
 };
 
