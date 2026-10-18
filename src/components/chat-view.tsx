@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Markdown } from "./markdown";
 import {
   Send,
   Square,
@@ -428,7 +429,11 @@ export function ChatView({
                     }`}
                   >
                     {text ? (
-                      <p className="whitespace-pre-wrap">{text}</p>
+                      m.role === "assistant" ? (
+                        <Markdown text={text} />
+                      ) : (
+                        <p className="whitespace-pre-wrap">{text}</p>
+                      )
                     ) : m.status === "streaming" ? (
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
                         <span className="size-2 rounded-full bg-primary animate-pulse" />
@@ -561,7 +566,8 @@ export function ChatView({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              // Enter during IME composition (Japanese/Chinese/Vietnamese input) must not send.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 handleSend();
               }
