@@ -128,21 +128,51 @@ CREATE TABLE "ModelCache" (
 
 CREATE UNIQUE INDEX "ModelCache_connectionId_key" ON "ModelCache"("connectionId");
 
+CREATE TABLE "Folder" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "Folder_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "Folder_userId_idx" ON "Folder"("userId");
+
 CREATE TABLE "Chat" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "modelRef" TEXT,
     "currentMessageId" TEXT,
+    "folderId" TEXT,
     "pinned" INTEGER NOT NULL DEFAULT 0,
     "archived" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL,
     CONSTRAINT "Chat_userId_fkey" FOREIGN KEY ("userId")
-        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Chat_folderId_fkey" FOREIGN KEY ("folderId")
+        REFERENCES "Folder" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 CREATE INDEX "Chat_userId_updatedAt_idx" ON "Chat"("userId", "updatedAt");
+CREATE INDEX "Chat_userId_folderId_idx" ON "Chat"("userId", "folderId");
+
+CREATE TABLE "ShareLink" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "chatId" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "snapshotJson" TEXT NOT NULL,
+    "expiresAt" TEXT,
+    "revokedAt" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "ShareLink_chatId_fkey" FOREIGN KEY ("chatId")
+        REFERENCES "Chat" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "ShareLink_token_key" ON "ShareLink"("token");
+CREATE INDEX "ShareLink_chatId_idx" ON "ShareLink"("chatId");
 
 CREATE TABLE "ChatMessage" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -190,6 +220,7 @@ CREATE TABLE "Generation" (
         REFERENCES "ChatMessage" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+CREATE UNIQUE INDEX "Generation_assistantMessageId_key" ON "Generation"("assistantMessageId");
 CREATE INDEX "Generation_chatId_createdAt_idx" ON "Generation"("chatId", "createdAt");
 CREATE INDEX "Generation_status_idx" ON "Generation"("status");
 

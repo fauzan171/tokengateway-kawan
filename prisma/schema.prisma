@@ -32,6 +32,8 @@ model User {
   sessions   Session[]
   passwordResetTokens PasswordResetToken[]
   chats     Chat[]
+  folders   Folder[]
+  connections Connection[]
 
   @@index([status])
 }
@@ -157,6 +159,19 @@ model ModelCache {
 }
 
 
+/// Folder satu tingkat untuk mengelompokkan chat (REQ-NT-35, SDD-2.2).
+model Folder {
+  id        String   @id
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chats Chat[]
+
+  @@index([userId])
+}
+
 /// Percakapan (REQ-NT-22, SDD-2.2). KONTRAK DIBEKUKAN di awal NT-P3.
 ///
 /// `currentMessageId` menunjuk leaf aktif pohon pesan; harus menunjuk pesan yang ada
@@ -168,15 +183,34 @@ model Chat {
   title            String
   modelRef         String?
   currentMessageId String?
+  folderId         String?
   pinned           Int      @default(0) // 0 | 1
   archived         Int      @default(0) // 0 | 1
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages ChatMessage[]
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder     Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  messages   ChatMessage[]
+  shareLinks ShareLink[]
 
   @@index([userId, updatedAt])
+  @@index([userId, folderId])
+}
+
+/// Tautan berbagi snapshot beku publik (REQ-NT-36/37/38, SDD-2.2).
+model ShareLink {
+  id           String    @id
+  chatId       String
+  token        String    @unique
+  snapshotJson String
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
 }
 
 /// Satu pesan dalam pohon (REQ-NT-25, SDD-2.2).
@@ -225,7 +259,7 @@ model Generation {
   id                String    @id
   chatId            String
   userMessageId     String
-  assistantMessageId String
+  assistantMessageId String    @unique
   jobId             String?
   status            String    @default("queued")
   cancelRequestedAt DateTime?
