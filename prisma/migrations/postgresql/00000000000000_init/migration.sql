@@ -311,3 +311,13 @@ CREATE TABLE "Prompt" (
 
 CREATE INDEX "Prompt_userId_idx" ON "Prompt"("userId");
 CREATE INDEX "Prompt_enabled_idx" ON "Prompt"("enabled");
+
+CREATE TABLE "UserSetting" (
+    "userId" TEXT NOT NULL PRIMARY KEY,
+    "theme" TEXT NOT NULL DEFAULT 'system',
+    "locale" TEXT NOT NULL DEFAULT 'id',
+    "fontScale" INTEGER NOT NULL DEFAULT 100,
+    "sendOnEnter" INTEGER NOT NULL DEFAULT 1,
+    "updatedAt" TIMESTAMP NOT NULL,
+    CONSTRAINT "UserSetting_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);

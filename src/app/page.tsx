@@ -76,6 +76,11 @@ export default function Home() {
           <Button key={id} variant="ghost" className="h-10 w-full justify-start" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
         ))}
       </nav>
+      <nav aria-label="Akun" className="mt-4 space-y-1 border-t pt-3">
+        {[["/settings", "Preferensi"], ["/usage", "Pemakaian"]].map(([href, label]) => (
+          <a key={href} href={href!} className="flex h-10 items-center rounded-md px-3 text-sm font-medium hover:bg-muted">{label}</a>
+        ))}
+      </nav>
       <a className="mt-3 text-xs text-muted-foreground underline-offset-4 hover:underline" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
     </div>
   );

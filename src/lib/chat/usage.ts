@@ -14,6 +14,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
 
 /** Bentuk usage dari gateway; nilai mentah, belum tepercaya. */
@@ -165,4 +166,174 @@ export async function usageForChat(
     select: USAGE_FIELDS,
   });
   return rows.map(toDto);
+}
+
+export type UsageDayRow = {
+  day: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  unreported: number;
+};
+
+export type UsageModelRow = {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  unreported: number;
+};
+
+type UsageBucket = { promptTokens: number; completionTokens: number; totalTokens: number; unreported: number };
+
+function emptyBucket(): UsageBucket {
+  return { promptTokens: 0, completionTokens: 0, totalTokens: 0, unreported: 0 };
+}
+
+/** Baris tanpa laporan hanya dihitung sebagai `unreported`, tidak ke token. */
+function addToBucket(bucket: UsageBucket, row: UsageRow): void {
+  if (row.reported !== 1) {
+    bucket.unreported += 1;
+    return;
+  }
+  bucket.promptTokens += row.promptTokens ?? 0;
+  bucket.completionTokens += row.completionTokens ?? 0;
+  bucket.totalTokens += row.totalTokens ?? 0;
+}
+
+/**
+ * `reported: false` hanya bila ADA baris dan SEMUANYA tanpa laporan — UI
+ * memakai itu untuk menulis "tidak tersedia" alih-alih nol. Tabel kosong
+ * tetap `reported: true` supaya pesannya "belum ada pemakaian", bukan klaim
+ * bahwa gateway bisu.
+ *
+ * shortcut: agregasi di JS, pindah ke groupBy SQL bila baris per pengguna > 100k.
+ */
+async function usageRowsInRange(
+  db: Db,
+  { userId, from, to }: { userId: string; from: Date; to: Date },
+): Promise<UsageRow[]> {
+  return db.usageRecord.findMany({
+    where: { userId, createdAt: { gte: from, lte: to } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: USAGE_FIELDS,
+  });
+}
+
+/** Baris mentah satu rentang, urut waktu menaik (dipakai ekspor CSV). */
+export async function usageRowsForExport(
+  db: Db,
+  input: { userId: string; from: Date; to: Date },
+): Promise<UsageRecordDto[]> {
+  return (await usageRowsInRange(db, input)).map(toDto);
+}
+
+/** `YYYY-MM-DD` (UTC) — satu hari satu baris, urut tanggal menaik. */
+export async function usageByDay(
+  db: Db,
+  input: { userId: string; from: Date; to: Date },
+): Promise<{ reported: boolean; rows: UsageDayRow[] }> {
+  const rows = await usageRowsInRange(db, input);
+  const buckets = new Map<string, UsageBucket>();
+
+  for (const row of rows) {
+    const day = row.createdAt.toISOString().slice(0, 10);
+    const bucket = buckets.get(day) ?? emptyBucket();
+    addToBucket(bucket, row);
+    buckets.set(day, bucket);
+  }
+
+  const reported = rows.length === 0 || rows.some((row) => row.reported === 1);
+  const result = [...buckets.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([day, bucket]) => ({ day, ...bucket }));
+  return { reported, rows: result };
+}
+
+/** Satu baris per nama model, urut total token menurun. */
+export async function usageByModel(
+  db: Db,
+  input: { userId: string; from: Date; to: Date },
+): Promise<{ reported: boolean; rows: UsageModelRow[] }> {
+  const rows = await usageRowsInRange(db, input);
+  const buckets = new Map<string, UsageBucket>();
+
+  for (const row of rows) {
+    const bucket = buckets.get(row.model) ?? emptyBucket();
+    addToBucket(bucket, row);
+    buckets.set(row.model, bucket);
+  }
+
+  const reported = rows.length === 0 || rows.some((row) => row.reported === 1);
+  const result = [...buckets.entries()]
+    .map(([model, bucket]) => ({ model, ...bucket }))
+    .sort((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model));
+  return { reported, rows: result };
+}
+
+const CSV_HEADER = [
+  "created_at",
+  "model",
+  "prompt_tokens",
+  "completion_tokens",
+  "total_tokens",
+  "reported",
+] as const;
+
+/** Sel kosong untuk `null` — nol berarti gateway benar-benar melaporkan nol. */
+function cell(value: string | number | null): string {
+  if (value === null) return "";
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+/**
+ * CSV baris mentah (REQ-NT-73). BOM di awal supaya Excel membaca UTF-8;
+ * akhir baris `\r\n` sesuai RFC 4180.
+ */
+export function usageCsv(rows: readonly UsageRecordDto[]): string {
+  const lines = [CSV_HEADER.join(",")];
+  for (const row of rows) {
+    lines.push(
+      [
+        cell(row.createdAt),
+        cell(row.model),
+        cell(row.promptTokens),
+        cell(row.completionTokens),
+        cell(row.totalTokens),
+        cell(row.reported ? "true" : "false"),
+      ].join(","),
+    );
+  }
+  return `\uFEFF${lines.join("\r\n")}\r\n`;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_DAYS = 30;
+const MAX_DAYS = 366;
+
+/**
+ * Rentang dari query `from`/`to` (ISO). Bawaan 30 hari terakhir sampai
+ * sekarang; rentang terbalik atau lebih dari 366 hari ditolak 400.
+ */
+export function parseUsageRange(params: URLSearchParams): { from: Date; to: Date } {
+  const to = params.get("to") ? new Date(params.get("to") as string) : new Date();
+  const from = params.get("from")
+    ? new Date(params.get("from") as string)
+    : new Date(to.getTime() - DEFAULT_DAYS * DAY_MS);
+
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    throw new ApiError({ status: STATUS.BAD_REQUEST, code: "INVALID_RANGE", message: "from/to harus tanggal ISO." });
+  }
+  if (from > to) {
+    throw new ApiError({ status: STATUS.BAD_REQUEST, code: "INVALID_RANGE", message: "from harus sebelum to." });
+  }
+  if (to.getTime() - from.getTime() > MAX_DAYS * DAY_MS) {
+    throw new ApiError({
+      status: STATUS.BAD_REQUEST,
+      code: "INVALID_RANGE",
+      message: `Rentang maksimal ${MAX_DAYS} hari.`,
+    });
+  }
+  return { from, to };
 }
