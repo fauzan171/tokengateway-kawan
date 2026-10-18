@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Markdown } from "./markdown";
+import { DocumentsPanel } from "./documents-panel";
 import {
   Send,
   Square,
@@ -709,8 +710,13 @@ export function ChatView({
         </div>
       )}
 
+      {/* Dokumen (WP-NT-P6-10) */}
+      <div className="mt-auto pt-2">
+        <DocumentsPanel />
+      </div>
+
       {/* Input Composer */}
-      <form onSubmit={handleSend} className="relative mt-auto pt-2">
+      <form onSubmit={handleSend} className="relative pt-2">
         {attachments.length > 0 && (
           <ul className="mb-2 flex flex-wrap gap-2">
             {attachments.map((file, index) => (

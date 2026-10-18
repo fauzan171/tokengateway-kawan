@@ -25,6 +25,7 @@ export type PublicDocument = {
   mime: string;
   sizeBytes: number;
   status: string;
+  errorCode: string | null;
   createdAt: string;
 };
 
@@ -34,6 +35,7 @@ const DOCUMENT_FIELDS = {
   mime: true,
   sizeBytes: true,
   status: true,
+  errorCode: true,
   createdAt: true,
 } as const;
 
@@ -43,6 +45,7 @@ type DocumentRow = {
   mime: string;
   sizeBytes: number;
   status: string;
+  errorCode: string | null;
   createdAt: Date;
 };
 
@@ -53,6 +56,7 @@ function toPublicDocument(row: DocumentRow): PublicDocument {
     mime: row.mime,
     sizeBytes: row.sizeBytes,
     status: row.status,
+    errorCode: row.errorCode,
     createdAt: row.createdAt.toISOString(),
   };
 }
