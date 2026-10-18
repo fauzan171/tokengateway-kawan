@@ -17,6 +17,7 @@ import { loadConfig } from "@/lib/config/env";
 import { closeDb, getDb } from "@/lib/db";
 import { createWorker, type JobHandler } from "@/lib/jobs/worker";
 import { runGeneration } from "@/lib/chat/generate";
+import { runExtract } from "@/lib/documents/run-extract";
 
 const IDLE_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -33,6 +34,13 @@ const handlers: Record<string, JobHandler> = {
     const config = loadConfig();
     const db = await getDb(config.databaseUrl);
     await runGeneration(db, config, payload.generationId, signal);
+  },
+  "document.extract": async (claim, signal) => {
+    const payload = JSON.parse(claim.payloadJson || "{}") as { documentId?: string };
+    if (!payload.documentId) throw new Error("Payload job document.extract tidak memiliki documentId.");
+    const config = loadConfig();
+    const db = await getDb(config.databaseUrl);
+    await runExtract(db, payload.documentId, signal);
   },
 };
 
