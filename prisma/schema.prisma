@@ -35,6 +35,7 @@ model User {
   folders   Folder[]
   connections Connection[]
   documents Document[]
+  prompts   Prompt[]
 
   @@index([status])
 }
@@ -336,6 +337,23 @@ model GenerationEvent {
   generation Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
 
   @@unique([generationId, seq])
+}
+
+/// Prompt tersimpan (REQ-NT-62/63/64). `userId` null = prompt bawaan admin.
+model Prompt {
+  id            String   @id
+  userId        String?
+  title         String
+  body          String
+  variablesJson String?
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([enabled])
 }
 
 /// Catatan pemakaian token (REQ-NT-71, SDD-2.2).

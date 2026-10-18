@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Markdown } from "./markdown";
 import { DocumentsPanel } from "./documents-panel";
 import { SourceList } from "./source-list";
+import { PromptPicker } from "./prompt-picker";
 import {
   Send,
   Square,
@@ -25,6 +26,7 @@ import {
   siblingsOf,
 } from "@/lib/chat/tree";
 import { IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/chat/content";
+import { applyVariables } from "@/lib/prompts/variables";
 
 const DEFAULT_MODEL = "deepseek-v4.1-flash";
 
@@ -788,6 +790,10 @@ export function ChatView({
             ))}
           </ul>
         )}
+        {/* Prompt tersimpan (WP-NT-P7-04/05) */}
+        <div className="mb-1 flex items-center">
+          <PromptPicker onApply={(body) => setInput(applyVariables(body, { isi: input }))} />
+        </div>
         <div className="relative flex items-center rounded-2xl border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
           {webSearchAvailable && (
             <button

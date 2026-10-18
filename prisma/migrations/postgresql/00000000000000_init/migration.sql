@@ -295,3 +295,19 @@ CREATE TABLE "DocumentChunk" (
 
 CREATE UNIQUE INDEX "DocumentChunk_documentId_ordinal_key" ON "DocumentChunk"("documentId", "ordinal");
 CREATE INDEX "DocumentChunk_documentId_idx" ON "DocumentChunk"("documentId");
+
+CREATE TABLE "Prompt" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT,
+    "title" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "variablesJson" TEXT,
+    "enabled" INTEGER NOT NULL DEFAULT 1,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL,
+    CONSTRAINT "Prompt_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "Prompt_userId_idx" ON "Prompt"("userId");
+CREATE INDEX "Prompt_enabled_idx" ON "Prompt"("enabled");
