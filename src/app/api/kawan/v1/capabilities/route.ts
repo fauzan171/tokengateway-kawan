@@ -9,6 +9,7 @@
 
 import { requestId } from "@/lib/api/errors";
 import { handleRouteError, jsonOk, requireContext } from "@/lib/api/route";
+import { readMediaConfig } from "@/lib/media/config";
 import { readWebSearchConfig } from "@/lib/search/web";
 
 export const runtime = "nodejs";
@@ -20,7 +21,17 @@ export async function GET(request: Request): Promise<Response> {
   const started = Date.now();
   try {
     await requireContext();
-    return jsonOk({ webSearch: Boolean(readWebSearchConfig()) }, reqId);
+    const media = readMediaConfig();
+    // Boolean saja: nama model, base URL, dan kunci tidak pernah ikut.
+    return jsonOk(
+      {
+        webSearch: Boolean(readWebSearchConfig()),
+        imageGen: Boolean(media.image),
+        stt: Boolean(media.stt),
+        tts: Boolean(media.tts),
+      },
+      reqId,
+    );
   } catch (err) {
     return handleRouteError(err, reqId, ROUTE, started);
   }

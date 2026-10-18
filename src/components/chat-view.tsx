@@ -5,6 +5,7 @@ import { Markdown } from "./markdown";
 import { DocumentsPanel } from "./documents-panel";
 import { SourceList } from "./source-list";
 import { PromptPicker } from "./prompt-picker";
+import { MediaControls } from "./media-controls";
 import {
   Send,
   Square,
@@ -157,6 +158,10 @@ export function ChatView({
   const [vision, setVision] = useState(false);
   const [webSearchAvailable, setWebSearchAvailable] = useState(false);
   const [webSearchOn, setWebSearchOn] = useState(false);
+  // Kapabilitas media (WP-NT-P8-01/03/04). Semua `false` sampai server
+  // mengumumkannya; gagal fetch berarti kontrol tidak dirender sama sekali.
+  const [mediaCaps, setMediaCaps] = useState({ imageGen: false, stt: false, tts: false });
+  const [mediaBusy, setMediaBusy] = useState(false);
   // Satu area pratinjau: sitasi yang terakhir dibuka. `text: null` = memuat.
   const [openCitation, setOpenCitation] = useState<{
     messageId: string;
@@ -192,6 +197,11 @@ export function ChatView({
       .then((data) => {
         if (cancelled) return;
         setWebSearchAvailable(data?.webSearch === true);
+        setMediaCaps({
+          imageGen: data?.imageGen === true,
+          stt: data?.stt === true,
+          tts: data?.tts === true,
+        });
       })
       .catch(() => {});
     return () => {
@@ -493,6 +503,95 @@ export function ChatView({
   function handleSwitchBranch(targetSiblingId: string) {
     const leaf = findLeaf(messages, targetSiblingId);
     setActiveLeafId(leaf);
+  }
+
+  // Kontrol media (WP-NT-P8-01/03/04). Kegagalannya jadi pesan di area galat,
+  // bukan `alert`, dan tidak menyentuh jalur streaming.
+  async function handleImage(prompt: string) {
+    if (!prompt.trim()) return;
+    setMediaBusy(true);
+    setErrorState(null);
+    try {
+      const res = await fetch("/api/kawan/v1/media/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || typeof data?.image !== "string") {
+        throw new Error(data?.error?.message || "Gagal membuat gambar.");
+      }
+      setAttachments((prev) =>
+        [...prev, { mime: "image/png", dataUrl: data.image }].slice(0, MAX_IMAGES),
+      );
+    } catch (err: unknown) {
+      setErrorState({
+        message: err instanceof Error ? err.message : "Gagal membuat gambar.",
+        retryable: false,
+      });
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  async function handleTranscribe(file: File) {
+    setMediaBusy(true);
+    setErrorState(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/kawan/v1/media/transcribe", { method: "POST", body: form });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || typeof data?.text !== "string") {
+        throw new Error(data?.error?.message || "Transkripsi gagal.");
+      }
+      const text: string = data.text;
+      setInput((prev) => (prev.trim() ? `${prev} ${text}` : text));
+    } catch (err: unknown) {
+      setErrorState({
+        message: err instanceof Error ? err.message : "Transkripsi gagal.",
+        retryable: false,
+      });
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  async function handleSpeak() {
+    let path: TreeNode[] = messages;
+    try {
+      if (activeLeafId) path = buildAncestryPath(messages, activeLeafId);
+    } catch {}
+    const last = [...path]
+      .reverse()
+      .find((m) => m.role === "assistant" && parseText(m.contentJson).trim() !== "");
+    const text = last ? parseText(last.contentJson) : "";
+    if (!text.trim()) return;
+
+    setMediaBusy(true);
+    setErrorState(null);
+    try {
+      const res = await fetch("/api/kawan/v1/media/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error?.message || "Gagal membacakan jawaban.");
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play().catch(() => URL.revokeObjectURL(url));
+    } catch (err: unknown) {
+      setErrorState({
+        message: err instanceof Error ? err.message : "Gagal membacakan jawaban.",
+        retryable: false,
+      });
+    } finally {
+      setMediaBusy(false);
+    }
   }
 
   // Active ancestry path
@@ -809,6 +908,17 @@ export function ChatView({
             >
               <Globe className="size-4" />
             </button>
+          )}
+          {/* Kontrol media hanya dirender bila server mengumumkan fiturnya;
+              handler pun hanya diisi untuk fitur yang tersedia (REQ-NT-69). */}
+          {(mediaCaps.imageGen || mediaCaps.stt || mediaCaps.tts) && (
+            <MediaControls
+              busy={isStreaming || mediaBusy}
+              prompt={input}
+              {...(mediaCaps.imageGen ? { onImage: handleImage } : {})}
+              {...(mediaCaps.stt ? { onTranscribe: handleTranscribe } : {})}
+              {...(mediaCaps.tts ? { onSpeak: handleSpeak } : {})}
+            />
           )}
           {vision && (
             <>

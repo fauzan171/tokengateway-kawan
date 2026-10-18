@@ -1,0 +1,109 @@
+/**
+ * Uji pembuatan gambar (WP-NT-P8-01).
+ *
+ * `@/lib/net` di-mock agar tidak ada resolusi DNS, `fetch` diganti stub.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/net", () => ({
+  assertOutboundAllowed: async (url: string) => url,
+  DEFAULT_OUTBOUND_OPTIONS: { allowInsecureHttp: false, allowlist: [] },
+}));
+
+const { generateImage } = await import("./images");
+
+const ENV_KEYS = ["MEDIA_IMAGE_MODEL"];
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+let fetchMock: ReturnType<typeof vi.fn>;
+let savedEnv: Record<string, string | undefined>;
+
+beforeEach(() => {
+  savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+  for (const key of ENV_KEYS) delete process.env[key];
+  fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+afterEach(() => {
+  for (const key of ENV_KEYS) {
+    if (savedEnv[key] === undefined) delete process.env[key];
+    else process.env[key] = savedEnv[key];
+  }
+  vi.unstubAllGlobals();
+});
+
+const base = { baseUrl: "https://gw.test/v1", apiKey: "rahasia-123", prompt: "kucing" };
+
+describe("generateImage", () => {
+  it("tanpa MEDIA_IMAGE_MODEL → 409 MEDIA_NOT_CONFIGURED, tanpa fetch", async () => {
+    await expect(generateImage(base)).rejects.toMatchObject({
+      status: 409,
+      code: "MEDIA_NOT_CONFIGURED",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("prompt kosong → 400 INVALID_PROMPT", async () => {
+    process.env["MEDIA_IMAGE_MODEL"] = "gpt-image-1";
+    await expect(generateImage({ ...base, prompt: "   " })).rejects.toMatchObject({
+      status: 400,
+      code: "INVALID_PROMPT",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("b64_json → data URL PNG", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [{ b64_json: "QUJD" }] }));
+    const image = await generateImage({ ...base, model: "gpt-image-1" });
+    expect(image).toEqual({ mime: "image/png", dataUrl: "data:image/png;base64,QUJD" });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://gw.test/v1/images/generations");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      model: "gpt-image-1",
+      prompt: "kucing",
+      size: "1024x1024",
+      response_format: "b64_json",
+      n: 1,
+    });
+  });
+
+  it("500 → 502 IMAGE_FAILED, pesan tidak memuat apiKey/baseUrl", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: { message: "model tidak dikenal" } }, 500),
+    );
+    try {
+      await generateImage({ ...base, model: "gpt-image-1" });
+      throw new Error("seharusnya gagal");
+    } catch (err) {
+      const error = err as { status: number; code: string; message: string };
+      expect(error.status).toBe(502);
+      expect(error.code).toBe("IMAGE_FAILED");
+      expect(error.message).toBe("model tidak dikenal");
+      expect(error.message).not.toContain("rahasia-123");
+      expect(error.message).not.toContain("gw.test");
+    }
+  });
+
+  it("hanya url → diunduh jadi data URL", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [{ url: "https://cdn.test/a.png" }] }))
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { "content-type": "image/webp" },
+        }),
+      );
+    const image = await generateImage({ ...base, model: "gpt-image-1" });
+    expect(image.mime).toBe("image/webp");
+    expect(image.dataUrl).toBe(`data:image/webp;base64,${Buffer.from([1, 2, 3]).toString("base64")}`);
+  });
+});
