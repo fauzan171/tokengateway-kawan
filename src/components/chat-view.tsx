@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Markdown } from "./markdown";
 import { DocumentsPanel } from "./documents-panel";
+import { SourceList } from "./source-list";
 import {
   Send,
   Square,
@@ -15,6 +16,7 @@ import {
   ChevronRight,
   X,
   ImagePlus,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,9 +84,22 @@ function parseNote(contentJson: string): string | null {
     const data = JSON.parse(contentJson);
     if (!Array.isArray(data?.parts)) return null;
     const note = data.parts.find((p: { kind?: string; code?: string }) => p?.kind === "note");
-    return note?.code === "keyword-only" ? "keyword-only" : null;
+    return typeof note?.code === "string" ? note.code : null;
   } catch {}
   return null;
+}
+
+type SourceView = { title: string; url: string };
+
+function parseSources(contentJson: string): SourceView[] {
+  try {
+    const data = JSON.parse(contentJson);
+    if (!Array.isArray(data?.parts)) return [];
+    return data.parts.filter(
+      (p: { kind?: string; url?: string }) => p?.kind === "source" && typeof p.url === "string" && p.url.startsWith("http"),
+    ) as SourceView[];
+  } catch {}
+  return [];
 }
 
 type CitationView = {
@@ -138,6 +153,8 @@ export function ChatView({
   const [attachments, setAttachments] = useState<{ mime: string; dataUrl: string }[]>([]);
   const [modelRef, setModelRef] = useState(DEFAULT_MODEL);
   const [vision, setVision] = useState(false);
+  const [webSearchAvailable, setWebSearchAvailable] = useState(false);
+  const [webSearchOn, setWebSearchOn] = useState(false);
   // Satu area pratinjau: sitasi yang terakhir dibuka. `text: null` = memuat.
   const [openCitation, setOpenCitation] = useState<{
     messageId: string;
@@ -163,6 +180,22 @@ export function ChatView({
       cancelled = true;
     };
   }, [modelRef]);
+
+  // Tombol pencarian web hanya muncul bila server mengonfigurasinya
+  // (REQ-NT-51). Gagal fetch → tombol tidak ditampilkan, bukan tombol mati.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/kawan/v1/capabilities")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setWebSearchAvailable(data?.webSearch === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -299,6 +332,7 @@ export function ChatView({
 
     const userText = input.trim();
     const sending = attachments;
+    const searchOn = webSearchOn;
     setInput("");
     setAttachments([]);
     setErrorState(null);
@@ -314,6 +348,7 @@ export function ChatView({
           content: userText || "(gambar)",
           parentId,
           attachments: sending,
+          ...(searchOn ? { webSearch: true } : {}),
         }),
       });
 
@@ -332,7 +367,13 @@ export function ChatView({
         role: "user",
         seq: messages.length + 1,
         status: "complete",
-        contentJson: JSON.stringify({ parts: [{ kind: "text", text: userText || "(gambar)" }, ...sending] }),
+        contentJson: JSON.stringify({
+          parts: [
+            { kind: "text", text: userText || "(gambar)" },
+            ...(searchOn ? [{ kind: "web-search" }] : []),
+            ...sending,
+          ],
+        }),
       };
       const assistantNode: TreeNode = {
         id: assistantMessageId,
@@ -478,6 +519,7 @@ export function ChatView({
             const images = parseImages(m.contentJson);
             const note = parseNote(m.contentJson);
             const citations = parseCitations(m.contentJson);
+            const sources = parseSources(m.contentJson);
             const siblings = siblingsOf(messages, m.id);
             const sibIdx = siblings.findIndex((s) => s.id === m.id);
             const hasSiblings = siblings.length > 1;
@@ -493,6 +535,11 @@ export function ChatView({
                 {note === "keyword-only" && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">
                     Pencarian dokumen memakai kata kunci karena embedding belum dikonfigurasi; hasil bisa kurang tepat.
+                  </p>
+                )}
+                {note === "web-search-unavailable" && !isEditing && (
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    Sumber web tidak tersedia untuk jawaban ini.
                   </p>
                 )}
                 {isEditing ? (
@@ -585,6 +632,8 @@ export function ChatView({
                     ))}
                   </div>
                 )}
+
+                {m.role === "assistant" && !isEditing && <SourceList sources={sources} />}
 
                 {m.role === "assistant" &&
                   openCitation?.messageId === m.id &&
@@ -740,6 +789,21 @@ export function ChatView({
           </ul>
         )}
         <div className="relative flex items-center rounded-2xl border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+          {webSearchAvailable && (
+            <button
+              type="button"
+              aria-pressed={webSearchOn}
+              aria-label="Pencarian web"
+              title="Pencarian web"
+              onClick={() => setWebSearchOn((prev) => !prev)}
+              disabled={isStreaming}
+              className={`ml-2 rounded-lg p-2 disabled:opacity-50 ${
+                webSearchOn ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Globe className="size-4" />
+            </button>
+          )}
           {vision && (
             <>
               <input

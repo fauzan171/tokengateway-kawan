@@ -35,6 +35,8 @@ import { buildContext } from "@/lib/documents/context";
 import { readEmbeddingConfig } from "@/lib/documents/embed";
 import { retrieveChunks, type RetrievedChunk } from "@/lib/documents/retrieve";
 import { extractCitations } from "@/lib/documents/citations";
+import { buildSearchSystem, webSearchRequested } from "@/lib/search/prompt";
+import { webSearch, type SearchResult } from "@/lib/search/web";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
@@ -455,10 +457,8 @@ export async function runGeneration(
     },
     orderBy: { seq: "asc" },
   });
-  const messages = buildMessages(
-    buildAncestryPath(rows, generation.assistantMessageId),
-    generation.assistantMessageId,
-  );
+  const ancestry = buildAncestryPath(rows, generation.assistantMessageId);
+  const messages = buildMessages(ancestry, generation.assistantMessageId);
 
   // Konteks rujukan dokumen (WP-NT-P6-07, SDD-6.2/6.3). Kegagalan retrieval
   // tidak boleh menggagalkan chat: tangkap, lanjut tanpa konteks.
@@ -493,6 +493,21 @@ export async function runGeneration(
     }
   }
 
+  // Pencarian web (WP-NT-P7-02/P7-03, REQ-NT-52/53). Kegagalan mesin pencari
+  // TIDAK boleh menggagalkan generasi: tangkap, lanjut tanpa sumber.
+  let sources: SearchResult[] = [];
+  let searchFailed = false;
+  const lastUserRow = [...ancestry].reverse().find((row) => row.role === "user");
+  if (query.trim() !== "" && webSearchRequested(lastUserRow?.contentJson)) {
+    try {
+      sources = await webSearch(query, { limit: 5 });
+    } catch {
+      // Isi query tidak dicatat: hanya penanda bahwa pencarian gagal.
+      searchFailed = true;
+    }
+  }
+  const searchSystem = buildSearchSystem(sources) ?? null;
+
   const active = await getActiveConnection(db, chat.userId);
   if (!active) throw new GenerationSetupError("Belum ada koneksi aktif.");
 
@@ -525,9 +540,12 @@ export async function runGeneration(
       apiKey,
       body: {
         model,
-        messages: contextSystem
-          ? [{ role: "system", content: contextSystem }, ...messages]
-          : messages,
+        messages: [
+          // Konteks dokumen lebih dulu, lalu sumber web.
+          ...(contextSystem ? [{ role: "system", content: contextSystem }] : []),
+          ...(searchSystem ? [{ role: "system", content: searchSystem }] : []),
+          ...messages,
+        ],
         stream: true,
       },
       outbound: {
@@ -573,17 +591,26 @@ export async function runGeneration(
 
   const now = new Date();
   // Catatan ikut di `contentJson` karena UI membacanya dari sana (bagian `note`).
-  const notePart = keywordOnly ? [{ kind: "note", code: "keyword-only" }] : [];
+  const notePart = [
+    ...(keywordOnly ? [{ kind: "note", code: "keyword-only" }] : []),
+    ...(searchFailed ? [{ kind: "note", code: "web-search-unavailable" }] : []),
+  ];
   // Sitasi hanya dari penanda yang benar-benar ditulis model (SDD-6.2).
   const citationParts = extractCitations(text, usedChunks).map((citation) => ({
     kind: "citation",
     ...citation,
+  }));
+  const sourceParts = sources.map((source) => ({
+    kind: "source",
+    title: source.title,
+    url: source.url,
   }));
   const contentJson = JSON.stringify({
     parts: [
       ...notePart,
       ...(text === "" ? [] : [{ kind: "text", text }]),
       ...citationParts,
+      ...sourceParts,
     ],
   });
 

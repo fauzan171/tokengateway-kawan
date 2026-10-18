@@ -79,6 +79,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
       parentId: body["parentId"],
       model: body["model"],
       attachments: body["attachments"],
+      webSearch: body["webSearch"],
       idempotencyKey: request.headers.get(IDEMPOTENCY_HEADER),
     });
 

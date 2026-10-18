@@ -103,9 +103,16 @@ export function idempotencyDigest(input: {
   parentId: string | null;
   model: string | null;
   attachments?: readonly { mime: string; dataUrl: string }[];
+  webSearch?: boolean;
 }): string {
   const images = (input.attachments ?? []).map((a) => [a.mime, a.dataUrl]);
-  const canonical = JSON.stringify([input.content, input.parentId, input.model, images]);
+  const canonical = JSON.stringify([
+    input.content,
+    input.parentId,
+    input.model,
+    images,
+    input.webSearch === true,
+  ]);
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -130,6 +137,8 @@ export type SendMessageInput = {
   attachments?: unknown;
   /** Nilai header `Idempotency-Key`; `null` bila tidak dikirim. */
   idempotencyKey: string | null;
+  /** Permintaan pencarian web; hanya `true` yang dihormati (REQ-NT-51). */
+  webSearch?: unknown;
 };
 
 function normalizeContent(value: unknown): string {
@@ -185,7 +194,8 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
   const model = normalizeModel(input.model);
   const images = validateAttachments(input.attachments);
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
-  const digest = idempotencyDigest({ content, parentId, model, attachments: images });
+  const webSearch = input.webSearch === true;
+  const digest = idempotencyDigest({ content, parentId, model, attachments: images, webSearch });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -230,7 +240,11 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
 
         const userMessageId = `msg_${randomUUID()}`;
         const contentJson = JSON.stringify({
-          parts: [{ kind: "text", text: content }, ...images],
+          parts: [
+            { kind: "text", text: content },
+            ...(webSearch ? [{ kind: "web-search" }] : []),
+            ...images,
+          ],
         });
 
         await tx.chatMessage.create({
