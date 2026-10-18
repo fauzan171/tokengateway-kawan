@@ -3,16 +3,13 @@
  *
  * Server-only: membaca berkas lewat adapter penyimpanan dan mengurai PDF.
  *
- * Keputusan penyimpanan hasil: satu baris `DocumentChunk` PER HALAMAN
- * (`ordinal` = indeks halaman 0-based, `page` = nomor halaman). Baris ini
- * adalah hasil ekstraksi mentah, bukan chunk berukuran; P6-04 akan
- * menggantinya dengan chunk 800–1200 karakter. Dipilih per halaman, bukan
- * satu baris `ordinal: 0` berisi teks penuh, supaya metadata halaman
- * (REQ-NT-55/57) tidak hilang dan tidak perlu mengekstrak ulang.
+ * Hasil ekstraksi dipotong menjadi chunk 800–1200 karakter dengan overlap
+ * (P6-04); tiap chunk membawa halaman asalnya dan ordinal lintas dokumen.
  */
 
 import { randomUUID } from "node:crypto";
 import type { Db } from "@/lib/db";
+import { chunkPages } from "./chunk";
 import { ExtractError, extractText } from "./extract";
 import { readDocument } from "./storage";
 
@@ -39,11 +36,12 @@ export async function runExtract(
   if (signal?.aborted) return;
   await db.document.update({ where: { id: documentId }, data: { status: "processing" } });
 
-  let result: { text: string; pages: { page: number; text: string }[] };
+  let chunks: ReturnType<typeof chunkPages>;
   try {
     const data = await readDocument(document.storageKey);
     if (signal?.aborted) return;
-    result = await extractText(document.mime, data);
+    // Chunking ikut di dalam try: batas jumlah chunk juga kegagalan permanen.
+    chunks = chunkPages((await extractText(document.mime, data)).pages);
   } catch (err) {
     if (signal?.aborted) return;
     const code = err instanceof ExtractError ? err.code : "EXTRACT_FAILED";
@@ -62,12 +60,13 @@ export async function runExtract(
   await db.$transaction(async (tx) => {
     await tx.documentChunk.deleteMany({ where: { documentId } });
     await tx.documentChunk.createMany({
-      data: result.pages.map((page, index) => ({
+      data: chunks.map((chunk) => ({
         id: randomUUID(),
         documentId,
-        ordinal: index,
-        text: page.text,
-        page: page.page,
+        ordinal: chunk.ordinal,
+        text: chunk.text,
+        page: chunk.page,
+        section: chunk.section,
       })),
     });
     await tx.document.update({

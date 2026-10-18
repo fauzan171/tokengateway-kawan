@@ -115,6 +115,22 @@ describe("runExtract", () => {
     await expect(runExtract(db, "doc_tidak_ada")).rejects.toThrow(/tidak ditemukan/);
   });
 
+  it("teks panjang: beberapa chunk dengan ordinal dan page yang benar", async () => {
+    const text = Array.from({ length: 400 }, (_, i) => `kata${String(i).padStart(4, "0")}`).join(" ");
+    const id = await seedDocument("text/plain", Buffer.from(text));
+
+    await runExtract(db, id);
+
+    const chunks = await db.documentChunk.findMany({
+      where: { documentId: id },
+      orderBy: { ordinal: "asc" },
+    });
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.map((c) => c.ordinal)).toEqual(chunks.map((_, i) => i));
+    for (const chunk of chunks) expect(chunk.page).toBe(1);
+    expect(chunks.map((c) => c.text).join(" ")).toContain("kata0399");
+  });
+
   it("dijalankan ulang tidak menggandakan chunk", async () => {
     const id = await seedDocument("text/plain", Buffer.from("sekali saja"));
     await runExtract(db, id);
