@@ -86,6 +86,25 @@ function parseNote(contentJson: string): string | null {
   return null;
 }
 
+type CitationView = {
+  index: number;
+  chunkId: string;
+  filename: string;
+  page: number | null;
+};
+
+function parseCitations(contentJson: string): CitationView[] {
+  try {
+    const data = JSON.parse(contentJson);
+    if (!Array.isArray(data?.parts)) return [];
+    return data.parts.filter(
+      (p: { kind?: string; chunkId?: string }) =>
+        p?.kind === "citation" && typeof p.chunkId === "string",
+    );
+  } catch {}
+  return [];
+}
+
 function findLeaf(messages: readonly TreeNode[], startId: string): string {
   let curr = startId;
   while (true) {
@@ -118,6 +137,12 @@ export function ChatView({
   const [attachments, setAttachments] = useState<{ mime: string; dataUrl: string }[]>([]);
   const [modelRef, setModelRef] = useState(DEFAULT_MODEL);
   const [vision, setVision] = useState(false);
+  // Satu area pratinjau: sitasi yang terakhir dibuka. `text: null` = memuat.
+  const [openCitation, setOpenCitation] = useState<{
+    messageId: string;
+    chunkId: string;
+    text: string | null;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -406,6 +431,21 @@ export function ChatView({
     }
   }
 
+  async function handleOpenCitation(messageId: string, chunkId: string) {
+    setOpenCitation({ messageId, chunkId, text: null });
+    try {
+      const res = await fetch(`/api/kawan/v1/documents/chunks/${chunkId}`);
+      const data = res.ok ? await res.json() : null;
+      setOpenCitation({
+        messageId,
+        chunkId,
+        text: typeof data?.text === "string" ? data.text : "Potongan tidak dapat dimuat.",
+      });
+    } catch {
+      setOpenCitation({ messageId, chunkId, text: "Potongan tidak dapat dimuat." });
+    }
+  }
+
   function handleSwitchBranch(targetSiblingId: string) {
     const leaf = findLeaf(messages, targetSiblingId);
     setActiveLeafId(leaf);
@@ -436,6 +476,7 @@ export function ChatView({
             const text = parseText(m.contentJson);
             const images = parseImages(m.contentJson);
             const note = parseNote(m.contentJson);
+            const citations = parseCitations(m.contentJson);
             const siblings = siblingsOf(messages, m.id);
             const sibIdx = siblings.findIndex((s) => s.id === m.id);
             const hasSiblings = siblings.length > 1;
@@ -521,6 +562,38 @@ export function ChatView({
                     )}
                   </div>
                 )}
+
+                {m.role === "assistant" && citations.length > 0 && !isEditing && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1 px-1">
+                    {citations.map((citation) => (
+                      <button
+                        key={citation.chunkId}
+                        type="button"
+                        aria-label={`Lihat potongan ${citation.filename}${
+                          citation.page === null ? "" : ` halaman ${citation.page}`
+                        }`}
+                        aria-expanded={
+                          openCitation?.messageId === m.id &&
+                          openCitation.chunkId === citation.chunkId
+                        }
+                        onClick={() => handleOpenCitation(m.id, citation.chunkId)}
+                        className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                      >
+                        [{citation.index}]
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {m.role === "assistant" &&
+                  openCitation?.messageId === m.id &&
+                  !isEditing && (
+                    <div className="mt-1 max-w-[85%] rounded-lg border bg-background p-2 text-xs text-muted-foreground">
+                      {openCitation.text === null
+                        ? "Memuat potongan..."
+                        : openCitation.text}
+                    </div>
+                  )}
 
                 {/* Sibling navigation & Action buttons */}
                 {!isEditing && (

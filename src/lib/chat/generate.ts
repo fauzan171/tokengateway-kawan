@@ -33,7 +33,8 @@ import {
 import { CONNECTION_API_KEY_PURPOSE, decryptSecret } from "@/lib/secrets";
 import { buildContext } from "@/lib/documents/context";
 import { readEmbeddingConfig } from "@/lib/documents/embed";
-import { retrieveChunks } from "@/lib/documents/retrieve";
+import { retrieveChunks, type RetrievedChunk } from "@/lib/documents/retrieve";
+import { extractCitations } from "@/lib/documents/citations";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
@@ -473,6 +474,8 @@ export async function runGeneration(
 
   let contextSystem: string | null = null;
   let keywordOnly = false;
+  // Di luar `try` supaya sitasi bisa dipetakan setelah streaming selesai.
+  let usedChunks: RetrievedChunk[] = [];
   if (query.trim() !== "") {
     const embedding = readEmbeddingConfig();
     try {
@@ -482,6 +485,7 @@ export async function runGeneration(
         limit: 6,
         ...(embedding ? { embedding } : {}),
       });
+      usedChunks = chunks;
       contextSystem = buildContext(chunks).system;
       keywordOnly = !embedding && chunks.length > 0;
     } catch {
@@ -570,8 +574,17 @@ export async function runGeneration(
   const now = new Date();
   // Catatan ikut di `contentJson` karena UI membacanya dari sana (bagian `note`).
   const notePart = keywordOnly ? [{ kind: "note", code: "keyword-only" }] : [];
+  // Sitasi hanya dari penanda yang benar-benar ditulis model (SDD-6.2).
+  const citationParts = extractCitations(text, usedChunks).map((citation) => ({
+    kind: "citation",
+    ...citation,
+  }));
   const contentJson = JSON.stringify({
-    parts: [...notePart, ...(text === "" ? [] : [{ kind: "text", text }])],
+    parts: [
+      ...notePart,
+      ...(text === "" ? [] : [{ kind: "text", text }]),
+      ...citationParts,
+    ],
   });
 
   await db.chatMessage.update({
