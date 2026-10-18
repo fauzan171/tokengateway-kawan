@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
 import { Menu, MessageCircle, Plus, Settings, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChatSidebar } from "@/components/chat-sidebar";
 import { ChatView } from "@/components/chat-view";
 
 type Theme = "system" | "light" | "dark";
@@ -14,6 +15,8 @@ export default function Home() {
   const [section, setSection] = useState("chat");
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [importNote, setImportNote] = useState("");
 
   /**
    * Pengalihan onboarding (REQ-NT-01): pengguna yang sudah masuk tetapi belum
@@ -64,16 +67,16 @@ export default function Home() {
   }
 
   const navigation = (
-    <div className="flex h-full flex-col p-5">
-      <div className="mb-9 flex items-center gap-3 text-xl font-semibold"><span className="rounded-xl bg-foreground p-2 text-background"><MessageCircle aria-hidden className="size-5" /></span>Kawan</div>
-      <Button className="h-11 w-full justify-start gap-3" onClick={() => navigate("chat")}><Plus aria-hidden />Chat baru</Button>
-      <nav aria-label="Navigasi utama" className="mt-8 space-y-2">
-        {[ ["chat", "Percakapan"], ["settings", "Pengaturan"], ["about", "Tentang Kawan"] ].map(([id, label]) => (
-          <Button key={id} variant="ghost" className="h-11 w-full justify-start" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
+    <div className="flex h-full min-h-0 flex-col p-5">
+      <div className="mb-6 flex items-center gap-3 text-xl font-semibold"><span className="rounded-xl bg-foreground p-2 text-background"><MessageCircle aria-hidden className="size-5" /></span>Kawan</div>
+      <Button className="h-11 w-full justify-start gap-3" onClick={() => { setActiveChatId(null); navigate("chat"); }}><Plus aria-hidden />Chat baru</Button>
+      <ChatSidebar activeChatId={activeChatId} onSelect={(id) => { setActiveChatId(id); navigate("chat"); }} />
+      <nav aria-label="Navigasi utama" className="mt-4 space-y-1 border-t pt-3">
+        {[ ["settings", "Pengaturan"], ["about", "Tentang Kawan"] ].map(([id, label]) => (
+          <Button key={id} variant="ghost" className="h-10 w-full justify-start" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
         ))}
       </nav>
-      <div className="mt-10 border-t pt-5 text-sm text-muted-foreground"><p>Ruang untuk ide berikutnya.</p><p className="mt-2 text-xs">Percakapanmu akan muncul di sini setelah fitur chat tersedia.</p></div>
-      <a className="mt-auto pt-8 text-xs text-muted-foreground underline-offset-4 hover:underline" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
+      <a className="mt-3 text-xs text-muted-foreground underline-offset-4 hover:underline" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
     </div>
   );
 
@@ -101,9 +104,9 @@ export default function Home() {
         </header>
         <main id="content" className="flex flex-1 flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
           {section === "chat" ? (
-            <ChatView />
+            <ChatView key={activeChatId ?? "baru"} initialChatId={activeChatId} onChatCreated={setActiveChatId} />
           ) : section === "settings" ? (
-            <section className="mx-auto w-full max-w-3xl py-12"><Settings aria-hidden className="mb-5 size-7" /><h1 className="text-3xl font-semibold">Buat nyaman ruangmu.</h1><p className="mt-3 text-muted-foreground">Sesuaikan tampilan Kawan dengan caramu bekerja.</p><div className="mt-10 rounded-2xl border p-6"><label htmlFor="theme" className="block font-medium">Tema tampilan</label><p className="mt-2 text-sm text-muted-foreground">Pilihan tersimpan di perangkat ini jika penyimpanan browser tersedia.</p><select id="theme" value={theme} onChange={event => { const value = event.target.value as Theme; setTheme(value); try { localStorage.setItem("kawan-theme", value); } catch { /* Theme remains usable without storage. */ } }} className="mt-5 min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"><option value="system">Ikuti sistem</option><option value="light">Terang</option><option value="dark">Gelap</option></select></div></section>
+            <section className="mx-auto w-full max-w-3xl py-12"><Settings aria-hidden className="mb-5 size-7" /><h1 className="text-3xl font-semibold">Buat nyaman ruangmu.</h1><p className="mt-3 text-muted-foreground">Sesuaikan tampilan Kawan dengan caramu bekerja.</p><div className="mt-10 rounded-2xl border p-6"><label htmlFor="theme" className="block font-medium">Tema tampilan</label><p className="mt-2 text-sm text-muted-foreground">Pilihan tersimpan di perangkat ini jika penyimpanan browser tersedia.</p><select id="theme" value={theme} onChange={event => { const value = event.target.value as Theme; setTheme(value); try { localStorage.setItem("kawan-theme", value); } catch { /* Theme remains usable without storage. */ } }} className="mt-5 min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"><option value="system">Ikuti sistem</option><option value="light">Terang</option><option value="dark">Gelap</option></select></div><div className="mt-6 rounded-2xl border p-6"><h2 className="font-medium">Datamu</h2><p className="mt-2 text-sm text-muted-foreground">Ekspor seluruh percakapan sebagai JSON, atau impor berkas <code>kawan.chat.v1</code>.</p><div className="mt-5 flex flex-wrap items-center gap-3"><a href="/api/kawan/v1/export" download className="inline-flex min-h-11 items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted">Ekspor semua data</a><label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted">Impor berkas<input type="file" accept="application/json,.json" className="sr-only" onChange={async event => { const file = event.target.files?.[0]; if (!file) return; const res = await fetch("/api/kawan/v1/chats/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() }); setImportNote(res.ok ? "Impor berhasil." : "Impor gagal."); event.target.value = ""; }} /></label><span role="status" aria-live="polite" className="text-sm text-muted-foreground">{importNote}</span></div></div></section>
           ) : (
             <section className="mx-auto w-full max-w-3xl py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">Chat pribadi dengan kunci API milikmu sendiri. Versi 0.1.0 — fondasi antarmuka; fitur chat belum tersedia.</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-block underline">by tokengateway.ai.id</a></section>
           )}

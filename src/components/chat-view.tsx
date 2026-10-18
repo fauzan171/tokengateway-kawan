@@ -70,11 +70,17 @@ function findLeaf(messages: readonly TreeNode[], startId: string): string {
   return curr;
 }
 
-export function ChatView() {
+export function ChatView({
+  initialChatId = null,
+  onChatCreated,
+}: {
+  initialChatId?: string | null;
+  onChatCreated?: (id: string) => void;
+} = {}) {
   const [messages, setMessages] = useState<TreeNode[]>([]);
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [chatId, setChatId] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeGenId, setActiveGenId] = useState<string | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
@@ -120,6 +126,7 @@ export function ChatView() {
     if (!res.ok) throw new Error("Gagal membuat percakapan");
     const data = await res.json();
     setChatId(data.id);
+    onChatCreated?.(data.id);
     return data.id;
   }
 
