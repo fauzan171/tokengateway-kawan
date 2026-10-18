@@ -19,6 +19,7 @@ export type PublicChat = {
   title: string;
   modelRef: string | null;
   currentMessageId: string | null;
+  folderId: string | null;
   pinned: boolean;
   archived: boolean;
   createdAt: string;
@@ -31,6 +32,7 @@ export const CHAT_FIELDS = {
   title: true,
   modelRef: true,
   currentMessageId: true,
+  folderId: true,
   pinned: true,
   archived: true,
   createdAt: true,
@@ -42,6 +44,7 @@ export type ChatRow = {
   title: string;
   modelRef: string | null;
   currentMessageId: string | null;
+  folderId?: string | null;
   pinned: number;
   archived: number;
   createdAt: Date;
@@ -54,6 +57,7 @@ export function toPublicChat(row: ChatRow): PublicChat {
     title: row.title,
     modelRef: row.modelRef,
     currentMessageId: row.currentMessageId,
+    folderId: row.folderId ?? null,
     pinned: row.pinned === 1,
     archived: row.archived === 1,
     createdAt: row.createdAt.toISOString(),
@@ -92,17 +96,129 @@ export type CreateChatInput = {
   /** Judul sementara; kosong/absen memakai judul bawaan. */
   title?: unknown;
   modelRef?: unknown;
+  folderId?: unknown;
 };
 
 export async function createChat(db: Db, input: CreateChatInput): Promise<PublicChat> {
   const title = normalizeTitle(input.title);
   const modelRef = normalizeModelRef(input.modelRef);
+  const folderId = typeof input.folderId === "string" && input.folderId.trim() !== ""
+    ? input.folderId.trim()
+    : null;
 
   const row = await db.chat.create({
-    data: { id: randomUUID(), userId: input.userId, title, modelRef },
+    data: { id: randomUUID(), userId: input.userId, title, modelRef, folderId },
     select: CHAT_FIELDS,
   });
   return toPublicChat(row);
+}
+
+export type ChatCursorPayload = {
+  updatedAt: string;
+  id: string;
+};
+
+export function encodeChatCursor(updatedAt: Date | string, id: string): string {
+  const iso = typeof updatedAt === "string" ? updatedAt : updatedAt.toISOString();
+  return Buffer.from(JSON.stringify({ updatedAt: iso, id })).toString("base64url");
+}
+
+export function decodeChatCursor(cursor: string): ChatCursorPayload {
+  try {
+    const raw = Buffer.from(cursor, "base64url").toString("utf-8");
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof parsed.updatedAt === "string" &&
+      typeof parsed.id === "string" &&
+      !isNaN(new Date(parsed.updatedAt).getTime())
+    ) {
+      return { updatedAt: parsed.updatedAt, id: parsed.id };
+    }
+  } catch {
+    // fall through
+  }
+  throw badRequest("INVALID_CURSOR", "Cursor paginasi tidak valid.");
+}
+
+export type ListChatsOptions = {
+  userId: string;
+  q?: string | null;
+  folderId?: string | null;
+  archived?: boolean;
+  cursor?: string | null;
+  limit?: number;
+};
+
+export type PaginatedChats = {
+  chats: PublicChat[];
+  nextCursor: string | null;
+};
+
+/**
+ * Daftar chat berpaginasi kursor stabil (REQ-NT-32, SDD-3.5).
+ * Urutan deterministik: updatedAt DESC, id DESC.
+ */
+export async function listChatsPaginated(
+  db: Db,
+  options: ListChatsOptions,
+): Promise<PaginatedChats> {
+  const { userId, q, folderId, archived = false, cursor } = options;
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+
+  const whereAnd: Array<Record<string, unknown>> = [
+    { userId },
+    { archived: archived ? 1 : 0 },
+  ];
+
+  if (folderId !== undefined) {
+    whereAnd.push({ folderId });
+  }
+
+  if (q && q.trim() !== "") {
+    const term = q.trim();
+    whereAnd.push({
+      OR: [
+        { title: { contains: term } },
+        { messages: { some: { contentJson: { contains: term } } } },
+      ],
+    });
+  }
+
+  if (cursor && cursor.trim() !== "") {
+    const decoded = decodeChatCursor(cursor.trim());
+    const cursorDate = new Date(decoded.updatedAt);
+    whereAnd.push({
+      OR: [
+        { updatedAt: { lt: cursorDate } },
+        {
+          AND: [
+            { updatedAt: cursorDate },
+            { id: { lt: decoded.id } },
+          ],
+        },
+      ],
+    });
+  }
+
+  const rows = await db.chat.findMany({
+    where: { AND: whereAnd },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    select: CHAT_FIELDS,
+  });
+
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const lastItem = items.length > 0 ? items[items.length - 1] : null;
+  const nextCursor =
+    hasMore && lastItem ? encodeChatCursor(lastItem.updatedAt, lastItem.id) : null;
+
+  return {
+    chats: items.map(toPublicChat),
+    nextCursor,
+  };
 }
 
 /** Daftar chat milik pengguna, terbaru diperbarui lebih dulu. */
