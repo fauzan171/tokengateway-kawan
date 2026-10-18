@@ -77,7 +77,7 @@ export default function Home() {
         ))}
       </nav>
       <nav aria-label="Akun" className="mt-4 space-y-1 border-t pt-3">
-        {[["/settings", "Preferensi"], ["/usage", "Pemakaian"], ["/admin", "Admin"]].map(([href, label]) => (
+        {[["/settings", "Preferensi"], ["/usage", "Pemakaian"], ["/admin", "Admin"], ["/privacy", "Kebijakan privasi"]].map(([href, label]) => (
           <a key={href} href={href!} className="flex h-10 items-center rounded-md px-3 text-sm font-medium hover:bg-muted">{label}</a>
         ))}
       </nav>
