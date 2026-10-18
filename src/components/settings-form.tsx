@@ -28,6 +28,11 @@ function apply(settings: UserSettings) {
   root.classList.toggle("dark", dark);
   root.style.colorScheme = dark ? "dark" : "light";
   root.style.fontSize = `${settings.fontScale}%`;
+  // `page.tsx` memulihkan tema dari localStorage saat mount; tanpa ini dua
+  // sumber saling menimpa dan pilihan kembali ke nilai lama setelah muat ulang.
+  try {
+    localStorage.setItem("kawan-theme", settings.theme);
+  } catch { /* Storage can be unavailable in private browsers. */ }
 }
 
 export function SettingsForm() {

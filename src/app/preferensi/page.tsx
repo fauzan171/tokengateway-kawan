@@ -11,7 +11,7 @@ import { auth } from "@/lib/auth";
 import { SettingsForm } from "@/components/settings-form";
 
 export const metadata: Metadata = {
-  title: "Pengaturan — Kawan",
+  title: "Preferensi — Kawan",
   description: "Tema, bahasa, ukuran font, dan cara mengirim pesan.",
 };
 

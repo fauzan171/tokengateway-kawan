@@ -1,7 +1,7 @@
 /**
  * Sumber teks kebijakan privasi (REQ-NT-79).
  *
- * Satu sumber: halaman `/privacy` merender array ini, dan `docs/privacy.md`
+ * Satu sumber: halaman `/privasi` merender array ini, dan `docs/privacy.md`
  * adalah salinan manual dari isi yang sama. Bila mengubah di sini, ubah juga
  * berkas Markdown itu.
  */
