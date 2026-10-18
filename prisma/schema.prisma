@@ -413,3 +413,11 @@ model UserSetting {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+/// Konfigurasi runtime yang dapat diubah admin (REQ-NT-76). Satu baris, id = "app".
+/// Baris tidak ada = pendaftaran terbuka; jangan menyisipkan baris saat membaca.
+model AppConfig {
+  id               String   @id
+  registrationOpen Int      @default(1) // 0 | 1
+  updatedAt        DateTime @updatedAt
+}

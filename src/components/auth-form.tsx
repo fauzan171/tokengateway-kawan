@@ -36,6 +36,8 @@ export type AuthFormProps = {
   mode: "login" | "register";
   /** Pesan informasi yang ditampilkan di atas formulir (mis. akun perlu aktivasi). */
   notice?: string;
+  /** Formulir ditutup (mis. pendaftaran publik dimatikan admin, REQ-NT-76). */
+  closed?: boolean;
   /** Server Action dari halaman pemanggil; menjalankan validator bersama. */
   onValidate: (values: AuthFormValues) => Promise<ValidationResult>;
 };
@@ -117,7 +119,7 @@ function firstErrorName(errors: Record<string, string>): FieldName | undefined {
   return FIELD_ORDER.find((name) => errors[name]);
 }
 
-export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
+export function AuthForm({ mode, notice, closed = false, onValidate }: AuthFormProps) {
   const router = useRouter();
   const fieldId = useId();
   const [values, setValues] = useState<AuthFormValues>({
@@ -240,7 +242,11 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
             aria-live="polite"
             className="mt-6 flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm leading-6"
           >
-            <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+            {closed ? (
+              <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+            ) : (
+              <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+            )}
             <span>{notice}</span>
           </p>
         ) : null}
@@ -310,7 +316,7 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
             </p>
           ) : null}
 
-          <Button type="submit" disabled={pending} aria-busy={pending} className="h-11 w-full">
+          <Button type="submit" disabled={pending || closed} aria-busy={pending} className="h-11 w-full">
             {pending ? (
               <>
                 <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />

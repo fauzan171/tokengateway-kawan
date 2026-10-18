@@ -38,7 +38,7 @@ afterAll(async () => {
 /** Pengguna mentah dengan kredential ber-hash nyata. */
 async function makeUser(password = LAMA): Promise<string> {
   const id = randomUUID();
-  await db.user.create({ data: { id, email: `${id}@contoh.test` } });
+  await db.user.create({ data: { id, email: `${id}@contoh.test`, status: "active" } });
   await db.credential.create({ data: { userId: id, passwordHash: await hashPassword(password) } });
   return id;
 }

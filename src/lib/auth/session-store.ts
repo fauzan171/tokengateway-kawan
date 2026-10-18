@@ -46,19 +46,26 @@ export async function createSession(
   return id;
 }
 
-/** `true` bila token masih terdaftar, belum dicabut, dan belum kedaluwarsa.
- *  `userId` dicocokkan supaya token milik pengguna lain tidak pernah lolos. */
+/**
+ * `true` bila token masih terdaftar, belum dicabut, belum kedaluwarsa, dan
+ * penggunanya masih `active` (REQ-NT-74).
+ *
+ * `userId` dicocokkan supaya token milik pengguna lain tidak pernah lolos.
+ * Status pengguna dibaca di kueri yang sama: menonaktifkan akun langsung
+ * membatalkan sesinya walau baris `Session` belum sempat terhapus.
+ */
 export async function isSessionValid(
   db: Db,
   input: { userId: string; token: string; now?: Date },
 ): Promise<boolean> {
   const row = await db.session.findUnique({
     where: { tokenHash: hashToken(input.token) },
-    select: { userId: true, expiresAt: true, revokedAt: true },
+    select: { userId: true, expiresAt: true, revokedAt: true, user: { select: { status: true } } },
   });
   if (!row) return false;
   if (row.userId !== input.userId) return false;
   if (row.revokedAt !== null) return false;
+  if (row.user.status !== "active") return false;
   return row.expiresAt.getTime() > (input.now ?? new Date()).getTime();
 }
 

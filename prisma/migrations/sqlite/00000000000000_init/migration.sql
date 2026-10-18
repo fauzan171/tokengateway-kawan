@@ -321,3 +321,9 @@ CREATE TABLE "UserSetting" (
     "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "UserSetting_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+CREATE TABLE "AppConfig" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "registrationOpen" INTEGER NOT NULL DEFAULT 1,
+    "updatedAt" TIMESTAMP NOT NULL
+);

@@ -152,6 +152,8 @@ function buildAuthConfig(config: ReturnType<typeof loadConfig>): AuthConfig {
         }
 
         // Muat ulang identitas; jangan pakai klaim lama (SDD-5.1).
+        // Status bukan `active` (mis. dinonaktifkan admin) menutup sesi di
+        // sini juga, walau baris `Session` belum terhapus (REQ-NT-74).
         const fresh = await findUserById(client, token.sub);
         if (!fresh || fresh.status !== "active") return null;
         token.role = fresh.role;
