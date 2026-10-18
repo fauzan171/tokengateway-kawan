@@ -34,6 +34,7 @@ model User {
   chats     Chat[]
   folders   Folder[]
   connections Connection[]
+  documents Document[]
 
   @@index([status])
 }
@@ -158,6 +159,52 @@ model ModelCache {
   @@unique([connectionId])
 }
 
+
+/// Dokumen milik pengguna untuk tanya-jawab berbasis berkas (REQ-NT-54, SDD-6.1).
+///
+/// `filename` adalah nama asli yang sudah disanitasi, hanya untuk tampilan.
+/// Berkasnya sendiri disimpan di luar webroot dengan nama acak; `storageKey`
+/// adalah path relatif terhadap akar penyimpanan, bukan path absolut dan bukan
+/// nama dari pengguna. Status: queued | processing | ready | failed.
+model Document {
+  id         String   @id
+  userId     String
+  filename   String
+  mime       String
+  sizeBytes  Int
+  storageKey String
+  status     String   @default("queued")
+  errorCode  String?
+  createdAt  DateTime @default(now())
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks DocumentChunk[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// Potongan teks satu dokumen (REQ-NT-55, SDD-6.1).
+///
+/// `page` dan `section` menyimpan metadata sumber untuk sitasi (REQ-NT-57).
+/// `embedding` disimpan sebagai teks base64, bukan `Bytes`: migrasi harus
+/// identik di SQLite dan PostgreSQL, dan `BLOB`/`BYTEA` ditolak
+/// `scripts/check-migrations.mjs`. Vektor ditulis oleh job `document.embed`.
+model DocumentChunk {
+  id         String   @id
+  documentId String
+  ordinal    Int
+  text       String
+  page       Int?
+  section    String?
+  embedding  String?
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, ordinal])
+  @@index([documentId])
+}
 
 /// Folder satu tingkat untuk mengelompokkan chat (REQ-NT-35, SDD-2.2).
 model Folder {

@@ -262,3 +262,36 @@ CREATE TABLE "IdempotencyKey" (
 
 CREATE UNIQUE INDEX "IdempotencyKey_userId_key_key" ON "IdempotencyKey"("userId", "key");
 CREATE INDEX "IdempotencyKey_createdAt_idx" ON "IdempotencyKey"("createdAt");
+
+CREATE TABLE "Document" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "filename" TEXT NOT NULL,
+    "mime" TEXT NOT NULL,
+    "sizeBytes" INTEGER NOT NULL,
+    "storageKey" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'queued',
+    "errorCode" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "Document_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "Document_userId_createdAt_idx" ON "Document"("userId", "createdAt");
+CREATE INDEX "Document_status_idx" ON "Document"("status");
+
+CREATE TABLE "DocumentChunk" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "documentId" TEXT NOT NULL,
+    "ordinal" INTEGER NOT NULL,
+    "text" TEXT NOT NULL,
+    "page" INTEGER,
+    "section" TEXT,
+    "embedding" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "DocumentChunk_documentId_fkey" FOREIGN KEY ("documentId")
+        REFERENCES "Document" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "DocumentChunk_documentId_ordinal_key" ON "DocumentChunk"("documentId", "ordinal");
+CREATE INDEX "DocumentChunk_documentId_idx" ON "DocumentChunk"("documentId");
