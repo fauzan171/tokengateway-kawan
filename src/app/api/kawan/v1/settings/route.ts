@@ -1,9 +1,14 @@
 /**
  * Preferensi pribadi (SDD-3.7, REQ-NT-70): `GET` baca, `PATCH` ubah sebagian.
+ *
+ * `PATCH` juga menulis cookie `kawan-locale` supaya `layout.tsx` bisa menyetel
+ * `lang` dan kamus tanpa query DB tiap request.
  */
 
+import { cookies } from "next/headers";
 import { requestId } from "@/lib/api/errors";
 import { handleRouteError, jsonOk, readJson, requireContext } from "@/lib/api/route";
+import { LOCALE_COOKIE, LOCALE_MAX_AGE, isLocale } from "@/lib/i18n/server";
 import { readSettings, writeSettings } from "@/lib/settings/settings";
 
 export const runtime = "nodejs";
@@ -27,7 +32,18 @@ export async function PATCH(request: Request): Promise<Response> {
   try {
     const { userId, db } = await requireContext();
     const body = await readJson(request);
-    return jsonOk({ settings: await writeSettings(db, userId, body) }, reqId);
+    const settings = await writeSettings(db, userId, body);
+
+    if (isLocale(body["locale"])) {
+      (await cookies()).set(LOCALE_COOKIE, settings.locale, {
+        path: "/",
+        maxAge: LOCALE_MAX_AGE,
+        sameSite: "lax",
+        httpOnly: false,
+      });
+    }
+
+    return jsonOk({ settings }, reqId);
   } catch (err) {
     return handleRouteError(err, reqId, ROUTE, started);
   }

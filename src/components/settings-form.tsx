@@ -7,10 +7,14 @@
  * diterapkan ke `document.documentElement`, bukan menunggu muat ulang. Slider
  * ditahan 400 ms supaya satu tarikan tidak jadi puluhan permintaan.
  *
+ * Perubahan bahasa memuat ulang halaman setelah `PATCH`: `lang` dan kamus
+ * dirender server dari cookie, jadi tanpa muat ulang teks lama akan bertahan.
+ *
  * Tanpa prop: komponen memuat sendiri dari `GET /api/kawan/v1/settings`.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n/context";
 import type { UserSettings } from "@/lib/settings/settings";
 
 const FONT_MIN = 90;
@@ -36,6 +40,7 @@ function apply(settings: UserSettings) {
 }
 
 export function SettingsForm() {
+  const t = useT();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,13 +56,13 @@ export function SettingsForm() {
         setSettings(data.settings);
         apply(data.settings);
       } catch {
-        if (alive) setError("Gagal memuat pengaturan.");
+        if (alive) setError(t("settings.loadFailed"));
       }
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [t]);
 
   const save = useCallback(async (patch: Patch) => {
     setError(null);
@@ -71,10 +76,12 @@ export function SettingsForm() {
       const data = (await res.json()) as { settings: UserSettings };
       setSettings(data.settings);
       apply(data.settings);
+      // Bahasa dirender server dari cookie; muat ulang agar `lang` dan kamus ikut.
+      if ("locale" in patch) location.reload();
     } catch {
-      setError("Perubahan tidak tersimpan. Coba lagi.");
+      setError(t("settings.saveFailed"));
     }
-  }, []);
+  }, [t]);
 
   /** Nilai tampil langsung berubah; penyimpanan ditunda untuk slider. */
   function change(patch: Patch, debounce = 0) {
@@ -92,14 +99,14 @@ export function SettingsForm() {
   }, []);
 
   if (!settings) {
-    return <p className="text-sm text-muted-foreground">Memuat pengaturan…</p>;
+    return <p className="text-sm text-muted-foreground">{t("settings.loading")}</p>;
   }
 
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-2">
         <label htmlFor="theme" className="font-medium">
-          Tema tampilan
+          {t("settings.theme")}
         </label>
         <select
           id="theme"
@@ -107,29 +114,30 @@ export function SettingsForm() {
           onChange={(event) => change({ theme: event.target.value as UserSettings["theme"] })}
           className="min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"
         >
-          <option value="system">Ikuti sistem</option>
-          <option value="light">Terang</option>
-          <option value="dark">Gelap</option>
+          <option value="system">{t("settings.theme.system")}</option>
+          <option value="light">{t("settings.theme.light")}</option>
+          <option value="dark">{t("settings.theme.dark")}</option>
         </select>
       </div>
 
       <div className="flex flex-col gap-2">
         <label htmlFor="locale" className="font-medium">
-          Bahasa
+          {t("settings.locale")}
         </label>
         <select
           id="locale"
-          value={settings.locale === "en" ? "id" : settings.locale}
+          value={settings.locale}
           onChange={(event) => change({ locale: event.target.value as UserSettings["locale"] })}
           className="min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"
         >
-          <option value="id">Indonesia</option>
+          <option value="id">{t("settings.locale.id")}</option>
+          <option value="en">{t("settings.locale.en")}</option>
         </select>
       </div>
 
       <div className="flex flex-col gap-2">
         <label htmlFor="font-scale" className="font-medium">
-          Ukuran font: {settings.fontScale}%
+          {t("settings.fontScale", { value: settings.fontScale })}
         </label>
         <input
           id="font-scale"
@@ -138,7 +146,7 @@ export function SettingsForm() {
           max={FONT_MAX}
           step={5}
           value={settings.fontScale}
-          aria-valuetext={`${settings.fontScale} persen`}
+          aria-valuetext={t("settings.fontScale.aria", { value: settings.fontScale })}
           onChange={(event) => change({ fontScale: Number(event.target.value) }, 400)}
           className="min-h-11 w-full sm:w-56"
         />
@@ -153,7 +161,7 @@ export function SettingsForm() {
           className="size-5"
         />
         <label htmlFor="send-on-enter" className="font-medium">
-          Enter mengirim pesan
+          {t("settings.sendOnEnter")}
         </label>
       </div>
 
