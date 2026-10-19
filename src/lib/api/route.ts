@@ -54,8 +54,11 @@ export function handleRouteError(err: unknown, reqId: string, route: string, sta
 
 /** Body JSON; body rusak dijawab 400, bukan 500. */
 export async function readJson(request: Request): Promise<Record<string, unknown>> {
+  // POST tanpa body sah (mis. buat tautan berbagi dengan nilai bawaan).
+  const raw = await request.text();
+  if (raw.trim() === "") return {};
   try {
-    const parsed = await request.json();
+    const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("not object");
     return parsed as Record<string, unknown>;
   } catch {

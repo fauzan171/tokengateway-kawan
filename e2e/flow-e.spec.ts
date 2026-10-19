@@ -21,17 +21,22 @@ test("E: admin menghapus pengguna, data pribadinya ikut hilang", async ({ page, 
 
   // Admin menghapus lewat UI.
   await login(page, ADMIN_EMAIL);
+  // Tanpa ini `goto("/admin")` membatalkan POST login yang masih terbang.
+  await expect(page).not.toHaveURL(/\/masuk/);
   await page.goto("/admin");
   const row = page.getByRole("row").filter({ hasText: E2E_B_EMAIL });
   await expect(row).toBeVisible();
 
-  const dialog = page.waitForEvent("dialog");
+  // Dialog `confirm()` memblokir aksi klik; handler harus terpasang lebih dulu.
+  let message = "";
+  page.once("dialog", (dialog) => {
+    message = dialog.message();
+    void dialog.accept();
+  });
   await row.getByRole("button", { name: "Hapus" }).click();
-  const confirm = await dialog;
-  expect(confirm.message()).toContain(`Hapus ${E2E_B_EMAIL}`);
-  expect(confirm.message()).toContain("seluruh data pribadinya");
-  expect(confirm.message()).toContain("tidak dapat dibatalkan");
-  await confirm.accept();
+  expect(message).toContain(`Hapus ${E2E_B_EMAIL}`);
+  expect(message).toContain("seluruh data pribadinya");
+  expect(message).toContain("tidak dapat dibatalkan");
 
   await expect(page.getByRole("row").filter({ hasText: E2E_B_EMAIL })).toHaveCount(0);
 
@@ -39,7 +44,7 @@ test("E: admin menghapus pengguna, data pribadinya ikut hilang", async ({ page, 
   const victim = await browser.newContext();
   const victimPage = await victim.newPage();
   await login(victimPage, E2E_B_EMAIL);
-  await expect(victimPage.getByRole("alert")).toContainText("tidak cocok");
+  await expect(victimPage.getByRole("alert").filter({ hasText: "tidak cocok" })).toBeVisible();
   await victim.close();
 
   // Tautan berbagi miliknya ikut 404.

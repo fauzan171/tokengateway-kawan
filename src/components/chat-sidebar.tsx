@@ -123,9 +123,14 @@ export function ChatSidebar({
       setError("Gagal membuat tautan berbagi.");
       return;
     }
-    const data = (await res.json()) as { token?: string };
-    if (!data.token) return;
-    const url = `${location.origin}/s/${data.token}`;
+    // Respons dibungkus `{ share: { token } }` (route `shares`), bukan token di akar.
+    const data = (await res.json()) as { share?: { token?: string } };
+    const token = data.share?.token;
+    if (!token) {
+      setError("Tautan tidak dibuat: respons tanpa token.");
+      return;
+    }
+    const url = `${location.origin}/s/${token}`;
     try {
       await navigator.clipboard.writeText(url);
       setError("Tautan disalin: " + url);

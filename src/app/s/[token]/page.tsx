@@ -3,6 +3,7 @@
  * judul, waktu, dan isi percakapan saja.
  */
 
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
@@ -14,20 +15,29 @@ export const dynamic = "force-dynamic";
 
 type PageProps = { params: Promise<{ token: string }> };
 
-async function loadShare(token: string) {
+/** Satu pembacaan per request: metadata dan halaman berbagi hasil yang sama. */
+const loadShare = cache(async (token: string) => {
   try {
     const db = await getDb(loadConfig().databaseUrl);
     return await getPublicShare(db, token);
   } catch {
     return null;
   }
-}
+});
 
+/**
+ * `notFound()` dipanggil DI SINI, bukan hanya di halaman.
+ *
+ * Metadata diselesaikan sebelum header respons dikirim, jadi `notFound()` di
+ * sini menghasilkan status 404 sungguhan (AUD-04). Halaman tetap memanggil
+ * `notFound()` sebagai jaring pengaman.
+ */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { token } = await params;
   const share = await loadShare(token);
+  if (!share) notFound();
   return {
-    title: share ? share.title : "Tautan tidak ditemukan",
+    title: share.title,
     robots: { index: false, follow: false },
   };
 }
