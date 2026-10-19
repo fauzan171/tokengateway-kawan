@@ -206,6 +206,53 @@ describe("deleteUserData", () => {
     expect(await db.chat.count({ where: { userId: other } })).toBe(1);
   });
 
+  it("transaksi gagal: berkas dan baris tetap ada (AUD-08)", async () => {
+    const admin = await makeUser("admin", "admin");
+    const target = await makeUser("target");
+    const storageKey = randomUUID();
+    const storedFile = join(storageDir, storageKey);
+    writeFileSync(storedFile, "isi");
+    await db.document.create({
+      data: { id: randomUUID(), userId: target, filename: "a.txt", mime: "text/plain", sizeBytes: 3, storageKey },
+    });
+
+    // Kegagalan di tengah transaksi disuntikkan lewat proksi: `user.delete`
+    // melempar, sisanya diteruskan apa adanya.
+    const failing = new Proxy(db, {
+      get(inner, prop, receiver) {
+        if (prop === "$transaction") {
+          return async () => {
+            throw new Error("transaksi gagal");
+          };
+        }
+        return Reflect.get(inner, prop, receiver);
+      },
+    }) as Db;
+
+    await expect(deleteUserData(failing, { actorId: admin, userId: target })).rejects.toThrow(
+      "transaksi gagal",
+    );
+
+    expect(existsSync(storedFile)).toBe(true);
+    expect(await db.user.count({ where: { id: target } })).toBe(1);
+    expect(await db.document.count({ where: { userId: target } })).toBe(1);
+  });
+
+  it("berkas gagal dihapus: baris hilang, tidak melempar, tercatat untuk retry", async () => {
+    const admin = await makeUser("admin", "admin");
+    const target = await makeUser("target");
+    // `storageKey` tidak sah: `deleteDocument` melempar setelah commit.
+    await db.document.create({
+      data: { id: randomUUID(), userId: target, filename: "a.txt", mime: "text/plain", sizeBytes: 3, storageKey: "../luar" },
+    });
+
+    await expect(deleteUserData(db, { actorId: admin, userId: target })).resolves.toEqual({
+      removed: true,
+    });
+    expect(await db.document.count({ where: { userId: target } })).toBe(0);
+    expect(await db.user.count({ where: { id: target } })).toBe(0);
+  });
+
   it("pengguna tidak ada → { removed: false }", async () => {
     const admin = await makeUser("admin", "admin");
 

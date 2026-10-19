@@ -11,6 +11,7 @@
  */
 
 import { ApiError, STATUS } from "@/lib/api/errors";
+import { logger } from "@/lib/api/logger";
 import type { Db } from "@/lib/db";
 import { deleteDocument } from "@/lib/documents/storage";
 import { normalizeEmail } from "@/lib/auth/users";
@@ -118,12 +119,9 @@ export async function deleteUserData(
   });
   if (!user) return { removed: false };
 
-  // Berkas lebih dulu: baris yang sudah hilang tidak lagi menyimpan
-  // `storageKey`, jadi berkasnya menjadi yatim yang tak bisa dilacak.
-  for (const document of user.documents) {
-    await deleteDocument(document.storageKey);
-  }
-
+  // Transaksi adalah sumber kebenaran: berkas baru dibersihkan setelah commit.
+  // Urutan sebaliknya meninggalkan baris yang menunjuk berkas hilang bila
+  // transaksi gagal.
   const email = normalizeEmail(user.email);
 
   await db.$transaction(async (tx) => {
@@ -144,6 +142,23 @@ export async function deleteUserData(
     await tx.userSetting.deleteMany({ where: { userId: input.userId } });
     await tx.user.delete({ where: { id: input.userId } });
   });
+
+  // Setelah commit: berkas tidak lagi punya baris. Kegagalan unlink dicatat
+  // agar `cleanupOrphans` bisa menyapunya nanti; path pengguna tidak dicatat.
+  let failedFiles = 0;
+  for (const document of user.documents) {
+    try {
+      await deleteDocument(document.storageKey);
+    } catch {
+      failedFiles += 1;
+    }
+  }
+  if (failedFiles > 0) {
+    logger.warn(
+      { requestId: "admin.delete-user", route: "admin.users", latencyMs: 0, result: "gagal-hapus-berkas" },
+      { failedFiles },
+    );
+  }
 
   return { removed: true };
 }
