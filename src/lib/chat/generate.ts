@@ -20,7 +20,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, STATUS } from "@/lib/api/errors";
+import { logger } from "@/lib/api/logger";
 import { getActiveConnection } from "@/lib/connections/connections";
 import type { Db } from "@/lib/db";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@/lib/net";
 import {
   DISCONNECTED_MESSAGE,
+  INVALID_REQUEST_CODE,
   PROVIDER_MESSAGES,
   fromApiError,
   fromUpstreamStatus,
@@ -177,6 +179,78 @@ async function openApiKey(
   }
 }
 
+/** Batas byte body galat yang dibaca supaya balasan raksasa tidak ditelan utuh. */
+const MAX_ERROR_BODY_BYTES = 4096;
+
+/** Header yang aman dicatat sebagai ID permintaan upstream (nama saja, tanpa nilai lain). */
+const REQUEST_ID_HEADERS = ["x-request-id", "request-id", "cf-ray", "x-amzn-requestid"] as const;
+
+/** Bentuk kode error provider yang boleh dicatat: pendek dan tanpa spasi/rahasia. */
+const SAFE_ERROR_CODE = /^[A-Za-z0-9_.:/-]{1,64}$/;
+
+type UpstreamFailureDetail = {
+  /** Kode provider dari body galat, bila bentuknya aman. */
+  providerCode?: string;
+  /** ID permintaan upstream, bila gateway mengirimkannya. */
+  upstreamRequestId?: string;
+};
+
+/**
+ * Membaca body galat SECARA TERBATAS lalu menyaringnya jadi metadata aman.
+ *
+ * Body mentah TIDAK dikembalikan dan TIDAK pernah ditulis ke log: bisa memuat
+ * prompt pengguna atau rahasia. Yang diambil hanya `error.code`/`error.type`
+ * (string pendek berkarakter aman) dan ID permintaan dari header allowlist.
+ */
+async function readFailureDetail(response: Response): Promise<UpstreamFailureDetail> {
+  const requestId = REQUEST_ID_HEADERS.map((name) => response.headers.get(name)).find(
+    (value) => value !== null && SAFE_ERROR_CODE.test(value),
+  );
+
+  let providerCode: string | undefined;
+  try {
+    const reader = response.body?.getReader();
+    if (reader) {
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        total += value.byteLength;
+        if (total >= MAX_ERROR_BODY_BYTES) break;
+      }
+      await reader.cancel().catch(() => {});
+      const text = Buffer.concat(chunks).subarray(0, MAX_ERROR_BODY_BYTES).toString("utf8");
+      const parsed: unknown = JSON.parse(text);
+      if (isRecord(parsed)) {
+        const error = isRecord(parsed["error"]) ? parsed["error"] : parsed;
+        for (const candidate of [error["code"], error["type"]]) {
+          if (typeof candidate === "string" && SAFE_ERROR_CODE.test(candidate)) {
+            providerCode = candidate;
+            break;
+          }
+        }
+      }
+    }
+  } catch {
+    // Body bukan JSON/tidak terbaca: metadata provider memang tidak tersedia.
+  }
+
+  return {
+    ...(providerCode ? { providerCode } : {}),
+    ...(requestId ? { upstreamRequestId: requestId } : {}),
+  };
+}
+
+/** Mencatat kegagalan upstream tanpa isi rahasia apa pun (AUD-02, SDD-8.5). */
+function logUpstreamFailure(generationId: string, status: number, detail: UpstreamFailureDetail): void {
+  logger.warn(
+    { requestId: generationId, route: "chat.generate", latencyMs: 0, result: "upstream_error" },
+    { upstreamStatus: status, ...detail },
+  );
+}
+
 /** Memetakan kegagalan transport/policy jadi galat generasi berkode. */
 function transportError(err: unknown): GenerationError {
   if (err instanceof ApiError) {
@@ -201,6 +275,7 @@ function transportError(err: unknown): GenerationError {
  * diteruskan apa adanya agar pemanggil tahu itu bukan galat generasi.
  */
 async function streamGateway(input: {
+  generationId: string;
   url: string;
   apiKey: string;
   body: unknown;
@@ -268,7 +343,15 @@ async function streamGateway(input: {
   if (!response.ok) {
     // 401/403 gateway BUKAN 401 akun: dipetakan jadi kode provider (SDD-5.4).
     const failure = fromUpstreamStatus(response.status);
-    throw new GenerationError(failure.reason, failure.message, failure.retryable);
+    const detail = await readFailureDetail(response);
+    logUpstreamFailure(input.generationId, response.status, detail);
+    // 400/422 dapat dibedakan dari 5xx lewat kode diagnostik, tanpa mengubah
+    // kosakata `reason` (AUD-02). Sisanya pakai `reason` apa adanya.
+    const code =
+      response.status === STATUS.BAD_REQUEST || response.status === STATUS.UNPROCESSABLE
+        ? INVALID_REQUEST_CODE
+        : failure.reason;
+    throw new GenerationError(code, failure.message, failure.retryable);
   }
   if (!response.body) {
     throw new GenerationError("UPSTREAM_ERROR", DISCONNECTED_MESSAGE, true);
@@ -586,6 +669,7 @@ export async function runGeneration(
   let finishReason: string | null;
   try {
     ({ usage, finishReason } = await streamGateway({
+      generationId,
       url: `${baseUrl.replace(/\/+$/, "")}${CHAT_COMPLETIONS_PATH}`,
       apiKey,
       body: {

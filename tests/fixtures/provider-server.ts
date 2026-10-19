@@ -25,6 +25,8 @@ export const SCENARIOS = [
   "timeout",
   "unauthorized",
   "rate-limited",
+  "bad-request",
+  "server-error",
   "corrupted",
   "drop",
 ] as const;
@@ -237,6 +239,27 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
         "retry-after": "2",
       });
       res.end(JSON.stringify({ error: { message: "Terlalu banyak permintaan.", type: "rate_limit_error" } }));
+      return;
+    }
+
+    case "bad-request": {
+      // Body memuat penanda rahasia: uji memastikan ia tidak bocor ke log.
+      res.writeHead(400, {
+        "content-type": "application/json",
+        "x-request-id": "req-uji-400",
+      });
+      res.end(
+        JSON.stringify({
+          error: { message: "messages kosong", type: "invalid_request_error", code: "invalid_messages" },
+          canary: "sk-canary-" + "b".repeat(24),
+        }),
+      );
+      return;
+    }
+
+    case "server-error": {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { type: "server_error" } }));
       return;
     }
 

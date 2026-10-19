@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import {
   UNICODE_TEXT,
@@ -204,6 +204,40 @@ describe("runGeneration", () => {
       where: { generationId, kind: "done" },
     });
     expect(JSON.parse(done.payloadJson)).toEqual({ status: "stopped" });
+  });
+
+  it("400 upstream → INVALID_UPSTREAM_REQUEST, status tercatat tanpa rahasia (AUD-02)", async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      lines.push(String(line));
+    });
+    const { generationId } = await seedGeneration("bad-request");
+    try {
+      await run(generationId);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("error");
+    expect(generation.errorCode).toBe("INVALID_UPSTREAM_REQUEST");
+
+    const logged = lines.join("\n");
+    expect(logged).toContain('"upstreamStatus":400');
+    expect(logged).toContain('"providerCode":"invalid_messages"');
+    expect(logged).toContain('"upstreamRequestId":"req-uji-400"');
+    // Body mentah dan kanari tidak boleh ikut tercatat.
+    expect(logged).not.toContain("messages kosong");
+    expect(logged).not.toContain("sk-canary-");
+  });
+
+  it("5xx tetap UPSTREAM_ERROR, bukan kode payload invalid", async () => {
+    const { generationId } = await seedGeneration("server-error");
+
+    await run(generationId);
+
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.errorCode).toBe("UPSTREAM_ERROR");
   });
 
   it("pohon tanpa pesan user (parentId NULL) → INVALID_ANCESTRY tanpa fetch (AUD-01)", async () => {
