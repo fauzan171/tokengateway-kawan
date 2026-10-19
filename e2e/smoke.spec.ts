@@ -11,7 +11,12 @@ import { expect, test } from "@playwright/test";
 test("beranda, navigasi, dan tema tersimpan", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveTitle("Kawan — Chat AI by tokengateway.ai.id");
-  await expect(page.getByRole("navigation", { name: "Navigasi utama" })).toBeVisible();
+  // Di layar sempit sidebar jadi drawer, jadi navigasi dijangkau lewat tombol
+  // "Buka menu" — keduanya sah, yang penting navigasi terjangkau.
+  const menu = page.getByRole("button", { name: "Buka menu" });
+  const nav = page.getByRole("navigation", { name: "Navigasi utama" });
+  if (await menu.isVisible()) await menu.click();
+  await expect(nav).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: /Mulai percakapan/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Pengaturan", exact: true }).click();
@@ -19,6 +24,8 @@ test("beranda, navigasi, dan tema tersimpan", async ({ page }) => {
   await expect(page.locator("html")).toHaveClass("dark");
   await page.reload();
   await expect(page.locator("html")).toHaveClass("dark");
+  // Muat ulang menutup drawer, jadi buka lagi sebelum menavigasi.
+  if (await menu.isVisible()) await menu.click();
   await page.getByRole("button", { name: "Pengaturan", exact: true }).click();
   await page.getByLabel("Tema tampilan").selectOption("system");
   await page.emulateMedia({ colorScheme: "light" });
