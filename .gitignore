@@ -33,6 +33,7 @@ npm-debug.log*
 storage/
 uploads/
 public/uploads/
+.data/
 
 # Snapshots & backups
 snapshots/
