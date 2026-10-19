@@ -27,22 +27,33 @@ test("D: tautan beku, tidak berubah saat chat diedit, 404 setelah dicabut", asyn
   const chatId = (await (await page.request.get("/api/kawan/v1/chats")).json()) as {
     chats: { id: string; title: string }[];
   };
-  const id = chatId.chats[0]?.id;
-  expect(id).toBeTruthy();
+  const target = chatId.chats[0];
+  expect(target?.id).toBeTruthy();
+  const id = target.id;
 
-  // Bagikan lewat menu UI, ambil tautannya dari status sidebar.
-  await page.getByRole("button", { name: /Aksi untuk / }).first().click();
+  // Bagikan lewat menu UI (bukti tombol & status bekerja), lalu pakai tautan
+  // chat yang benar dari API — urutan sidebar tidak mengikuti urutan API.
+  await page.getByRole("button", { name: /^Aksi untuk / }).first().click();
   await page.getByRole("button", { name: "Bagikan tautan" }).click();
   const status = page.getByRole("status").filter({ hasText: /Tautan/ });
   await expect(status).toBeVisible();
-  const token = (await status.textContent())?.match(/\/s\/([A-Za-z0-9_-]+)/)?.[1];
+  expect(await status.textContent()).toMatch(/\/s\/[A-Za-z0-9_-]+/);
+
+  const created = (await (await page.request.post(`/api/kawan/v1/chats/${id}/shares`)).json()) as {
+    share: { token: string };
+  };
+  const token = created.share.token;
   expect(token).toBeTruthy();
 
   // Anonim: konten terlihat.
   const anon = await browser.newContext();
   const anonPage = await anon.newPage();
   await anonPage.goto(`/s/${token}`);
-  await expect(anonPage.getByText("Pesan untuk dibagikan")).toBeVisible();
+  const sharedMessage = anonPage
+    .getByRole("listitem")
+    .getByText("Pesan untuk dibagikan", { exact: true });
+  await expect(sharedMessage).toHaveCount(1);
+  await expect(sharedMessage).toBeVisible();
   const before = await anonPage.getByRole("main").textContent();
 
   // Pemilik menambah pesan; snapshot tidak boleh ikut berubah.
