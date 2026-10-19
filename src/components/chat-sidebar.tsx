@@ -26,11 +26,22 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/context";
 import { groupChats, type GroupableChat } from "@/lib/chat/grouping";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 type Chat = GroupableChat;
 
 type Folder = { id: string; name: string };
+
+/** Label grup dari `groupChats()` masih bahasa Indonesia; terjemahkan saat render. */
+const GROUP_LABEL: Record<string, MessageKey> = {
+  Disematkan: "sidebar.group.pinned",
+  "Hari ini": "sidebar.group.today",
+  Kemarin: "sidebar.group.yesterday",
+  "7 hari terakhir": "sidebar.group.last7",
+  "Lebih lama": "sidebar.group.older",
+};
 
 export function ChatSidebar({
   activeChatId,
@@ -39,6 +50,7 @@ export function ChatSidebar({
   activeChatId: string | null;
   onSelect: (id: string | null) => void;
 }) {
+  const t = useT();
   const [chats, setChats] = useState<Chat[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -71,16 +83,16 @@ export function ChatSidebar({
         setNextCursor(data.nextCursor ?? null);
         setError(null);
       } else if (chatRes.status !== 401) {
-        setError("Gagal memuat riwayat.");
+        setError(t("sidebar.loadFailed"));
       }
       if (folderRes.ok) {
         const data = (await folderRes.json()) as { folders?: Folder[] };
         setFolders(data.folders ?? []);
       }
     } catch {
-      setError("Gagal memuat riwayat.");
+      setError(t("sidebar.loadFailed"));
     }
-  }, [query, folderId, showArchived]);
+  }, [query, folderId, showArchived, t]);
 
   useEffect(() => {
     const timer = setTimeout(load, query ? 250 : 0);
@@ -114,7 +126,7 @@ export function ChatSidebar({
     });
     if (!res.ok) {
       const payload = (await res.json().catch(() => null)) as { message?: string } | null;
-      setError(payload?.message ?? "Aksi gagal.");
+      setError(payload?.message ?? t("sidebar.actionFailed"));
       return false;
     }
     setError(null);
@@ -123,10 +135,10 @@ export function ChatSidebar({
   }
 
   async function removeChat(id: string) {
-    if (!confirm("Hapus percakapan ini? Tindakan tidak dapat dibatalkan.")) return;
+    if (!confirm(t("sidebar.deleteConfirm"))) return;
     const res = await fetch(`/api/kawan/v1/chats/${id}`, { method: "DELETE" });
     if (!res.ok && res.status !== 404) {
-      setError("Gagal menghapus percakapan.");
+      setError(t("sidebar.deleteFailed"));
       return;
     }
     if (activeChatId === id) onSelect(null);
@@ -136,27 +148,27 @@ export function ChatSidebar({
   async function shareChat(id: string) {
     const res = await fetch(`/api/kawan/v1/chats/${id}/shares`, { method: "POST" });
     if (!res.ok) {
-      setError("Gagal membuat tautan berbagi.");
+      setError(t("sidebar.shareFailed"));
       return;
     }
     // Respons dibungkus `{ share: { token } }` (route `shares`), bukan token di akar.
     const data = (await res.json()) as { share?: { token?: string } };
     const token = data.share?.token;
     if (!token) {
-      setError("Tautan tidak dibuat: respons tanpa token.");
+      setError(t("sidebar.shareNoToken"));
       return;
     }
     const url = `${location.origin}/s/${token}`;
     try {
       await navigator.clipboard.writeText(url);
-      setError("Tautan disalin: " + url);
+      setError(t("sidebar.shareCopied", { url }));
     } catch {
-      setError("Tautan: " + url);
+      setError(t("sidebar.shareUrl", { url }));
     }
   }
 
   async function newFolder() {
-    const name = prompt("Nama folder baru:");
+    const name = prompt(t("sidebar.folderPrompt"));
     if (!name?.trim()) return;
     const res = await fetch("/api/kawan/v1/folders", {
       method: "POST",
@@ -165,7 +177,7 @@ export function ChatSidebar({
     });
     if (!res.ok) {
       const payload = (await res.json().catch(() => null)) as { message?: string } | null;
-      setError(payload?.message ?? "Gagal membuat folder.");
+      setError(payload?.message ?? t("sidebar.folderFailed"));
       return;
     }
     await load();
@@ -176,7 +188,7 @@ export function ChatSidebar({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="mt-6 space-y-2">
-        <label htmlFor="chat-search" className="sr-only">Cari percakapan</label>
+        <label htmlFor="chat-search" className="sr-only">{t("sidebar.search")}</label>
         <div className="relative">
           <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -184,7 +196,7 @@ export function ChatSidebar({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari percakapan"
+            placeholder={t("sidebar.search")}
             className="min-h-9 w-full rounded-lg border bg-background pl-8 pr-2 text-sm"
           />
         </div>
@@ -195,7 +207,7 @@ export function ChatSidebar({
             aria-pressed={folderId === null}
             onClick={() => setFolderId(null)}
           >
-            Semua
+            {t("sidebar.all")}
           </Button>
           {folders.map((folder) => (
             <Button
@@ -208,14 +220,14 @@ export function ChatSidebar({
               {folder.name}
             </Button>
           ))}
-          <Button variant="ghost" size="icon-xs" aria-label="Folder baru" title="Folder baru" onClick={newFolder}>
+          <Button variant="ghost" size="icon-xs" aria-label={t("sidebar.newFolder")} title={t("sidebar.newFolder")} onClick={newFolder}>
             <FolderPlus aria-hidden />
           </Button>
           <Button
             variant={showArchived ? "secondary" : "ghost"}
             size="icon-xs"
-            aria-label={showArchived ? "Sembunyikan arsip" : "Tampilkan arsip"}
-            title={showArchived ? "Sembunyikan arsip" : "Tampilkan arsip"}
+            aria-label={showArchived ? t("sidebar.hideArchived") : t("sidebar.showArchived")}
+            title={showArchived ? t("sidebar.hideArchived") : t("sidebar.showArchived")}
             aria-pressed={showArchived}
             onClick={() => setShowArchived((value) => !value)}
           >
@@ -230,16 +242,16 @@ export function ChatSidebar({
         </p>
       )}
 
-      <nav aria-label="Riwayat percakapan" className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+      <nav aria-label={t("sidebar.history")} className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
         {groups.length === 0 && (
           <p className="text-xs text-muted-foreground">
-            {query ? "Tidak ada hasil." : "Belum ada percakapan."}
+            {query ? t("sidebar.noResults") : t("sidebar.noChats")}
           </p>
         )}
         {groups.map((group) => (
           <section key={group.label}>
             <h2 className="px-1 text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
-              {group.label}
+              {GROUP_LABEL[group.label] ? t(GROUP_LABEL[group.label]) : group.label}
             </h2>
             <ul className="mt-1 space-y-0.5">
               {group.chats.map((chat) => (
@@ -261,13 +273,13 @@ export function ChatSidebar({
                         onKeyDown={(event) => {
                           if (event.key === "Escape") setRenaming(null);
                         }}
-                        aria-label="Judul baru"
+                        aria-label={t("sidebar.newTitle")}
                         className="min-h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
                       />
-                      <Button type="submit" size="icon-xs" aria-label="Simpan judul">
+                      <Button type="submit" size="icon-xs" aria-label={t("sidebar.saveTitle")}>
                         <Check aria-hidden />
                       </Button>
-                      <Button type="button" size="icon-xs" variant="ghost" aria-label="Batal" onClick={() => setRenaming(null)}>
+                      <Button type="button" size="icon-xs" variant="ghost" aria-label={t("common.cancel")} onClick={() => setRenaming(null)}>
                         <X aria-hidden />
                       </Button>
                     </form>
@@ -286,7 +298,7 @@ export function ChatSidebar({
                         variant="ghost"
                         size="icon-xs"
                         className="min-h-11 min-w-11"
-                        aria-label={`Aksi untuk ${chat.title}`}
+                        aria-label={t("sidebar.actionsFor", { title: chat.title })}
                         aria-expanded={menuId === chat.id}
                         onClick={(event) => {
                           menuTriggerRef.current = event.currentTarget;
@@ -301,18 +313,18 @@ export function ChatSidebar({
                   {menuId === chat.id && (
                     <div ref={menuRef} className="absolute right-0 top-9 z-20 w-52 rounded-lg border bg-popover p-1 shadow-md">
                       <MenuItem icon={<Pencil aria-hidden />} onClick={() => { setRenaming({ id: chat.id, title: chat.title }); setMenuId(null); }}>
-                        Ganti nama
+                        {t("sidebar.rename")}
                       </MenuItem>
                       <MenuItem icon={chat.pinned ? <PinOff aria-hidden /> : <Pin aria-hidden />} onClick={() => { setMenuId(null); void patchChat(chat.id, { pinned: !chat.pinned }); }}>
-                        {chat.pinned ? "Lepas sematan" : "Sematkan"}
+                        {chat.pinned ? t("sidebar.unpin") : t("sidebar.pin")}
                       </MenuItem>
                       <MenuItem icon={chat.archived ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />} onClick={() => { setMenuId(null); void patchChat(chat.id, { archived: !chat.archived }); }}>
-                        {chat.archived ? "Keluarkan dari arsip" : "Arsipkan"}
+                        {chat.archived ? t("sidebar.unarchive") : t("sidebar.archive")}
                       </MenuItem>
                       {folders.length > 0 && (
                         <label className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
                           <FolderPlus aria-hidden className="size-4" />
-                          <span className="sr-only">Pindah ke folder</span>
+                          <span className="sr-only">{t("sidebar.moveToFolder")}</span>
                           <select
                             value={chat.folderId ?? ""}
                             onChange={(event) => {
@@ -321,7 +333,7 @@ export function ChatSidebar({
                             }}
                             className="min-h-7 min-w-0 flex-1 rounded border bg-background px-1 text-xs"
                           >
-                            <option value="">Tanpa folder</option>
+                            <option value="">{t("sidebar.noFolder")}</option>
                             {folders.map((folder) => (
                               <option key={folder.id} value={folder.id}>{folder.name}</option>
                             ))}
@@ -329,7 +341,7 @@ export function ChatSidebar({
                         </label>
                       )}
                       <MenuItem icon={<Link2 aria-hidden />} onClick={() => { setMenuId(null); void shareChat(chat.id); }}>
-                        Bagikan tautan
+                        {t("sidebar.shareLink")}
                       </MenuItem>
                       <a
                         href={`/api/kawan/v1/chats/${chat.id}/transfer?format=md`}
@@ -338,10 +350,10 @@ export function ChatSidebar({
                         onClick={() => setMenuId(null)}
                       >
                         <Download aria-hidden className="size-4" />
-                        Ekspor Markdown
+                        {t("sidebar.exportMarkdown")}
                       </a>
                       <MenuItem icon={<Trash2 aria-hidden />} destructive onClick={() => { setMenuId(null); void removeChat(chat.id); }}>
-                        Hapus
+                        {t("common.delete")}
                       </MenuItem>
                     </div>
                   )}
@@ -352,7 +364,7 @@ export function ChatSidebar({
         ))}
         {nextCursor && (
           <Button variant="ghost" size="sm" className="w-full" onClick={() => void load(nextCursor)}>
-            Muat lagi
+            {t("common.loadMore")}
           </Button>
         )}
       </nav>

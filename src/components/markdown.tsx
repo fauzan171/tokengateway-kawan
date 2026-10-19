@@ -7,6 +7,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import { Check, Copy } from "lucide-react";
+import { useT } from "@/lib/i18n/context";
 
 // Raw HTML is never enabled (no rehype-raw), so model output cannot inject markup:
 // `<script>` and `onerror` stay inert text. Sanitising is the parser's default, not a plugin.
@@ -61,13 +62,14 @@ function MermaidDiagram({ code }: { code: string }) {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const t = useT();
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   return (
     <>
       <button
         type="button"
-        aria-label={status === "copied" ? "Tersalin" : "Salin kode"}
-        title="Salin kode"
+        aria-label={status === "copied" ? t("markdown.copied") : t("markdown.copy")}
+        title={t("markdown.copy")}
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(text);
@@ -83,7 +85,7 @@ function CopyButton({ text }: { text: string }) {
         {status === "copied" ? <Check className="size-3.5 text-green-600" /> : <Copy className="size-3.5" />}
       </button>
       <span role="status" aria-live="polite" className="sr-only">
-        {status === "copied" ? "Kode disalin." : status === "failed" ? "Salin gagal; pilih kode manual." : ""}
+        {status === "copied" ? t("markdown.copiedStatus") : status === "failed" ? t("markdown.copyFailed") : ""}
       </span>
     </>
   );

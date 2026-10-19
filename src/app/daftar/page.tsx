@@ -4,16 +4,15 @@ import { validateRegister } from "@/lib/auth/validation";
 import { readAppConfig } from "@/lib/admin/config";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
+import { serverT } from "@/lib/page-i18n";
 
 export const metadata: Metadata = {
   title: "Kawan — Chat AI by tokengateway.ai.id",
   description: "Buat akun Kawan dengan email dan kata sandi.",
 };
 
-/** Teks yang sama dengan balasan `POST /api/register` saat ditutup (REQ-NT-76). */
-const REGISTRATION_CLOSED = "Pendaftaran publik ditutup. Hubungi administrator.";
-
 export default async function DaftarPage() {
+  const t = await serverT();
   // Server Action: memakai `validateRegister` apa adanya, sehingga aturan
   // panjang kata sandi dan kecocokan konfirmasi tetap satu sumber kebenaran.
   async function validate(values: AuthFormValues) {
@@ -33,7 +32,7 @@ export default async function DaftarPage() {
   return (
     <AuthForm
       mode="register"
-      notice={open ? undefined : REGISTRATION_CLOSED}
+      notice={open ? undefined : t("register.closed")}
       closed={!open}
       onValidate={validate}
     />

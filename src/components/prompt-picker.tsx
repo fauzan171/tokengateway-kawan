@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n/context";
 
 type PromptItem = {
   id: string;
@@ -21,6 +22,7 @@ type PromptItem = {
 const ENDPOINT = "/api/kawan/v1/prompts";
 
 export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
@@ -51,20 +53,20 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
     try {
       const response = await fetch(ENDPOINT);
       if (response.status === 401) {
-        setError("Sesi berakhir, muat ulang halaman.");
+        setError(t("common.sessionExpired"));
         return;
       }
       if (!response.ok) {
-        setError("Gagal memuat prompt.");
+        setError(t("prompts.loadFailed"));
         return;
       }
       const data = (await response.json().catch(() => null)) as { prompts?: PromptItem[] } | null;
       setPrompts(data?.prompts ?? []);
       setError(null);
     } catch {
-      setError("Gagal memuat prompt.");
+      setError(t("prompts.loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (open && !loaded) {
@@ -81,14 +83,14 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
         body: JSON.stringify({ title, body }),
       });
       if (!response.ok) {
-        setError("Prompt gagal disimpan. Judul dan isi wajib diisi.");
+        setError(t("prompts.saveFailed"));
         return;
       }
       setTitle("");
       setBody("");
       await load();
     } catch {
-      setError("Prompt gagal disimpan.");
+      setError(t("prompts.saveNetworkFailed"));
     }
   }
 
@@ -96,12 +98,12 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
     try {
       const response = await fetch(`${ENDPOINT}/${promptId}`, { method: "DELETE" });
       if (!response.ok) {
-        setError("Prompt gagal dihapus.");
+        setError(t("prompts.deleteFailed"));
         return;
       }
       setPrompts((prev) => prev.filter((item) => item.id !== promptId));
     } catch {
-      setError("Prompt gagal dihapus.");
+      setError(t("prompts.deleteFailed"));
     }
   }
 
@@ -114,7 +116,7 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
         onClick={() => setOpen((prev) => !prev)}
         className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground"
       >
-        Prompt
+        {t("prompts.trigger")}
       </button>
 
       {open && (
@@ -141,11 +143,11 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
                   {!prompt.isDefault && (
                     <button
                       type="button"
-                      aria-label={`Hapus prompt ${prompt.title}`}
+                      aria-label={t("prompts.remove", { title: prompt.title })}
                       onClick={() => void remove(prompt.id)}
                       className="inline-flex min-h-11 items-center rounded-lg px-2 text-xs text-muted-foreground hover:text-destructive"
                     >
-                      Hapus
+                      {t("common.delete")}
                     </button>
                   )}
                 </li>
@@ -157,15 +159,15 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Judul prompt"
-              aria-label="Judul prompt"
+              placeholder={t("prompts.titlePlaceholder")}
+              aria-label={t("prompts.titlePlaceholder")}
               className="min-h-11 w-full rounded-lg border bg-transparent px-2 text-sm outline-none"
             />
             <textarea
               value={body}
               onChange={(event) => setBody(event.target.value)}
-              placeholder="Isi prompt, boleh memakai {{isi}}"
-              aria-label="Isi prompt"
+              placeholder={t("prompts.bodyPlaceholder")}
+              aria-label={t("prompts.bodyPlaceholder")}
               rows={3}
               className="min-h-11 w-full resize-none rounded-lg border bg-transparent px-2 text-sm outline-none"
             />
@@ -175,7 +177,7 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
               disabled={!title.trim() || !body.trim()}
               className="min-h-11 rounded-lg border px-2 text-xs disabled:opacity-50"
             >
-              Simpan prompt
+              {t("prompts.save")}
             </button>
           </div>
 

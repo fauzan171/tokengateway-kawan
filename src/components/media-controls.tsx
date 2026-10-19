@@ -10,6 +10,7 @@
  */
 
 import { useRef } from "react";
+import { useT } from "@/lib/i18n/context";
 import { Image as ImageIcon, Mic, Volume2 } from "lucide-react";
 
 const buttonClass =
@@ -29,6 +30,7 @@ export function MediaControls({
   /** Draft saat ini: tombol gambar mati bila prompt kosong. */
   prompt?: string;
 }) {
+  const t = useT();
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -36,8 +38,8 @@ export function MediaControls({
       {onImage && (
         <button
           type="button"
-          aria-label="Buat gambar"
-          title="Buat gambar dari prompt"
+          aria-label={t("media.image")}
+          title={t("media.imageTitle")}
           disabled={busy || !prompt.trim()}
           onClick={() => onImage(prompt)}
           className={buttonClass}
@@ -61,8 +63,8 @@ export function MediaControls({
           />
           <button
             type="button"
-            aria-label="Transkripsi audio"
-            title="Ubah audio jadi teks"
+            aria-label={t("media.transcribe")}
+            title={t("media.transcribeTitle")}
             disabled={busy}
             onClick={() => audioInputRef.current?.click()}
             className={buttonClass}
@@ -75,8 +77,8 @@ export function MediaControls({
       {onSpeak && (
         <button
           type="button"
-          aria-label="Bacakan jawaban"
-          title="Bacakan jawaban"
+          aria-label={t("media.speak")}
+          title={t("media.speak")}
           disabled={busy}
           onClick={onSpeak}
           className={buttonClass}

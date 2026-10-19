@@ -11,21 +11,20 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useT, type Translate } from "@/lib/i18n/context";
 
 type DayRow = { day: string; promptTokens: number; completionTokens: number; totalTokens: number; unreported: number };
 type ModelRow = { model: string; promptTokens: number; completionTokens: number; totalTokens: number; unreported: number };
 type Report = { reported: boolean; rows: DayRow[] | ModelRow[] };
 
 const RANGES = [7, 30, 90] as const;
-const UNAVAILABLE = "Pemakaian tidak tersedia: gateway tidak melaporkan jumlah token.";
-const EMPTY = "Belum ada pemakaian pada rentang ini.";
-
 function isoDaysAgo(days: number): string {
   const date = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   return date.toISOString().slice(0, 10);
 }
 
 export function UsageReport() {
+  const t = useT();
   const [days, setDays] = useState<number>(30);
   const [day, setDay] = useState<Report | null>(null);
   const [model, setModel] = useState<Report | null>(null);
@@ -44,9 +43,9 @@ export function UsageReport() {
       setDay((await dayRes.json()) as Report);
       setModel((await modelRes.json()) as Report);
     } catch {
-      setError("Gagal memuat pemakaian.");
+      setError(t("usage.loadFailed"));
     }
-  }, [query]);
+  }, [query, t]);
 
   useEffect(() => {
     void load();
@@ -55,7 +54,7 @@ export function UsageReport() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center gap-3">
-        <div role="group" aria-label="Rentang" className="flex gap-2">
+        <div role="group" aria-label={t("usage.range")} className="flex gap-2">
           {RANGES.map((value) => (
             <button
               key={value}
@@ -64,7 +63,7 @@ export function UsageReport() {
               aria-pressed={days === value}
               className={`min-h-11 rounded-lg border px-4 text-sm ${days === value ? "bg-muted font-medium" : ""}`}
             >
-              {value} hari
+              {t("usage.days", { count: value })}
             </button>
           ))}
         </div>
@@ -73,7 +72,7 @@ export function UsageReport() {
           download
           className="inline-flex min-h-11 items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted"
         >
-          Unduh CSV
+          {t("usage.downloadCsv")}
         </a>
       </div>
 
@@ -84,33 +83,34 @@ export function UsageReport() {
       ) : null}
 
       {day && model ? (
-        <Section title="Per hari" report={day} kind="day" />
+        <Section title={t("usage.perDay")} report={day} kind="day" />
       ) : null}
       {day && model ? (
-        <Section title="Per model" report={model} kind="model" />
+        <Section title={t("usage.perModel")} report={model} kind="model" />
       ) : null}
     </div>
   );
 }
 
 function Section({ title, report, kind }: { title: string; report: Report; kind: "day" | "model" }) {
+  const t: Translate = useT();
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
       {!report.reported ? (
-        <p className="text-sm text-muted-foreground">{UNAVAILABLE}</p>
+        <p className="text-sm text-muted-foreground">{t("usage.unavailable")}</p>
       ) : report.rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{EMPTY}</p>
+        <p className="text-sm text-muted-foreground">{t("usage.empty")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left">
-                <th scope="col" className="py-2 pr-4 font-medium">{kind === "day" ? "Tanggal" : "Model"}</th>
-                <th scope="col" className="py-2 pr-4 text-right font-medium">Token prompt</th>
-                <th scope="col" className="py-2 pr-4 text-right font-medium">Token jawaban</th>
-                <th scope="col" className="py-2 pr-4 text-right font-medium">Total token</th>
-                <th scope="col" className="py-2 text-right font-medium">Tidak dilaporkan</th>
+                <th scope="col" className="py-2 pr-4 font-medium">{kind === "day" ? t("usage.date") : t("usage.model")}</th>
+                <th scope="col" className="py-2 pr-4 text-right font-medium">{t("usage.promptTokens")}</th>
+                <th scope="col" className="py-2 pr-4 text-right font-medium">{t("usage.completionTokens")}</th>
+                <th scope="col" className="py-2 pr-4 text-right font-medium">{t("usage.totalTokens")}</th>
+                <th scope="col" className="py-2 text-right font-medium">{t("usage.unreported")}</th>
               </tr>
             </thead>
             <tbody>

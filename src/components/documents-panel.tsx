@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/context";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 /**
  * Salinan `ALLOWED_MIME` dari `src/lib/documents/upload.ts`: berkas itu
@@ -19,11 +21,11 @@ import { Button } from "@/components/ui/button";
  */
 const ACCEPT = ["application/pdf", "text/plain", "text/markdown"];
 
-const STATUS_LABEL: Record<string, string> = {
-  queued: "Menunggu",
-  processing: "Memproses",
-  ready: "Siap",
-  failed: "Gagal",
+const STATUS_LABEL: Record<string, MessageKey> = {
+  queued: "documents.status.queued",
+  processing: "documents.status.processing",
+  ready: "documents.status.ready",
+  failed: "documents.status.failed",
 };
 
 const STATUS_CLASS: Record<string, string> = {
@@ -52,6 +54,7 @@ function isPending(status: string): boolean {
 }
 
 export function DocumentsPanel() {
+  const t = useT();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -60,20 +63,20 @@ export function DocumentsPanel() {
     try {
       const response = await fetch("/api/kawan/v1/documents");
       if (response.status === 401) {
-        setError("Sesi berakhir, muat ulang halaman.");
+        setError(t("common.sessionExpired"));
         return;
       }
       if (!response.ok) {
-        setError("Gagal memuat dokumen.");
+        setError(t("documents.loadFailed"));
         return;
       }
       const data = (await response.json().catch(() => null)) as { documents?: DocumentItem[] } | null;
       setDocuments(data?.documents ?? []);
       setError(null);
     } catch {
-      setError("Gagal memuat dokumen.");
+      setError(t("documents.loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -96,19 +99,19 @@ export function DocumentsPanel() {
     try {
       const response = await fetch("/api/kawan/v1/documents", { method: "POST", body });
       if (response.status === 401) {
-        setError("Sesi berakhir, muat ulang halaman.");
+        setError(t("common.sessionExpired"));
         return;
       }
       const data = (await response.json().catch(() => null)) as
         | { document?: DocumentItem; error?: { message?: string } }
         | null;
       if (!response.ok || !data?.document) {
-        setError(data?.error?.message ?? "Unggahan gagal. Coba lagi.");
+        setError(data?.error?.message ?? t("documents.uploadFailed"));
         return;
       }
       setDocuments((current) => [data.document as DocumentItem, ...current]);
     } catch {
-      setError("Unggahan gagal. Periksa koneksi lalu coba lagi.");
+      setError(t("documents.uploadFailedNetwork"));
     } finally {
       setUploading(false);
     }
@@ -119,14 +122,14 @@ export function DocumentsPanel() {
     try {
       const response = await fetch(`/api/kawan/v1/documents/${id}/retry`, { method: "POST" });
       if (!response.ok) {
-        setError("Dokumen belum dapat dicoba lagi.");
+        setError(t("documents.retryFailed"));
         return;
       }
       setDocuments((current) =>
         current.map((item) => (item.id === id ? { ...item, status: "queued", errorCode: null } : item)),
       );
     } catch {
-      setError("Dokumen belum dapat dicoba lagi.");
+      setError(t("documents.retryFailed"));
     }
   }
 
@@ -135,21 +138,21 @@ export function DocumentsPanel() {
     try {
       const response = await fetch(`/api/kawan/v1/documents/${id}`, { method: "DELETE" });
       if (!response.ok) {
-        setError("Dokumen gagal dihapus.");
+        setError(t("documents.deleteFailed"));
         return;
       }
       setDocuments((current) => current.filter((item) => item.id !== id));
     } catch {
-      setError("Dokumen gagal dihapus.");
+      setError(t("documents.deleteFailed"));
     }
   }
 
   return (
-    <section aria-label="Dokumen" className="mb-2 rounded-2xl border bg-background p-3">
+    <section aria-label={t("documents.title")} className="mb-2 rounded-2xl border bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium">Dokumen</p>
+        <p className="text-sm font-medium">{t("documents.title")}</p>
         <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm font-medium hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
-          {uploading ? "Mengunggah…" : "Lampirkan dokumen"}
+          {uploading ? t("documents.uploading") : t("documents.attach")}
           <input
             type="file"
             accept={ACCEPT.join(",")}
@@ -173,7 +176,7 @@ export function DocumentsPanel() {
       <div role="status" aria-live="polite">
         {documents.length === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Belum ada dokumen. Lampirkan PDF atau teks untuk bertanya berdasarkan isinya.
+            {t("documents.empty")}
           </p>
         ) : (
           <ul className="mt-2 space-y-2">
@@ -185,13 +188,13 @@ export function DocumentsPanel() {
                 </span>
                 <span className="text-muted-foreground">{sizeKb(item.sizeBytes)}</span>
                 <span className={STATUS_CLASS[item.status] ?? "text-muted-foreground"}>
-                  {STATUS_LABEL[item.status] ?? item.status}
+                  {STATUS_LABEL[item.status] ? t(STATUS_LABEL[item.status]) : item.status}
                 </span>
                 {item.status === "failed" && (
                   <>
-                    <span className="text-destructive">{item.errorCode ?? "Ekstraksi gagal."}</span>
+                    <span className="text-destructive">{item.errorCode ?? t("documents.extractFailed")}</span>
                     <Button type="button" size="sm" variant="outline" onClick={() => void handleRetry(item.id)}>
-                      Coba lagi
+                      {t("common.retry")}
                     </Button>
                   </>
                 )}
@@ -199,7 +202,7 @@ export function DocumentsPanel() {
                   type="button"
                   size="icon-sm"
                   variant="ghost"
-                  aria-label={`Hapus ${item.filename}`}
+                  aria-label={t("documents.remove", { filename: item.filename })}
                   onClick={() => void handleDelete(item.id)}
                 >
                   <Trash2 aria-hidden className="size-3.5" />

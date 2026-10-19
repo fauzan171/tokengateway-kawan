@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { ChangePasswordForm } from "@/components/change-password-form";
+import { serverT } from "@/lib/page-i18n";
 
 export const metadata: Metadata = {
   title: "Pengaturan — Kawan",
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PengaturanPage() {
+  const t = await serverT();
   const session = await auth();
   if (!session?.user) redirect("/masuk");
 
@@ -23,22 +25,21 @@ export default async function PengaturanPage() {
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
       <header className="mb-7 flex flex-col gap-2">
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Akun
+          {t("account.badge")}
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Pengaturan</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("account.title")}</h1>
         <p className="text-sm leading-6 text-muted-foreground">
-          Masuk sebagai {session.user.email}.
+          {t("account.signedInAs", { email: session.user.email ?? "" })}
         </p>
       </header>
 
       <section aria-labelledby="ganti-sandi-title" className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h2 id="ganti-sandi-title" className="text-lg font-semibold tracking-tight">
-            Ganti kata sandi
+            {t("account.changePasswordTitle")}
           </h2>
           <p className="text-sm leading-6 text-muted-foreground">
-            Setelah kata sandi berganti, semua perangkat lain yang masih masuk akan
-            dikeluarkan. Perangkat ini tetap masuk.
+            {t("account.changePasswordBody")}
           </p>
         </div>
         <ChangePasswordForm />
@@ -49,7 +50,7 @@ export default async function PengaturanPage() {
           href="https://tokengateway.ai.id"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+          className="inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-4 hover:underline"
         >
           by tokengateway.ai.id
         </a>

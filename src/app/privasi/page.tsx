@@ -9,6 +9,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PRIVACY_EFFECTIVE_DATE, PRIVACY_SECTIONS } from "@/lib/legal/privacy";
+import { serverT } from "@/lib/page-i18n";
 
 export const metadata: Metadata = {
   title: "Kebijakan privasi — Kawan",
@@ -25,14 +26,15 @@ function formatDate(iso: string): string {
   return `${hari} ${bulan[(bulanKe ?? 1) - 1]} ${tahun}`;
 }
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  const t = await serverT();
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10">
       <header className="mb-8 flex flex-col gap-2">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Legal</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Kebijakan privasi</h1>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("legal.badge")}</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("legal.title")}</h1>
         <p className="text-sm leading-6 text-muted-foreground">
-          Berlaku sejak {formatDate(PRIVACY_EFFECTIVE_DATE)}.
+          {t("legal.effective", { date: formatDate(PRIVACY_EFFECTIVE_DATE) })}
         </p>
       </header>
 
@@ -50,10 +52,10 @@ export default function PrivacyPage() {
       </div>
 
       <p className="mt-10 text-sm leading-6 text-muted-foreground">
-        Kebijakan ini dapat berubah; versi terbaru selalu ada di halaman ini.
+        {t("legal.changeNote")}
       </p>
       <p className="mt-6 text-sm">
-        <Link href="/" className="underline underline-offset-4">Kembali ke Kawan</Link>
+        <Link href="/" className="underline underline-offset-4">{t("legal.back")}</Link>
       </p>
     </main>
   );

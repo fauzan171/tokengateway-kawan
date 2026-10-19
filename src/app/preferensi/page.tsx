@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { SettingsForm } from "@/components/settings-form";
+import { serverT } from "@/lib/page-i18n";
 
 export const metadata: Metadata = {
   title: "Preferensi — Kawan",
@@ -16,16 +17,17 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
+  const t = await serverT();
   const session = await auth();
   if (!session?.user) redirect("/masuk");
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10">
       <header className="mb-8 flex flex-col gap-2">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Akun</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Pengaturan</h1>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("account.badge")}</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("account.title")}</h1>
         <p className="text-sm leading-6 text-muted-foreground">
-          Perubahan langsung berlaku dan tersimpan ke akunmu.
+          {t("account.settingsSubtitle")}
         </p>
       </header>
       <SettingsForm />

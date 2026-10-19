@@ -7,6 +7,7 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
+import { serverT } from "@/lib/page-i18n";
 import { getPublicShare } from "@/lib/chat/share";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
@@ -43,6 +44,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function SharePage({ params }: PageProps) {
+  const t = await serverT();
   const { token } = await params;
   const share = await loadShare(token);
   if (!share) notFound();
@@ -52,14 +54,14 @@ export default async function SharePage({ params }: PageProps) {
       <header className="flex flex-col gap-1 border-b pb-4">
         <h1 className="text-xl font-semibold">{share.title}</h1>
         <p className="text-sm text-muted-foreground">
-          Dibagikan {new Date(share.createdAt).toLocaleString("id-ID")} · hanya-baca
+          {t("share.sharedAt", { date: new Date(share.createdAt).toLocaleString("id-ID") })}
         </p>
       </header>
       <ol className="flex flex-col gap-4">
         {share.messages.map((message, index) => (
           <li key={`${message.createdAt}-${index}`} className="flex flex-col gap-1">
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {message.role === "user" ? "Kamu" : "Kawan"}
+              {message.role === "user" ? t("share.you") : "Kawan"}
             </span>
             {message.role === "user" ? (
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>

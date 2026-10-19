@@ -28,6 +28,7 @@ import {
 } from "@/lib/chat/tree";
 import { IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/chat/content";
 import { applyVariables } from "@/lib/prompts/variables";
+import { useT, type Translate } from "@/lib/i18n/context";
 
 const DEFAULT_MODEL = "deepseek-v4.1-flash";
 
@@ -37,26 +38,26 @@ interface ErrorState {
   assistantId?: string;
 }
 
-function mapProviderError(code?: string, rawMsg?: string): { message: string; retryable: boolean } {
+function mapProviderError(t: Translate, code?: string, rawMsg?: string): { message: string; retryable: boolean } {
   if (code === "UNAUTHORIZED" || rawMsg?.includes("401") || rawMsg?.toLowerCase().includes("unauthorized")) {
-    return { message: "Key ditolak oleh gateway.", retryable: false };
+    return { message: t("chat.keyRejected"), retryable: false };
   }
   if (code === "FORBIDDEN" || rawMsg?.includes("403")) {
-    return { message: "Gateway menolak permintaan ini.", retryable: false };
+    return { message: t("chat.forbidden"), retryable: false };
   }
   if (rawMsg?.includes("429") || rawMsg?.toLowerCase().includes("banyak permintaan")) {
-    return { message: "Terlalu banyak permintaan. Coba lagi sebentar.", retryable: true };
+    return { message: t("chat.rateLimited"), retryable: true };
   }
   if (code === "TIMEOUT" || rawMsg?.toLowerCase().includes("timeout")) {
-    return { message: "Gateway tidak merespons.", retryable: true };
+    return { message: t("chat.timeout"), retryable: true };
   }
   if (code === "UPSTREAM_ERROR" || rawMsg?.includes("500") || rawMsg?.includes("502") || rawMsg?.includes("503")) {
-    return { message: "Gateway sedang bermasalah.", retryable: true };
+    return { message: t("chat.upstream"), retryable: true };
   }
   if (rawMsg?.toLowerCase().includes("terputus") || rawMsg?.toLowerCase().includes("network")) {
-    return { message: "Koneksi terputus.", retryable: true };
+    return { message: t("chat.disconnected"), retryable: true };
   }
-  return { message: rawMsg || "Terjadi kesalahan.", retryable: true };
+  return { message: rawMsg || t("chat.genericError"), retryable: true };
 }
 
 function parseText(contentJson: string): string {
@@ -143,6 +144,7 @@ export function ChatView({
   initialChatId?: string | null;
   onChatCreated?: (id: string) => void;
 } = {}) {
+  const t = useT();
   const [messages, setMessages] = useState<TreeNode[]>([]);
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -276,9 +278,9 @@ export function ChatView({
     const res = await fetch("/api/kawan/v1/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Obrolan Baru", model: "deepseek-v4.1-flash" }),
+      body: JSON.stringify({ title: t("chat.newChatTitle"), model: DEFAULT_MODEL }),
     });
-    if (!res.ok) throw new Error("Gagal membuat percakapan");
+    if (!res.ok) throw new Error(t("chat.createFailed"));
     const data = await res.json();
     setChatId(data.id);
     onChatCreated?.(data.id);
@@ -301,7 +303,7 @@ export function ChatView({
       );
 
       if (!streamRes.ok || !streamRes.body) {
-        throw new Error("Gagal membuka aliran balasan AI");
+        throw new Error(t("chat.streamFailed"));
       }
 
       const reader = streamRes.body.getReader();
@@ -351,10 +353,10 @@ export function ChatView({
             setActiveGenId(null);
             try {
               const errPayload = JSON.parse(dataStr);
-              const mapped = mapProviderError(errPayload.code, errPayload.message);
+              const mapped = mapProviderError(t, errPayload.code, errPayload.message);
               setErrorState({ ...mapped, assistantId: assistantMessageId });
             } catch {
-              setErrorState({ message: "Generasi gagal.", retryable: true, assistantId: assistantMessageId });
+              setErrorState({ message: t("chat.generationFailed"), retryable: true, assistantId: assistantMessageId });
             }
             await refreshChat(activeId, assistantMessageId);
             return;
@@ -362,8 +364,8 @@ export function ChatView({
         }
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat menerima balasan";
-      const mapped = mapProviderError(undefined, msg);
+      const msg = err instanceof Error ? err.message : t("chat.receiveFailed");
+      const mapped = mapProviderError(t, undefined, msg);
       setErrorState({ ...mapped, assistantId: assistantMessageId });
     } finally {
       setIsStreaming(false);
@@ -400,7 +402,7 @@ export function ChatView({
 
       if (!sendRes.ok) {
         const err = await sendRes.json().catch(() => ({}));
-        throw new Error(err.message || "Gagal mengirim pesan");
+        throw new Error(err.message || t("chat.sendFailed"));
       }
 
       const { generationId, assistantMessageId, userMessageId } = await sendRes.json();
@@ -436,7 +438,7 @@ export function ChatView({
 
       await streamSSE(activeId, generationId, assistantMessageId);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat mengirim pesan";
+      const msg = err instanceof Error ? err.message : t("chat.sendError");
       setErrorState({ message: msg, retryable: false });
       setIsStreaming(false);
       setActiveGenId(null);
@@ -479,15 +481,15 @@ export function ChatView({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Gagal melakukan regenerasi balasan");
+        throw new Error(err.message || t("chat.regenerateFailed"));
       }
 
       const { generationId, assistantMessageId } = await res.json();
       await refreshChat(chatId, assistantMessageId);
       await streamSSE(chatId, generationId, assistantMessageId);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Gagal melakukan regenerasi";
-      const mapped = mapProviderError(undefined, msg);
+      const msg = err instanceof Error ? err.message : t("chat.regenerateFailedShort");
+      const mapped = mapProviderError(t, undefined, msg);
       setErrorState({ ...mapped, assistantId: messageId });
     }
   }
@@ -505,7 +507,7 @@ export function ChatView({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Gagal mengedit pesan");
+        throw new Error(err.message || t("chat.editFailed"));
       }
 
       setEditingId(null);
@@ -519,7 +521,7 @@ export function ChatView({
         await streamSSE(chatId, generationId, assistantMessageId);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Gagal mengedit pesan";
+      const msg = err instanceof Error ? err.message : t("chat.editFailed");
       setErrorState({ message: msg, retryable: false });
     }
   }
@@ -532,10 +534,10 @@ export function ChatView({
       setOpenCitation({
         messageId,
         chunkId,
-        text: typeof data?.text === "string" ? data.text : "Potongan tidak dapat dimuat.",
+        text: typeof data?.text === "string" ? data.text : t("chat.chunkUnavailable"),
       });
     } catch {
-      setOpenCitation({ messageId, chunkId, text: "Potongan tidak dapat dimuat." });
+      setOpenCitation({ messageId, chunkId, text: t("chat.chunkUnavailable") });
     }
   }
 
@@ -558,14 +560,14 @@ export function ChatView({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || typeof data?.image !== "string") {
-        throw new Error(data?.error?.message || "Gagal membuat gambar.");
+        throw new Error(data?.error?.message || t("chat.imageFailed"));
       }
       setAttachments((prev) =>
         [...prev, { mime: "image/png", dataUrl: data.image }].slice(0, MAX_IMAGES),
       );
     } catch (err: unknown) {
       setErrorState({
-        message: err instanceof Error ? err.message : "Gagal membuat gambar.",
+        message: err instanceof Error ? err.message : t("chat.imageFailed"),
         retryable: false,
       });
     } finally {
@@ -582,13 +584,13 @@ export function ChatView({
       const res = await fetch("/api/kawan/v1/media/transcribe", { method: "POST", body: form });
       const data = await res.json().catch(() => null);
       if (!res.ok || typeof data?.text !== "string") {
-        throw new Error(data?.error?.message || "Transkripsi gagal.");
+        throw new Error(data?.error?.message || t("chat.transcribeFailed"));
       }
       const text: string = data.text;
       setInput((prev) => (prev.trim() ? `${prev} ${text}` : text));
     } catch (err: unknown) {
       setErrorState({
-        message: err instanceof Error ? err.message : "Transkripsi gagal.",
+        message: err instanceof Error ? err.message : t("chat.transcribeFailed"),
         retryable: false,
       });
     } finally {
@@ -617,7 +619,7 @@ export function ChatView({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error?.message || "Gagal membacakan jawaban.");
+        throw new Error(data?.error?.message || t("chat.speakFailed"));
       }
       const url = URL.createObjectURL(await res.blob());
       const audio = new Audio(url);
@@ -625,7 +627,7 @@ export function ChatView({
       await audio.play().catch(() => URL.revokeObjectURL(url));
     } catch (err: unknown) {
       setErrorState({
-        message: err instanceof Error ? err.message : "Gagal membacakan jawaban.",
+        message: err instanceof Error ? err.message : t("chat.speakFailed"),
         retryable: false,
       });
     } finally {
@@ -650,8 +652,8 @@ export function ChatView({
       <div role="log" aria-live="polite" aria-relevant="additions" className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4">
         {activeMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-8">
-            <h2 className="text-2xl font-semibold mb-2">Mulai percakapan dengan AI</h2>
-            <p className="text-sm max-w-md">Ketik pesanmu di bawah. AI akan membalas menggunakan API gateway yang terhubung.</p>
+            <h2 className="text-2xl font-semibold mb-2">{t("chat.emptyTitle")}</h2>
+            <p className="text-sm max-w-md">{t("chat.emptyBody")}</p>
           </div>
         ) : (
           activeMessages.map((m) => {
@@ -674,12 +676,12 @@ export function ChatView({
               >
                 {note === "keyword-only" && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">
-                    Pencarian dokumen memakai kata kunci karena embedding belum dikonfigurasi; hasil bisa kurang tepat.
+                    {t("chat.keywordOnly")}
                   </p>
                 )}
                 {note === "web-search-unavailable" && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">
-                    Sumber web tidak tersedia untuk jawaban ini.
+                    {t("chat.webSearchUnavailable")}
                   </p>
                 )}
                 {isEditing ? (
@@ -701,14 +703,14 @@ export function ChatView({
                         }}
                       >
                         <X className="size-3.5 mr-1" />
-                        Batal
+                        {t("common.cancel")}
                       </Button>
                       <Button
                         size="sm"
                         onClick={() => handleEditSubmit(m.id)}
                         disabled={!editText.trim() || isStreaming}
                       >
-                        Simpan & Cabang
+                        {t("chat.saveBranch")}
                       </Button>
                     </div>
                   </div>
@@ -727,7 +729,7 @@ export function ChatView({
                             {/* eslint-disable-next-line @next/next/no-img-element -- data URL attachment, not an optimizable asset */}
                             <img
                               src={image.dataUrl}
-                              alt={`Lampiran ${index + 1}`}
+                              alt={t("chat.attachmentAlt", { index: index + 1 })}
                               className="max-h-56 rounded-lg border object-contain"
                             />
                           </li>
@@ -743,10 +745,10 @@ export function ChatView({
                     ) : images.length > 0 ? null : m.status === "streaming" ? (
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
                         <span className="size-2 rounded-full bg-primary animate-pulse" />
-                        Sedang berpikir...
+                        {t("chat.thinking")}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground italic">Tidak ada balasan</span>
+                      <span className="text-muted-foreground italic">{t("chat.noReply")}</span>
                     )}
                   </div>
                 )}
@@ -757,9 +759,11 @@ export function ChatView({
                       <button
                         key={citation.chunkId}
                         type="button"
-                        aria-label={`Lihat potongan ${citation.filename}${
-                          citation.page === null ? "" : ` halaman ${citation.page}`
-                        }`}
+                        aria-label={
+                          citation.page === null
+                            ? t("chat.viewChunk", { filename: citation.filename })
+                            : t("chat.viewChunkPage", { filename: citation.filename, page: citation.page })
+                        }
                         aria-expanded={
                           openCitation?.messageId === m.id &&
                           openCitation.chunkId === citation.chunkId
@@ -780,7 +784,7 @@ export function ChatView({
                   !isEditing && (
                     <div className="mt-1 max-w-[85%] rounded-lg border bg-background p-2 text-xs text-muted-foreground">
                       {openCitation.text === null
-                        ? "Memuat potongan..."
+                        ? t("chat.loadingChunk")
                         : openCitation.text}
                     </div>
                   )}
@@ -796,7 +800,7 @@ export function ChatView({
                       <div className="inline-flex items-center gap-1 bg-muted/60 rounded-md px-1.5 py-0.5 border text-[11px]">
                         <button
                           type="button"
-                          aria-label="Cabang sebelumnya"
+                          aria-label={t("chat.prevBranch")}
                           disabled={sibIdx <= 0 || isStreaming}
                           onClick={() => handleSwitchBranch(siblings[sibIdx - 1].id)}
                           className="hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
@@ -808,7 +812,7 @@ export function ChatView({
                         </span>
                         <button
                           type="button"
-                          aria-label="Cabang berikutnya"
+                          aria-label={t("chat.nextBranch")}
                           disabled={sibIdx >= siblings.length - 1 || isStreaming}
                           onClick={() => handleSwitchBranch(siblings[sibIdx + 1].id)}
                           className="hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
@@ -821,10 +825,10 @@ export function ChatView({
                     {text && (
                       <button
                         type="button"
-                        aria-label="Salin pesan"
+                        aria-label={t("chat.copyMessage")}
                         onClick={() => handleCopy(m.id, text)}
                         className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 hover:text-foreground focus-visible:opacity-100"
-                        title="Salin"
+                        title={t("chat.copy")}
                       >
                         {copiedId === m.id ? (
                           <Check className="size-3.5 text-green-600" />
@@ -837,14 +841,14 @@ export function ChatView({
                     {m.role === "user" && (
                       <button
                         type="button"
-                        aria-label="Edit pesan"
+                        aria-label={t("chat.editMessage")}
                         disabled={isStreaming}
                         onClick={() => {
                           setEditingId(m.id);
                           setEditText(text);
                         }}
                         className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 hover:text-foreground focus-visible:opacity-100 disabled:opacity-0"
-                        title="Edit pesan"
+                        title={t("chat.editMessage")}
                       >
                         <Pencil className="size-3.5" />
                       </button>
@@ -853,11 +857,11 @@ export function ChatView({
                     {m.role === "assistant" && (
                       <button
                         type="button"
-                        aria-label="Regenerasi balasan"
+                        aria-label={t("chat.regenerate")}
                         disabled={isStreaming}
                         onClick={() => handleRegenerate(m.id)}
                         className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 hover:text-foreground focus-visible:opacity-100 disabled:opacity-0"
-                        title="Regenerasi balasan"
+                        title={t("chat.regenerate")}
                       >
                         <RotateCcw className="size-3.5" />
                       </button>
@@ -873,7 +877,7 @@ export function ChatView({
 
       {copyError && (
         <p role="status" aria-live="polite" className="mb-2 text-xs text-destructive">
-          Salin gagal. Pilih teksnya lalu salin manual.
+          {t("chat.copyFailed")}
         </p>
       )}
 
@@ -899,7 +903,7 @@ export function ChatView({
               }}
             >
               <RotateCcw className="size-3 mr-1" />
-              Coba lagi
+              {t("common.retry")}
             </Button>
           )}
         </div>
@@ -919,12 +923,12 @@ export function ChatView({
                 {/* eslint-disable-next-line @next/next/no-img-element -- data URL preview, not an optimizable asset */}
                 <img
                   src={file.dataUrl}
-                  alt={`Lampiran ${index + 1}`}
+                  alt={t("chat.attachmentAlt", { index: index + 1 })}
                   className="size-16 rounded-lg border object-cover"
                 />
                 <button
                   type="button"
-                  aria-label={`Hapus lampiran ${index + 1}`}
+                  aria-label={t("chat.removeAttachment", { index: index + 1 })}
                   onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                   className="absolute -right-1.5 -top-1.5 rounded-full border bg-background p-0.5 text-muted-foreground hover:text-foreground"
                 >
@@ -943,8 +947,8 @@ export function ChatView({
             <button
               type="button"
               aria-pressed={webSearchOn}
-              aria-label="Pencarian web"
-              title="Pencarian web"
+              aria-label={t("chat.webSearch")}
+              title={t("chat.webSearch")}
               onClick={() => setWebSearchOn((prev) => !prev)}
               disabled={isStreaming}
               className={`ml-2 rounded-lg p-2 disabled:opacity-50 ${
@@ -980,7 +984,7 @@ export function ChatView({
                   for (const file of files) {
                     if (!(IMAGE_MIMES as readonly string[]).includes(file.type)) continue;
                     if (file.size > MAX_IMAGE_BYTES) {
-                      setErrorState({ message: "Ukuran gambar melebihi 4 MB.", retryable: false });
+                      setErrorState({ message: t("chat.imageTooLarge"), retryable: false });
                       continue;
                     }
                     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -996,8 +1000,8 @@ export function ChatView({
               />
               <button
                 type="button"
-                aria-label="Lampirkan gambar"
-                title="Lampirkan gambar"
+                aria-label={t("chat.attachImage")}
+                title={t("chat.attachImage")}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isStreaming}
                 className="ml-2 rounded-lg p-2 text-muted-foreground hover:text-foreground disabled:opacity-50"
@@ -1018,11 +1022,11 @@ export function ChatView({
                 handleSend();
               }
             }}
-            aria-label="Tulis pesan"
+            aria-label={t("chat.composerLabel")}
             placeholder={
               sendOnEnter
-                ? "Tulis pesan... (Enter untuk kirim, Shift+Enter untuk baris baru)"
-                : "Tulis pesan... (Shift+Enter untuk kirim, Enter untuk baris baru)"
+                ? t("chat.composerPlaceholderSend")
+                : t("chat.composerPlaceholderNewline")
             }
             className="w-full resize-none bg-transparent px-4 py-3.5 text-sm outline-none max-h-36 min-h-[52px]"
             rows={1}
@@ -1036,8 +1040,8 @@ export function ChatView({
                 variant="destructive"
                 className="size-9 rounded-xl p-0"
                 onClick={handleStop}
-                title="Hentikan balasan"
-                aria-label="Hentikan balasan"
+                title={t("chat.stop")}
+                aria-label={t("chat.stop")}
               >
                 <Square className="size-4 fill-current" />
               </Button>
@@ -1047,8 +1051,8 @@ export function ChatView({
                 size="sm"
                 className="size-9 rounded-xl p-0"
                 disabled={!input.trim()}
-                title="Kirim pesan"
-                aria-label="Kirim pesan"
+                title={t("chat.send")}
+                aria-label={t("chat.send")}
               >
                 <Send className="size-4" />
               </Button>

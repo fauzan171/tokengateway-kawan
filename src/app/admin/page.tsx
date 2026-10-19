@@ -12,6 +12,7 @@ import { auth } from "@/lib/auth";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
 import { AdminPanel } from "@/components/admin-panel";
+import { serverT } from "@/lib/page-i18n";
 
 export const metadata: Metadata = {
   title: "Admin — Kawan",
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminPage() {
+  const t = await serverT();
   const session = await auth();
   if (!session?.user) redirect("/masuk");
 
@@ -29,10 +31,10 @@ export default async function AdminPage() {
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10">
       <header className="mb-8 flex flex-col gap-2">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Administrasi</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Panel admin</h1>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("adminPage.badge")}</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("adminPage.title")}</h1>
         <p className="text-sm leading-6 text-muted-foreground">
-          Kelola pengguna, pendaftaran publik, dan pantau keadaan sistem.
+          {t("adminPage.subtitle")}
         </p>
       </header>
       <AdminPanel />
