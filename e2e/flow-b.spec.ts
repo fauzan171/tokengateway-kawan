@@ -23,8 +23,13 @@ async function send(page: Page, text: string): Promise<void> {
   await page.getByPlaceholder(/Tulis pesan/).fill(text);
   await page.getByRole("button", { name: "Kirim pesan" }).click();
   await expect(page.getByRole("log")).toContainText(text);
-  // Tombol kirim kembali = streaming selesai (berganti tombol "Hentikan balasan").
+  await idle(page);
+}
+
+/** Streaming selesai: tombol kirim kembali (berganti "Hentikan balasan" saat aktif). */
+async function idle(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: "Kirim pesan" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "Hentikan balasan" })).toHaveCount(0);
 }
 
 /** Pesan user pada permintaan terakhir yang memuat penanda uji ini. */
@@ -55,11 +60,14 @@ test("B: edit membuat cabang, regenerasi menambah sibling, konteks hanya cabang 
   await page.getByRole("button", { name: "Simpan & Cabang" }).click();
 
   await expect(page.getByRole("log")).toContainText("Pesan A aksen", { timeout: 20_000 });
+  // Tunggu generasi cabang selesai: klik regenerasi saat masih streaming = 409.
+  await idle(page);
   await expect(page.getByRole("button", { name: "Cabang berikutnya" }).first()).toBeVisible();
 
   // Regenerasi jawaban terakhir → sibling kedua.
   const assistant = page.getByRole("log").getByRole("button", { name: "Regenerasi balasan" }).last();
   await assistant.click({ force: true });
+  await idle(page);
   await expect
     .poll(async () => page.getByRole("button", { name: "Cabang sebelumnya" }).count(), {
       timeout: 20_000,

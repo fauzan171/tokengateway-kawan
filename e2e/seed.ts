@@ -143,7 +143,7 @@ export function seed(): void {
   ).run("doc-e2e-ready", E2E_USER_ID, "laporan.pdf", "application/pdf", 2048, "e2e/laporan.pdf", "ready", null, now);
   db.prepare(
     `INSERT INTO "DocumentChunk" (id, documentId, ordinal, text, page, section, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run("chunk-e2e", "doc-e2e-ready", 0, "Kesimpulan laporan: penjualan naik.", 3, "Kesimpulan", now);
+  ).run("chunk-e2e", "doc-e2e-ready", 0, "Kesimpulan laporan: margin membaik.", 3, "Kesimpulan", now);
   db.prepare(
     `INSERT INTO "Document" (id, userId, filename, mime, sizeBytes, storageKey, status, errorCode, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run("doc-e2e-failed", E2E_USER_ID, "catatan.txt", "text/plain", 512, "e2e/catatan.txt", "failed", "EXTRACT_EMPTY", now);
