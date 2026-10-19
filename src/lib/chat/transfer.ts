@@ -80,6 +80,9 @@ export async function exportChatMarkdown(db: Db, userId: string, chatId: string)
   return lines.join("\n");
 }
 
+/** Chat per query saat ekspor: 100 chat jadi 4 query, bukan 100. */
+const EXPORT_CHAT_BATCH = 25;
+
 /** Arsip seluruh data percakapan pengguna; tanpa kredensial atau id internal. */
 export async function exportAll(db: Db, userId: string) {
   const [folders, chats] = await Promise.all([
@@ -93,26 +96,34 @@ export async function exportAll(db: Db, userId: string) {
 
   const folderNames = new Map(folders.map((folder) => [folder.id, folder.name]));
 
-  const exported = [];
-  for (const chat of chats) {
+  // Semua pesan diambil per batch chat, bukan satu query per chat.
+  const byChat = new Map<string, ExportMessage[]>();
+  for (let index = 0; index < chats.length; index += EXPORT_CHAT_BATCH) {
+    const ids = chats.slice(index, index + EXPORT_CHAT_BATCH).map((chat) => chat.id);
     const messages = await db.chatMessage.findMany({
-      where: { chatId: chat.id },
+      where: { chatId: { in: ids } },
       orderBy: { seq: "asc" },
-      select: { id: true, parentId: true, role: true, contentJson: true, createdAt: true },
+      select: { chatId: true, id: true, parentId: true, role: true, contentJson: true, createdAt: true },
     });
-    exported.push({
-      title: chat.title,
-      folder: chat.folderId ? folderNames.get(chat.folderId) ?? null : null,
-      createdAt: chat.createdAt.toISOString(),
-      messages: messages.map((message) => ({
+    for (const message of messages) {
+      const list = byChat.get(message.chatId) ?? [];
+      list.push({
         id: message.id,
         parentId: message.parentId,
         role: message.role,
         text: messageText(message.contentJson),
         createdAt: message.createdAt.toISOString(),
-      })),
-    });
+      });
+      byChat.set(message.chatId, list);
+    }
   }
+
+  const exported = chats.map((chat) => ({
+    title: chat.title,
+    folder: chat.folderId ? folderNames.get(chat.folderId) ?? null : null,
+    createdAt: chat.createdAt.toISOString(),
+    messages: byChat.get(chat.id) ?? [],
+  }));
 
   return {
     format: EXPORT_FORMAT,

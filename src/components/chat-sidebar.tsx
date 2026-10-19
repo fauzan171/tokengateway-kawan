@@ -40,6 +40,7 @@ export function ChatSidebar({
   onSelect: (id: string | null) => void;
 }) {
   const [chats, setChats] = useState<Chat[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [query, setQuery] = useState("");
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -49,11 +50,12 @@ export function ChatSidebar({
   const [menuId, setMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (cursor?: string) => {
     const params = new URLSearchParams({ limit: "50" });
     if (query.trim()) params.set("q", query.trim());
     if (folderId) params.set("folderId", folderId);
     if (showArchived) params.set("archived", "true");
+    if (cursor) params.set("cursor", cursor);
 
     try {
       const [chatRes, folderRes] = await Promise.all([
@@ -61,8 +63,10 @@ export function ChatSidebar({
         fetch("/api/kawan/v1/folders"),
       ]);
       if (chatRes.ok) {
-        const data = (await chatRes.json()) as { chats?: Chat[] };
-        setChats(data.chats ?? []);
+        const data = (await chatRes.json()) as { chats?: Chat[]; nextCursor?: string | null };
+        const page = data.chats ?? [];
+        setChats((current) => (cursor ? [...current, ...page] : page));
+        setNextCursor(data.nextCursor ?? null);
         setError(null);
       } else if (chatRes.status !== 401) {
         setError("Gagal memuat riwayat.");
@@ -330,6 +334,11 @@ export function ChatSidebar({
             </ul>
           </section>
         ))}
+        {nextCursor && (
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => void load(nextCursor)}>
+            Muat lagi
+          </Button>
+        )}
       </nav>
     </div>
   );

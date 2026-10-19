@@ -11,7 +11,7 @@ import { createChat, deleteChat, updateChat } from "./chats";
 import { getChat } from "./messages";
 import { createFolder, deleteFolder, listFolders, renameFolder } from "./folders";
 import { buildSnapshot, createShareLink, getPublicShare, revokeShareLinks } from "./share";
-import { CHAT_FORMAT, exportChatJson, exportChatMarkdown, importChat } from "./transfer";
+import { CHAT_FORMAT, exportAll, exportChatJson, exportChatMarkdown, importChat } from "./transfer";
 
 let temp: TempDb;
 let db: Db;
@@ -219,5 +219,32 @@ describe("transfer", () => {
       ],
     };
     await expect(importChat(db, userId, payload)).rejects.toMatchObject({ code: "INVALID_IMPORT" });
+  });
+
+  it("ekspor 100 chat memakai empat query pesan, isi tetap utuh (AUD-07)", async () => {
+    for (let index = 0; index < 100; index += 1) await seedChat(`Chat ${index}`);
+
+    let messageQueries = 0;
+    const counted = new Proxy(db, {
+      get(inner, prop, receiver) {
+        const value = Reflect.get(inner, prop, receiver) as Record<string, unknown> | undefined;
+        if (prop !== "chatMessage" || !value) return value;
+        return new Proxy(value, {
+          get(target, method, recv) {
+            if (method !== "findMany") return Reflect.get(target, method, recv);
+            return (...args: unknown[]) => {
+              messageQueries += 1;
+              return (Reflect.get(target, method, recv) as (...a: unknown[]) => unknown)(...args);
+            };
+          },
+        });
+      },
+    }) as Db;
+
+    const archive = await exportAll(counted, userId);
+
+    expect(archive.chats).toHaveLength(100);
+    expect(archive.chats.every((chat) => chat.messages.length === 2)).toBe(true);
+    expect(messageQueries).toBe(4);
   });
 });
