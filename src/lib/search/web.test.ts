@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/net", () => ({
   assertOutboundAllowed: async (url: string) => url,
+  // Tanpa ini modul yang memakai fetchOutbound akan gagal sebelum stub dipanggil.
+  fetchOutbound: (url: string, init: RequestInit) => fetch(url, init),
   DEFAULT_OUTBOUND_OPTIONS: { allowInsecureHttp: false, allowlist: [] },
 }));
 
