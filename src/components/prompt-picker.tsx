@@ -179,7 +179,7 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
             </button>
           </div>
 
-          {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+          {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
         </div>
       )}
     </div>

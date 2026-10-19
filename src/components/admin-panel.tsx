@@ -57,6 +57,7 @@ export function AdminPanel() {
   const [open, setOpen] = useState<boolean | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -81,6 +82,27 @@ export function AdminPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** Memuat halaman berikut; id yang sudah ada dilewati agar tidak ganda. */
+  async function loadMore() {
+    if (!nextCursor) return;
+    setError(null);
+    setLoadingMore(true);
+    try {
+      const body = await jsonOf<{ users: AdminUser[]; nextCursor: string | null }>(
+        await fetch(`/api/kawan/v1/admin/users?cursor=${encodeURIComponent(nextCursor)}`),
+      );
+      setUsers((current) => {
+        const known = new Set((current ?? []).map((user) => user.id));
+        return [...(current ?? []), ...body.users.filter((user) => !known.has(user.id))];
+      });
+      setNextCursor(body.nextCursor);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat pengguna berikutnya.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   async function toggleStatus(user: AdminUser) {
     const next = user.status === "active" ? "disabled" : "active";
@@ -183,10 +205,10 @@ export function AdminPanel() {
                     <td className="px-3 py-2">{tanggal(user.createdAt)}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => void toggleStatus(user)}>
+                        <Button variant="outline" className="min-h-11" onClick={() => void toggleStatus(user)}>
                           {user.status === "active" ? "Nonaktifkan" : "Aktifkan"}
                         </Button>
-                        <Button variant="destructive" onClick={() => void remove(user)}>Hapus</Button>
+                        <Button variant="destructive" className="min-h-11" onClick={() => void remove(user)}>Hapus</Button>
                       </div>
                     </td>
                   </tr>
@@ -196,9 +218,14 @@ export function AdminPanel() {
           </div>
         )}
         {nextCursor ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Menampilkan {users?.length ?? 0} pengguna pertama; sisanya belum dimuat.
-          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
+              {loadingMore ? "Memuat…" : "Muat lagi"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Menampilkan {users?.length ?? 0} pengguna; sisanya belum dimuat.
+            </p>
+          </div>
         ) : null}
       </section>
 

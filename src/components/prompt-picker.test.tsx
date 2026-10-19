@@ -100,6 +100,17 @@ describe("PromptPicker", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("kegagalan hapus prompt diumumkan lewat role=alert (UX-09)", async () => {
+    await mount([prompt({ title: "Ringkas" })]);
+    fetchMock.mockResolvedValueOnce(json({ message: "gagal" }, 500));
+
+    const removeButton = container.querySelector('button[aria-label="Hapus prompt Ringkas"]') as HTMLButtonElement;
+    await act(async () => removeButton.click());
+
+    const alert = container.querySelector('p[role="alert"]');
+    expect(alert?.textContent).toContain("gagal dihapus");
+  });
+
   it("prompt bawaan tidak punya tombol hapus", async () => {
     await mount([
       prompt({ id: "bawaan", title: "Bawaan", isDefault: true }),
