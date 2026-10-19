@@ -147,6 +147,12 @@ export function ChatView({
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [chatId, setChatId] = useState<string | null>(initialChatId);
+
+  // Sidebar memilih chat lain / "Chat baru": ikuti prop, jangan remount
+  // (remount saat chat baru dibuat memutus SSE yang sedang berjalan).
+  useEffect(() => {
+    setChatId(initialChatId);
+  }, [initialChatId]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeGenId, setActiveGenId] = useState<string | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
@@ -219,7 +225,15 @@ export function ChatView({
       if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data.messages)) {
-        setMessages(data.messages);
+        // API mengirim `content` (objek), bukan `contentJson` (string): tanpa
+        // normalisasi ini setiap riwayat tampil "Tidak ada balasan".
+        setMessages(
+          data.messages.map((m: TreeNode & { content?: unknown }) => ({
+            ...m,
+            chatId: m.chatId ?? id,
+            contentJson: m.contentJson ?? JSON.stringify(m.content ?? { parts: [] }),
+          }))
+        );
         const leaf = preferredLeaf !== undefined ? preferredLeaf : data.chat?.currentMessageId ?? null;
         setActiveLeafId(leaf);
         if (typeof data.chat?.modelRef === "string") setModelRef(data.chat.modelRef);
