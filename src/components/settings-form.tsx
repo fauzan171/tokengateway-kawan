@@ -119,12 +119,11 @@ export function SettingsForm() {
         </label>
         <select
           id="locale"
-          value={settings.locale}
+          value={settings.locale === "en" ? "id" : settings.locale}
           onChange={(event) => change({ locale: event.target.value as UserSettings["locale"] })}
           className="min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"
         >
           <option value="id">Indonesia</option>
-          <option value="en">English</option>
         </select>
       </div>
 
