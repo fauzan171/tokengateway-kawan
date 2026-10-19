@@ -70,6 +70,52 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+describe("preferensi Enter (UX-10)", () => {
+  it("sendOnEnter=false: Enter membuat baris baru, Shift+Enter mengirim", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/settings") return json({ settings: { sendOnEnter: false } });
+      if (url === "/api/kawan/v1/models") return json({ models: [] });
+      if (url === "/api/kawan/v1/capabilities") return json(NONE);
+      return json({}, 404);
+    });
+    await mount();
+
+    const textarea = container.querySelector("textarea")!;
+    expect(textarea.getAttribute("placeholder")).toContain("Shift+Enter untuk kirim");
+
+    // Isi draf lewat setter native supaya state React ikut berubah.
+    const setValue = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    )!.set!;
+    await act(async () => {
+      setValue.call(textarea, "halo");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    let sent = 0;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/chat") {
+        sent += 1;
+        return json({ chat: { id: "c1" } });
+      }
+      return json({}, 404);
+    });
+
+    await act(async () => {
+      textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    expect(sent).toBe(0);
+
+    await act(async () => {
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(sent).toBe(1);
+  });
+});
+
 describe("matriks kapabilitas ChatView", () => {
   it("semua kapabilitas false → tidak ada tombol media mana pun", async () => {
     stub({ caps: NONE });

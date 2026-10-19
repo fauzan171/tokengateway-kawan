@@ -157,6 +157,10 @@ export function ChatView({
   const [activeGenId, setActiveGenId] = useState<string | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
+  // Preferensi Enter (REQ-NT-70). Bawaan `true` = perilaku lama sampai
+  // pengaturan termuat; gagal fetch tidak boleh mematikan tombol kirim.
+  const [sendOnEnter, setSendOnEnter] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [attachments, setAttachments] = useState<{ mime: string; dataUrl: string }[]>([]);
@@ -208,6 +212,22 @@ export function ChatView({
           stt: data?.stt === true,
           tts: data?.tts === true,
         });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Preferensi Enter/Shift+Enter dibaca sekali saat mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/kawan/v1/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const settings = data?.settings as { sendOnEnter?: unknown } | undefined;
+        if (typeof settings?.sendOnEnter === "boolean") setSendOnEnter(settings.sendOnEnter);
       })
       .catch(() => {});
     return () => {
@@ -438,8 +458,13 @@ export function ChatView({
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
+      setCopyError(false);
       setTimeout(() => setCopiedId(null), 2000);
-    } catch {}
+    } catch {
+      // Clipboard ditolak: pengguna diberi tahu, isi pesan tidak disiarkan.
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 3000);
+    }
   }
 
   async function handleRegenerate(messageId: string) {
@@ -846,6 +871,12 @@ export function ChatView({
         <div ref={messagesEndRef} />
       </div>
 
+      {copyError && (
+        <p role="status" aria-live="polite" className="mb-2 text-xs text-destructive">
+          Salin gagal. Pilih teksnya lalu salin manual.
+        </p>
+      )}
+
       {errorState && (
         <div
           role="status"
@@ -980,13 +1011,19 @@ export function ChatView({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               // Enter during IME composition (Japanese/Chinese/Vietnamese input) must not send.
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+              // `sendOnEnter` menentukan arah: false berarti Shift+Enter yang mengirim.
+              if (e.shiftKey !== sendOnEnter) {
                 e.preventDefault();
                 handleSend();
               }
             }}
             aria-label="Tulis pesan"
-            placeholder="Tulis pesan... (Enter untuk kirim, Shift+Enter untuk baris baru)"
+            placeholder={
+              sendOnEnter
+                ? "Tulis pesan... (Enter untuk kirim, Shift+Enter untuk baris baru)"
+                : "Tulis pesan... (Shift+Enter untuk kirim, Enter untuk baris baru)"
+            }
             className="w-full resize-none bg-transparent px-4 py-3.5 text-sm outline-none max-h-36 min-h-[52px]"
             rows={1}
             disabled={isStreaming}

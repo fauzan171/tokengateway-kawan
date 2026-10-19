@@ -61,25 +61,31 @@ function MermaidDiagram({ code }: { code: string }) {
 }
 
 function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   return (
-    <button
-      type="button"
-      aria-label={copied ? "Tersalin" : "Salin kode"}
-      title="Salin kode"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          /* Clipboard blocked: the code stays selectable. */
-        }
-      }}
-      className="absolute right-2 top-2 rounded-md border bg-background/80 p-1.5 text-muted-foreground hover:text-foreground"
-    >
-      {copied ? <Check className="size-3.5 text-green-600" /> : <Copy className="size-3.5" />}
-    </button>
+    <>
+      <button
+        type="button"
+        aria-label={status === "copied" ? "Tersalin" : "Salin kode"}
+        title="Salin kode"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(text);
+            setStatus("copied");
+          } catch {
+            // Clipboard ditolak: beri tahu tanpa menyiarkan isi blok kode.
+            setStatus("failed");
+          }
+          setTimeout(() => setStatus("idle"), 1500);
+        }}
+        className="absolute right-2 top-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border bg-background/80 p-1.5 text-muted-foreground hover:text-foreground"
+      >
+        {status === "copied" ? <Check className="size-3.5 text-green-600" /> : <Copy className="size-3.5" />}
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {status === "copied" ? "Kode disalin." : status === "failed" ? "Salin gagal; pilih kode manual." : ""}
+      </span>
+    </>
   );
 }
 
