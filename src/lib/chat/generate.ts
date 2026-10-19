@@ -460,7 +460,7 @@ export async function runGeneration(
 ): Promise<void> {
   const generation = await db.generation.findUnique({
     where: { id: generationId },
-    select: { id: true, chatId: true, assistantMessageId: true },
+    select: { id: true, chatId: true, userMessageId: true, assistantMessageId: true },
   });
   if (!generation) throw new GenerationSetupError(`Generation "${generationId}" tidak ditemukan.`);
 
@@ -487,6 +487,28 @@ export async function runGeneration(
   });
   const ancestry = buildAncestryPath(rows, generation.assistantMessageId);
   const messages = buildMessages(ancestry, generation.assistantMessageId);
+
+  // Pohon cacat (mis. assistant ber-`parentId` NULL) membuat ancestry kosong
+  // dan gateway menolak `messages: []` dengan 400 yang tidak bisa didiagnosis
+  // (AUD-01). Hentikan SEBELUM fetch dengan kode yang jelas.
+  if (
+    !ancestry.some((node) => node.id === generation.userMessageId) ||
+    !messages.some((message) => message.role === "user")
+  ) {
+    await failGeneration(
+      db,
+      generationId,
+      generation.assistantMessageId,
+      new GenerationError(
+        "INVALID_ANCESTRY",
+        "Riwayat pesan untuk generasi ini tidak lengkap.",
+        false,
+      ),
+      "",
+      new Date(),
+    );
+    return;
+  }
 
   // Konteks rujukan dokumen (WP-NT-P6-07, SDD-6.2/6.3). Kegagalan retrieval
   // tidak boleh menggagalkan chat: tangkap, lanjut tanpa konteks.

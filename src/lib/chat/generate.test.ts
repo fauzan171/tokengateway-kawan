@@ -206,6 +206,21 @@ describe("runGeneration", () => {
     expect(JSON.parse(done.payloadJson)).toEqual({ status: "stopped" });
   });
 
+  it("pohon tanpa pesan user (parentId NULL) → INVALID_ANCESTRY tanpa fetch (AUD-01)", async () => {
+    const { assistantMessageId, generationId } = await seedGeneration("usage-present");
+    const before = fixture.requests.length;
+    // Bentuk data rusak: placeholder assistant lepas dari pesan user.
+    await db.chatMessage.update({ where: { id: assistantMessageId }, data: { parentId: null } });
+
+    await run(generationId);
+
+    expect(fixture.requests.length).toBe(before);
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("error");
+    expect(generation.errorCode).toBe("INVALID_ANCESTRY");
+    expect(generation.finishedAt).not.toBeNull();
+  });
+
   it("koneksi tanpa kunci yang cocok → galat setup, tidak menulis event", async () => {
     await db.connection.deleteMany({ where: { userId } });
     const chat = await createChat(db, { userId });
