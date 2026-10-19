@@ -11,7 +11,13 @@
  * Server-only: memakai `fetch` ke provider embedding.
  */
 
-import { assertOutboundAllowed, DEFAULT_OUTBOUND_OPTIONS, type OutboundPolicyOptions } from "@/lib/net";
+import { ApiError } from "@/lib/api/errors";
+import {
+  assertOutboundAllowed,
+  fetchOutbound,
+  DEFAULT_OUTBOUND_OPTIONS,
+  type OutboundPolicyOptions,
+} from "@/lib/net";
 import type { ChunkDraft } from "./chunk";
 
 /** Konfigurasi provider embedding. Tanpa ini, fitur jatuh ke pencarian kata
@@ -138,16 +144,22 @@ async function embedBatch(
 
     let response: Response;
     try {
-      response = await fetch(target, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+      response = await fetchOutbound(
+        target,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+          },
+          body: JSON.stringify({ model: config.model, input: texts }),
+          signal,
         },
-        body: JSON.stringify({ model: config.model, input: texts }),
-        signal,
-      });
+        options.outbound ?? DEFAULT_OUTBOUND_OPTIONS,
+      );
     } catch (err) {
+      // Penolakan redirect = keputusan kebijakan, bukan gangguan sementara.
+      if (err instanceof ApiError) throw err;
       // Jaringan putus/timeout: bisa dipulihkan, coba lagi dengan jeda.
       lastError = new EmbedError(
         `Provider embedding tidak terjangkau: ${err instanceof Error ? err.message : String(err)}`,

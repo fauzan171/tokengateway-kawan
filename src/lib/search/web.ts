@@ -9,7 +9,8 @@
  * menerima boolean dari `GET /api/kawan/v1/capabilities`.
  */
 
-import { assertOutboundAllowed, DEFAULT_OUTBOUND_OPTIONS } from "@/lib/net";
+import { ApiError } from "@/lib/api/errors";
+import { assertOutboundAllowed, fetchOutbound, DEFAULT_OUTBOUND_OPTIONS } from "@/lib/net";
 
 export type WebSearchConfig = {
   baseUrl: string;
@@ -82,15 +83,21 @@ export async function webSearch(
 
   let response: Response;
   try {
-    response = await fetch(target, {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+    response = await fetchOutbound(
+      target,
+      {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+        },
+        signal,
       },
-      signal,
-    });
-  } catch {
+      DEFAULT_OUTBOUND_OPTIONS,
+    );
+  } catch (err) {
+    // Penolakan redirect tetap BAD_URL: itu keputusan kebijakan, bukan gangguan.
+    if (err instanceof ApiError) throw err;
     // Detail galat jaringan tidak diteruskan: bisa memuat alamat internal.
     throw new SearchError("Mesin pencari tidak dapat dihubungi.", true);
   }

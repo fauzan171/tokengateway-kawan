@@ -115,6 +115,63 @@ describe("jalur nyata: fetchJson", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("302 ke alamat metadata ditolak sebelum target kedua dipanggil", async () => {
+    const fetchMock = vi.fn(async (url: URL | string) => {
+      const target = String(url);
+      if (target.includes("169.254.169.254")) {
+        throw new Error(`target privat terpanggil: ${target}`);
+      }
+      return new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchJson("https://publik.contoh.test/v1", { outbound: options })).rejects.toMatchObject({
+      code: "BAD_URL",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("302 lintas host publik juga ditolak", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(null, { status: 302, headers: { location: "https://lain.contoh.test/v2" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchJson("https://publik.contoh.test/v1", { outbound: options })).rejects.toMatchObject({
+      code: "BAD_URL",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("POST tidak mengikuti redirect sama sekali", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(null, { status: 307, headers: { location: "https://publik.contoh.test/v2" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchJson("https://publik.contoh.test/v1", { method: "POST", body: { a: 1 }, outbound: options }),
+    ).rejects.toMatchObject({ code: "BAD_URL" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("redirect GET ke origin sama tetap diikuti", async () => {
+    const fetchMock = vi.fn(async (url: URL | string) => {
+      const target = String(url);
+      if (target.endsWith("/v2")) return new Response("{}", { status: 200 });
+      return new Response(null, { status: 302, headers: { location: "/v2" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchJson("https://publik.contoh.test/v1", { outbound: options })).resolves.toMatchObject({
+      status: 200,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("host publik tetap di-fetch: kebijakan tidak memblokir semua", async () => {
     const fetchMock = spyFetch();
     vi.stubGlobal("fetch", fetchMock);

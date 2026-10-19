@@ -7,7 +7,12 @@
  */
 
 import { ApiError, STATUS } from "@/lib/api/errors";
-import { assertOutboundAllowed, DEFAULT_OUTBOUND_OPTIONS, type OutboundPolicyOptions } from "@/lib/net";
+import {
+  assertOutboundAllowed,
+  fetchOutbound,
+  DEFAULT_OUTBOUND_OPTIONS,
+  type OutboundPolicyOptions,
+} from "@/lib/net";
 import { readMediaConfig } from "./config";
 
 const TIMEOUT_MS = 120_000;
@@ -60,13 +65,18 @@ export async function transcribeAudio(input: {
 
   let response: Response;
   try {
-    response = await fetch(target, {
-      method: "POST",
-      headers: { authorization: `Bearer ${input.apiKey}` },
-      body: form,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch {
+    response = await fetchOutbound(
+      target,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${input.apiKey}` },
+        body: form,
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      },
+      input.outbound ?? DEFAULT_OUTBOUND_OPTIONS,
+    );
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
     throw upstreamError(true);
   }
 
@@ -119,18 +129,23 @@ export async function synthesizeSpeech(input: {
 
   let response: Response;
   try {
-    response = await fetch(target, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${input.apiKey}` },
-      body: JSON.stringify({
-        model,
-        input: clipped,
-        voice: input.voice?.trim() || config?.voice || "alloy",
-        response_format: "mp3",
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch {
+    response = await fetchOutbound(
+      target,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${input.apiKey}` },
+        body: JSON.stringify({
+          model,
+          input: clipped,
+          voice: input.voice?.trim() || config?.voice || "alloy",
+          response_format: "mp3",
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      },
+      input.outbound ?? DEFAULT_OUTBOUND_OPTIONS,
+    );
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
     throw upstreamError(true);
   }
 

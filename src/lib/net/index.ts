@@ -8,6 +8,7 @@
 export {
   assertOutboundAllowed,
   assertRedirectAllowed,
+  fetchOutbound,
   isBlockedAddress,
   DEFAULT_OUTBOUND_OPTIONS,
   OUTBOUND_LIMITS,

@@ -7,7 +7,12 @@
  */
 
 import { ApiError, STATUS } from "@/lib/api/errors";
-import { assertOutboundAllowed, DEFAULT_OUTBOUND_OPTIONS, type OutboundPolicyOptions } from "@/lib/net";
+import {
+  assertOutboundAllowed,
+  fetchOutbound,
+  DEFAULT_OUTBOUND_OPTIONS,
+  type OutboundPolicyOptions,
+} from "@/lib/net";
 import { readMediaConfig } from "./config";
 
 export type ImageRequest = {
@@ -41,19 +46,25 @@ async function postGeneration(input: ImageRequest, model: string, prompt: string
 
   let response: Response;
   try {
-    response = await fetch(target, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${input.apiKey}` },
-      body: JSON.stringify({
-        model,
-        prompt,
-        size: input.size ?? "1024x1024",
-        response_format: "b64_json",
-        n: 1,
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch {
+    response = await fetchOutbound(
+      target,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${input.apiKey}` },
+        body: JSON.stringify({
+          model,
+          prompt,
+          size: input.size ?? "1024x1024",
+          response_format: "b64_json",
+          n: 1,
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      },
+      input.outbound ?? DEFAULT_OUTBOUND_OPTIONS,
+    );
+  } catch (err) {
+    // Redirect ditolak kebijakan: kode BAD_URL lebih tepat daripada gangguan.
+    if (err instanceof ApiError) throw err;
     // Detail galat jaringan tidak diteruskan: bisa memuat alamat internal.
     throw new ApiError({
       status: STATUS.BAD_GATEWAY,
@@ -82,8 +93,13 @@ async function downloadImage(
   const target = await assertOutboundAllowed(rawUrl, outbound);
   let response: Response;
   try {
-    response = await fetch(target, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  } catch {
+    response = await fetchOutbound(
+      target,
+      { signal: AbortSignal.timeout(TIMEOUT_MS) },
+      outbound,
+    );
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
     throw new ApiError({
       status: STATUS.BAD_GATEWAY,
       code: "MEDIA_UPSTREAM",

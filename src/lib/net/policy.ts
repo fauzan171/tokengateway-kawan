@@ -75,6 +75,10 @@ export const DEFAULT_OUTBOUND_OPTIONS: OutboundPolicyOptions = {
 export const OUTBOUND_LIMITS = {
   connectTimeoutMs: 5_000,
   totalTimeoutMs: 15_000,
+  /** Jeda maksimum antar potongan stream. Bukan durasi total: model reasoning
+   *  butuh puluhan detik untuk menjawab penuh, dan memotongnya di tengah
+   *  menghasilkan TIMEOUT palsu. */
+  streamIdleTimeoutMs: 90_000,
   maxResponseBytes: 10 * 1024 * 1024,
 } as const;
 
@@ -299,4 +303,59 @@ export async function assertRedirectAllowed(
   }
 
   return to;
+}
+
+/** Status yang membawa header `Location` dan karena itu harus diperiksa. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/** Lompatan redirect maksimum sebelum dianggap lingkaran. */
+const MAX_REDIRECTS = 3;
+
+/**
+ * `fetch` keluar dengan redirect DIMATIKAN dan divalidasi sendiri.
+ *
+ * `fetch` bawaan mengikuti redirect otomatis sesudah URL awal lolos kebijakan,
+ * sehingga gateway yang dikendalikan pengguna bisa menembak alamat privat lewat
+ * `Location` (SDD-5.3 butir 3). Di sini setiap lompatan diperiksa
+ * `assertRedirectAllowed` LEBIH DULU; target hanya dihubungi bila lolos.
+ *
+ * Permintaan non-GET/HEAD dengan body (POST form, JSON, stream) TIDAK diikuti:
+ * mengulanginya ke alamat lain berarti mengirim ulang kredensial dan isi ke
+ * tujuan yang belum tentu sama. Redirect semacam itu ditolak.
+ *
+ * `url` sudah divalidasi pemanggil lewat `assertOutboundAllowed` (mereka
+ * membutuhkannya untuk galat kebijakan yang spesifik).
+ */
+export async function fetchOutbound(
+  url: URL,
+  init: RequestInit,
+  options: OutboundPolicyOptions,
+  maxRedirects: number = MAX_REDIRECTS,
+): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const redirectable = method === "GET" || method === "HEAD";
+
+  let current = url;
+  for (let hop = 0; hop <= maxRedirects; hop += 1) {
+    const response = await fetch(current, { ...init, redirect: "manual" });
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
+
+    const location = response.headers.get("location");
+    // Body 3xx dibuang; ia bukan isi yang dipakai pemanggil, dan membiarkannya
+    // terbuka menahan soket sampai timeout.
+    await response.body?.cancel().catch(() => {});
+
+    if (!redirectable) throw badUrl("Redirect pada permintaan ini tidak diizinkan.");
+    if (!location) throw badUrl("Redirect tanpa alamat tujuan.");
+
+    let next: URL;
+    try {
+      next = new URL(location, current);
+    } catch {
+      throw badUrl("Alamat redirect tidak valid.");
+    }
+    current = await assertRedirectAllowed(current.toString(), next.toString(), options);
+  }
+
+  throw badUrl("Terlalu banyak redirect.");
 }

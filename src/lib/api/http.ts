@@ -9,7 +9,7 @@
  * hostname yang menunjuk ke alamat privat ikut tertolak — bukan hanya literal.
  */
 
-import { assertOutboundAllowed, DEFAULT_OUTBOUND_OPTIONS, type OutboundPolicyOptions } from "@/lib/net";
+import { assertOutboundAllowed, fetchOutbound, DEFAULT_OUTBOUND_OPTIONS, type OutboundPolicyOptions } from "@/lib/net";
 import { ApiError, STATUS } from "./errors";
 
 export type FetchJsonOptions = {
@@ -42,13 +42,20 @@ export async function fetchJson<T>(
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: options.method ?? "GET",
-      headers: options.headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal,
-    });
+    response = await fetchOutbound(
+      url,
+      {
+        method: options.method ?? "GET",
+        headers: options.headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal,
+      },
+      options.outbound ?? DEFAULT_OUTBOUND_OPTIONS,
+    );
   } catch (err) {
+    // Penolakan redirect (BAD_URL) sudah punya kode dan pesan sendiri; jangan
+    // ditimpa jadi "gateway tidak dapat dihubungi".
+    if (err instanceof ApiError) throw err;
     if (err instanceof Error && err.name === "TimeoutError") {
       throw new ApiError({
         status: STATUS.GATEWAY_TIMEOUT,

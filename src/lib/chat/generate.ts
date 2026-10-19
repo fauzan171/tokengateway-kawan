@@ -23,7 +23,12 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/errors";
 import { getActiveConnection } from "@/lib/connections/connections";
 import type { Db } from "@/lib/db";
-import { assertOutboundAllowed, OUTBOUND_LIMITS, type OutboundPolicyOptions } from "@/lib/net";
+import {
+  assertOutboundAllowed,
+  fetchOutbound,
+  OUTBOUND_LIMITS,
+  type OutboundPolicyOptions,
+} from "@/lib/net";
 import {
   DISCONNECTED_MESSAGE,
   PROVIDER_MESSAGES,
@@ -220,23 +225,45 @@ async function streamGateway(input: {
   };
   if (input.apiKey !== "") headers["authorization"] = `Bearer ${input.apiKey}`;
 
-  const combined = AbortSignal.any([
-    input.signal,
-    AbortSignal.timeout(OUTBOUND_LIMITS.totalTimeoutMs),
-  ]);
+  // Batas waktu di sini adalah JEDA antar potongan, bukan durasi total: stream
+  // panjang tidak boleh dipotong hanya karena modelnya lambat menjawab.
+  const idle = new AbortController();
+  let idleFired = false;
+  const bumpIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleFired = true;
+      idle.abort();
+    }, OUTBOUND_LIMITS.streamIdleTimeoutMs);
+  };
+  let idleTimer = setTimeout(() => {
+    idleFired = true;
+    idle.abort();
+  }, OUTBOUND_LIMITS.streamIdleTimeoutMs);
+
+  const combined = AbortSignal.any([input.signal, idle.signal]);
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(input.body),
-      signal: combined,
-    });
+    // POST ber-body: redirect TIDAK diikuti (kredensial & isi tidak dikirim
+    // ulang ke tujuan lain); `fetchOutbound` menolaknya sebagai BAD_URL.
+    response = await fetchOutbound(
+      url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(input.body),
+        signal: combined,
+      },
+      input.outbound,
+    );
   } catch (err) {
+    clearTimeout(idleTimer);
     if (input.signal.aborted) throw err;
+    if (idleFired) throw new GenerationError("TIMEOUT", PROVIDER_MESSAGES.TIMEOUT, true);
     throw transportError(err);
   }
+  bumpIdle();
 
   if (!response.ok) {
     // 401/403 gateway BUKAN 401 akun: dipetakan jadi kode provider (SDD-5.4).
@@ -256,6 +283,7 @@ async function streamGateway(input: {
   try {
     for (;;) {
       const { done, value } = await reader.read();
+      bumpIdle();
       if (done) break;
       // Setiap potongan diperiksa (SDD-4.6): begitu `cancelRequestedAt` terisi,
       // potongan yang baru dibaca ini TIDAK ditulis dan koneksi ditutup —
