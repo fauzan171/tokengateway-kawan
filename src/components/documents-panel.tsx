@@ -148,7 +148,7 @@ export function DocumentsPanel() {
     <section aria-label="Dokumen" className="mb-2 rounded-2xl border bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">Dokumen</p>
-        <label className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border px-3 text-sm font-medium hover:bg-muted">
+        <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm font-medium hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
           {uploading ? "Mengunggah…" : "Lampirkan dokumen"}
           <input
             type="file"

@@ -798,7 +798,7 @@ export function ChatView({
                         type="button"
                         aria-label="Salin pesan"
                         onClick={() => handleCopy(m.id, text)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-foreground"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 hover:text-foreground focus-visible:opacity-100"
                         title="Salin"
                       >
                         {copiedId === m.id ? (
@@ -818,7 +818,7 @@ export function ChatView({
                           setEditingId(m.id);
                           setEditText(text);
                         }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-foreground disabled:opacity-0"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 hover:text-foreground focus-visible:opacity-100 disabled:opacity-0"
                         title="Edit pesan"
                       >
                         <Pencil className="size-3.5" />
@@ -831,7 +831,7 @@ export function ChatView({
                         aria-label="Regenerasi balasan"
                         disabled={isStreaming}
                         onClick={() => handleRegenerate(m.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-foreground disabled:opacity-0"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 hover:text-foreground focus-visible:opacity-100 disabled:opacity-0"
                         title="Regenerasi balasan"
                       >
                         <RotateCcw className="size-3.5" />
@@ -985,6 +985,7 @@ export function ChatView({
                 handleSend();
               }
             }}
+            aria-label="Tulis pesan"
             placeholder="Tulis pesan... (Enter untuk kirim, Shift+Enter untuk baris baru)"
             className="w-full resize-none bg-transparent px-4 py-3.5 text-sm outline-none max-h-36 min-h-[52px]"
             rows={1}

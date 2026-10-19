@@ -13,7 +13,7 @@ import { useRef } from "react";
 import { Image as ImageIcon, Mic, Volume2 } from "lucide-react";
 
 const buttonClass =
-  "rounded-lg p-2 text-muted-foreground hover:text-foreground disabled:opacity-50";
+  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-muted-foreground hover:text-foreground disabled:opacity-50";
 
 export function MediaControls({
   onImage,

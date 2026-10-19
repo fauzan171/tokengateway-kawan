@@ -85,6 +85,21 @@ describe("PromptPicker", () => {
     expect(applied).toEqual(["Ringkas {{isi}}"]);
   });
 
+  it("Escape menutup popup dan fokus kembali ke pemicu (UX-07)", async () => {
+    await mount([prompt({ title: "Ringkas" })]);
+
+    const trigger = [...container.querySelectorAll("button")].find((b) => b.textContent === "Prompt")!;
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("prompt bawaan tidak punya tombol hapus", async () => {
     await mount([
       prompt({ id: "bawaan", title: "Bawaan", isDefault: true }),

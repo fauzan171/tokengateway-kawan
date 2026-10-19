@@ -7,7 +7,7 @@
  * besar percakapan tidak memakai prompt, jadi tidak perlu permintaan tambahan.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type PromptItem = {
   id: string;
@@ -27,6 +27,25 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  // Escape menutup popup dan fokus kembali ke pemicu (UX-07).
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  // Fokus masuk ke kontrol pertama saat popup dibuka.
+  useEffect(() => {
+    if (open) popupRef.current?.querySelector<HTMLElement>("button, input, textarea")?.focus();
+  }, [open]);
 
   const load = useCallback(async () => {
     try {
@@ -89,16 +108,17 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground"
       >
         Prompt
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 z-10 mb-2 w-80 rounded-xl border bg-background p-3 shadow-md">
+        <div ref={popupRef} className="absolute bottom-full left-0 z-10 mb-2 w-80 rounded-xl border bg-background p-3 shadow-md">
           {prompts.length > 0 && (
             <ul className="mb-3 max-h-56 space-y-1 overflow-y-auto">
               {prompts.map((prompt) => (
@@ -109,7 +129,7 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
                       onApply(prompt.body);
                       setOpen(false);
                     }}
-                    className="flex-1 truncate rounded-lg px-2 py-1 text-left text-sm hover:bg-muted"
+                    className="min-h-11 flex-1 truncate rounded-lg px-2 text-left text-sm hover:bg-muted"
                   >
                     {prompt.title}
                     {prompt.variables.length > 0 && (
@@ -123,7 +143,7 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
                       type="button"
                       aria-label={`Hapus prompt ${prompt.title}`}
                       onClick={() => void remove(prompt.id)}
-                      className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
+                      className="inline-flex min-h-11 items-center rounded-lg px-2 text-xs text-muted-foreground hover:text-destructive"
                     >
                       Hapus
                     </button>
@@ -139,7 +159,7 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Judul prompt"
               aria-label="Judul prompt"
-              className="w-full rounded-lg border bg-transparent px-2 py-1 text-sm outline-none"
+              className="min-h-11 w-full rounded-lg border bg-transparent px-2 text-sm outline-none"
             />
             <textarea
               value={body}
@@ -147,13 +167,13 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
               placeholder="Isi prompt, boleh memakai {{isi}}"
               aria-label="Isi prompt"
               rows={3}
-              className="w-full resize-none rounded-lg border bg-transparent px-2 py-1 text-sm outline-none"
+              className="min-h-11 w-full resize-none rounded-lg border bg-transparent px-2 text-sm outline-none"
             />
             <button
               type="button"
               onClick={() => void save()}
               disabled={!title.trim() || !body.trim()}
-              className="rounded-lg border px-2 py-1 text-xs disabled:opacity-50"
+              className="min-h-11 rounded-lg border px-2 text-xs disabled:opacity-50"
             >
               Simpan prompt
             </button>

@@ -49,6 +49,8 @@ export function ChatSidebar({
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Fokus dikembalikan ke tombol pemicu saat menu ditutup (UX-04).
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async (cursor?: string) => {
     const params = new URLSearchParams({ limit: "50" });
@@ -90,8 +92,18 @@ export function ChatSidebar({
     const close = (event: MouseEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) setMenuId(null);
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuId(null);
+        menuTriggerRef.current?.focus();
+      }
+    };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [menuId]);
 
   async function patchChat(id: string, body: Record<string, unknown>) {
@@ -265,7 +277,7 @@ export function ChatSidebar({
                         type="button"
                         onClick={() => onSelect(chat.id)}
                         aria-current={activeChatId === chat.id ? "page" : undefined}
-                        className="min-h-9 min-w-0 flex-1 truncate rounded-md px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-muted aria-[current=page]:font-medium"
+                        className="min-h-11 min-w-0 flex-1 truncate rounded-md px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-muted aria-[current=page]:font-medium"
                       >
                         {chat.pinned && <Pin aria-hidden className="mr-1 inline size-3 align-[-1px]" />}
                         {chat.title}
@@ -273,9 +285,13 @@ export function ChatSidebar({
                       <Button
                         variant="ghost"
                         size="icon-xs"
+                        className="min-h-11 min-w-11"
                         aria-label={`Aksi untuk ${chat.title}`}
                         aria-expanded={menuId === chat.id}
-                        onClick={() => setMenuId(menuId === chat.id ? null : chat.id)}
+                        onClick={(event) => {
+                          menuTriggerRef.current = event.currentTarget;
+                          setMenuId(menuId === chat.id ? null : chat.id);
+                        }}
                       >
                         <MoreHorizontal aria-hidden />
                       </Button>
@@ -359,7 +375,7 @@ function MenuItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${destructive ? "text-destructive" : ""}`}
+      className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${destructive ? "text-destructive" : ""}`}
     >
       <span className="[&_svg]:size-4">{icon}</span>
       {children}
