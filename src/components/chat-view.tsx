@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Markdown } from "./markdown";
-import { DocumentsPanel } from "./documents-panel";
+import { DocumentAttachButton, DocumentChips, useDocuments } from "./documents-panel";
 import { SourceList } from "./source-list";
 import { PromptPicker } from "./prompt-picker";
 import { MediaControls } from "./media-controls";
@@ -165,6 +165,7 @@ export function ChatView({
   const [sendOnEnter, setSendOnEnter] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const documentsApi = useDocuments();
   const [attachments, setAttachments] = useState<{ mime: string; dataUrl: string }[]>([]);
   const [modelRef, setModelRef] = useState(DEFAULT_MODEL);
   const [vision, setVision] = useState(false);
@@ -912,11 +913,6 @@ export function ChatView({
         </div>
       )}
 
-      {/* Dokumen (WP-NT-P6-10) */}
-      <div className="mt-auto pt-2">
-        <DocumentsPanel />
-      </div>
-
       {/* Input Composer */}
       <form onSubmit={handleSend} className="relative pt-2">
         {attachments.length > 0 && (
@@ -945,7 +941,10 @@ export function ChatView({
         <div className="mb-1 flex items-center">
           <PromptPicker onApply={(body) => setInput(applyVariables(body, { isi: input }))} />
         </div>
-        <div className="relative flex items-center rounded-2xl border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+        <div className="relative rounded-2xl border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+          {/* Dokumen (WP-NT-P6-10): chip di dalam kotak, seperti ChatGPT/Gemini. */}
+          <DocumentChips api={documentsApi} />
+          <div className="flex items-center">
           {webSearchAvailable && (
             <button
               type="button"
@@ -1013,6 +1012,7 @@ export function ChatView({
               </button>
             </>
           )}
+          <DocumentAttachButton api={documentsApi} />
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1060,6 +1060,7 @@ export function ChatView({
                 <Send className="size-4" />
               </Button>
             )}
+          </div>
           </div>
         </div>
       </form>

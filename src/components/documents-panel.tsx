@@ -1,16 +1,17 @@
 "use client";
 
 /**
- * Panel dokumen: unggah, status ingestion, hapus, coba lagi (WP-NT-P6-10,
- * REQ-NT-47, REQ-NT-54).
+ * Dokumen sebagai lampiran composer (WP-NT-P6-10, REQ-NT-47, REQ-NT-54).
  *
- * Satu-satunya timer di komponen ini adalah polling 2 detik yang hidup hanya
- * selama ada dokumen `queued`/`processing`. Status diumumkan lewat wadah
- * `role="status"` (SDD-7.5).
+ * Dulu panel terpisah di bawah chat. Sekarang menempel di kotak input seperti
+ * ChatGPT/Gemini: chip di atas textarea, tombol lampirkan di toolbar. State
+ * diangkat ke `useDocuments` supaya chip dan tombol berbagi satu daftar.
+ *
+ * Satu-satunya timer: polling 2 detik selama ada dokumen `queued`/`processing`.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { FileText, Trash2 } from "lucide-react";
+import { FileText, LoaderCircle, Paperclip, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/context";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -31,7 +32,7 @@ const STATUS_LABEL: Record<string, MessageKey> = {
 const STATUS_CLASS: Record<string, string> = {
   queued: "text-muted-foreground",
   processing: "text-muted-foreground",
-  ready: "text-foreground",
+  ready: "text-emerald-600 dark:text-emerald-500",
   failed: "text-destructive",
 };
 
@@ -53,7 +54,16 @@ function isPending(status: string): boolean {
   return status === "queued" || status === "processing";
 }
 
-export function DocumentsPanel() {
+export type DocumentsApi = {
+  documents: DocumentItem[];
+  error: string | null;
+  uploading: boolean;
+  upload: (file: File) => Promise<void>;
+  retry: (id: string) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+};
+
+export function useDocuments(): DocumentsApi {
   const t = useT();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -91,127 +101,171 @@ export function DocumentsPanel() {
     return () => clearInterval(timer);
   }, [polling, load]);
 
-  async function handleUpload(file: File) {
-    setUploading(true);
-    setError(null);
-    const body = new FormData();
-    body.append("file", file);
-    try {
-      const response = await fetch("/api/kawan/v1/documents", { method: "POST", body });
-      if (response.status === 401) {
-        setError(t("common.sessionExpired"));
-        return;
+  const upload = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      setError(null);
+      const body = new FormData();
+      body.append("file", file);
+      try {
+        const response = await fetch("/api/kawan/v1/documents", { method: "POST", body });
+        if (response.status === 401) {
+          setError(t("common.sessionExpired"));
+          return;
+        }
+        const data = (await response.json().catch(() => null)) as
+          | { document?: DocumentItem; error?: { message?: string } }
+          | null;
+        if (!response.ok || !data?.document) {
+          setError(data?.error?.message ?? t("documents.uploadFailed"));
+          return;
+        }
+        setDocuments((current) => [data.document as DocumentItem, ...current]);
+      } catch {
+        setError(t("documents.uploadFailedNetwork"));
+      } finally {
+        setUploading(false);
       }
-      const data = (await response.json().catch(() => null)) as
-        | { document?: DocumentItem; error?: { message?: string } }
-        | null;
-      if (!response.ok || !data?.document) {
-        setError(data?.error?.message ?? t("documents.uploadFailed"));
-        return;
-      }
-      setDocuments((current) => [data.document as DocumentItem, ...current]);
-    } catch {
-      setError(t("documents.uploadFailedNetwork"));
-    } finally {
-      setUploading(false);
-    }
-  }
+    },
+    [t],
+  );
 
-  async function handleRetry(id: string) {
-    setError(null);
-    try {
-      const response = await fetch(`/api/kawan/v1/documents/${id}/retry`, { method: "POST" });
-      if (!response.ok) {
+  const retry = useCallback(
+    async (id: string) => {
+      setError(null);
+      try {
+        const response = await fetch(`/api/kawan/v1/documents/${id}/retry`, { method: "POST" });
+        if (!response.ok) {
+          setError(t("documents.retryFailed"));
+          return;
+        }
+        setDocuments((current) =>
+          current.map((item) => (item.id === id ? { ...item, status: "queued", errorCode: null } : item)),
+        );
+      } catch {
         setError(t("documents.retryFailed"));
-        return;
       }
-      setDocuments((current) =>
-        current.map((item) => (item.id === id ? { ...item, status: "queued", errorCode: null } : item)),
-      );
-    } catch {
-      setError(t("documents.retryFailed"));
-    }
-  }
+    },
+    [t],
+  );
 
-  async function handleDelete(id: string) {
-    setError(null);
-    try {
-      const response = await fetch(`/api/kawan/v1/documents/${id}`, { method: "DELETE" });
-      if (!response.ok) {
+  const remove = useCallback(
+    async (id: string) => {
+      setError(null);
+      try {
+        const response = await fetch(`/api/kawan/v1/documents/${id}`, { method: "DELETE" });
+        if (!response.ok) {
+          setError(t("documents.deleteFailed"));
+          return;
+        }
+        setDocuments((current) => current.filter((item) => item.id !== id));
+      } catch {
         setError(t("documents.deleteFailed"));
-        return;
       }
-      setDocuments((current) => current.filter((item) => item.id !== id));
-    } catch {
-      setError(t("documents.deleteFailed"));
-    }
-  }
+    },
+    [t],
+  );
+
+  return { documents, error, uploading, upload, retry, remove };
+}
+
+/** Tombol lampirkan dokumen di toolbar composer. */
+export function DocumentAttachButton({ api }: { api: DocumentsApi }) {
+  const t = useT();
+  const { uploading, upload } = api;
+  return (
+    <label
+      aria-label={t("documents.attach")}
+      title={t("documents.attach")}
+      className={`ml-2 rounded-lg p-2 hover:text-foreground ${
+        uploading ? "cursor-wait opacity-50" : "cursor-pointer text-muted-foreground"
+      }`}
+    >
+      {uploading ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Paperclip aria-hidden className="size-4" />}
+      <input
+        type="file"
+        accept={ACCEPT.join(",")}
+        className="sr-only"
+        disabled={uploading}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void upload(file);
+        }}
+      />
+    </label>
+  );
+}
+
+/** Chip lampiran di dalam kotak input, gaya ChatGPT/Gemini. */
+export function DocumentChips({ api }: { api: DocumentsApi }) {
+  const t = useT();
+  const { documents, error, retry, remove } = api;
+  if (documents.length === 0 && !error) return null;
 
   return (
-    <section aria-label={t("documents.title")} className="mb-2 rounded-2xl border bg-background p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium">{t("documents.title")}</p>
-        <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm font-medium hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
-          {uploading ? t("documents.uploading") : t("documents.attach")}
-          <input
-            type="file"
-            accept={ACCEPT.join(",")}
-            className="sr-only"
-            disabled={uploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void handleUpload(file);
-            }}
-          />
-        </label>
-      </div>
-
-      {error && (
-        <p role="alert" className="mt-2 text-xs text-destructive">
-          {error}
-        </p>
-      )}
-
+    <div className="px-2 pt-2">
       <div role="status" aria-live="polite">
-        {documents.length === 0 ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t("documents.empty")}
-          </p>
-        ) : (
-          <ul className="mt-2 space-y-2">
+        {documents.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5">
             {documents.map((item) => (
-              <li key={item.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                <FileText aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate" title={item.filename}>
+              <li
+                key={item.id}
+                className="flex max-w-full items-center gap-1.5 rounded-lg border bg-muted/40 py-1 pl-2 pr-1 text-xs"
+              >
+                <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 max-w-40 truncate" title={item.filename}>
                   {item.filename}
                 </span>
-                <span className="text-muted-foreground">{sizeKb(item.sizeBytes)}</span>
-                <span className={STATUS_CLASS[item.status] ?? "text-muted-foreground"}>
+                <span className="shrink-0 text-muted-foreground">{sizeKb(item.sizeBytes)}</span>
+                <span className={`shrink-0 ${STATUS_CLASS[item.status] ?? "text-muted-foreground"}`}>
                   {STATUS_LABEL[item.status] ? t(STATUS_LABEL[item.status]) : item.status}
                 </span>
                 {item.status === "failed" && (
-                  <>
-                    <span className="text-destructive">{item.errorCode ?? t("documents.extractFailed")}</span>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void handleRetry(item.id)}>
-                      {t("common.retry")}
-                    </Button>
-                  </>
+                  <span className="shrink-0 text-destructive">
+                    {item.errorCode ?? t("documents.extractFailed")}
+                  </span>
                 )}
-                <Button
+                {item.status === "failed" && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-5 px-1.5 text-[11px]"
+                    onClick={() => void retry(item.id)}
+                  >
+                    {t("common.retry")}
+                  </Button>
+                )}
+                <button
                   type="button"
-                  size="icon-sm"
-                  variant="ghost"
                   aria-label={t("documents.remove", { filename: item.filename })}
-                  onClick={() => void handleDelete(item.id)}
+                  onClick={() => void remove(item.id)}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                 >
                   <Trash2 aria-hidden className="size-3.5" />
-                </Button>
+                </button>
               </li>
             ))}
           </ul>
         )}
       </div>
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Chip + tombol dalam satu blok; dipakai test dan sebagai pemakaian mandiri. */
+export function DocumentsPanel() {
+  const api = useDocuments();
+  return (
+    <section aria-label="Dokumen">
+      <DocumentChips api={api} />
+      <DocumentAttachButton api={api} />
     </section>
   );
 }
