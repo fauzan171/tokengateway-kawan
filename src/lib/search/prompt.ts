@@ -45,6 +45,5 @@ export function buildSearchSystem(results: readonly SearchResult[]): string | un
     "",
     "Kutip penanda sumber, misalnya [S1], bila memakai isi salah satu sumber di atas.",
     "Jangan mengarang URL atau sumber yang tidak ada di daftar ini.",
-    "Jawab dalam bahasa Indonesia.",
   ].join("\n");
 }

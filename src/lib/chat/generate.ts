@@ -48,9 +48,19 @@ import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
+import { getSystemPrompt } from "./system-prompt";
 
 /** Model cadangan bila chat belum pernah memilih model. */
 export const DEFAULT_MODEL = "deepseek-v4.1-flash";
+
+/** Instruksi dasar yang selalu dikirim paling awal (WO-1). */
+const DEFAULT_SYSTEM_PROMPT = [
+  "Kamu adalah asisten AI yang membantu dan jujur.",
+  "Jawab dengan bahasa yang dipakai pengguna.",
+  "Sesuaikan panjang jawaban dengan kebutuhan pertanyaan; jangan memotong jawaban yang butuh penjelasan.",
+  "Jika tidak yakin, katakan tidak yakin. Jangan mengarang fakta, angka, atau sumber.",
+  "Gunakan markdown bila membantu keterbacaan: daftar, tabel, atau blok kode.",
+].join("\n");
 
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
 
@@ -593,8 +603,14 @@ export async function runGeneration(
     return;
   }
 
-  // Konteks rujukan dokumen (WP-NT-P6-07, SDD-6.2/6.3). Kegagalan retrieval
-  // tidak boleh menggagalkan chat: tangkap, lanjut tanpa konteks.
+  // Prompt pengguna per chat (REQ-NT-31). Baris sistem ber-`parentId` NULL
+  // sehingga tak pernah masuk ancestry; ambil langsung di sini. Bila ancestry
+  // sudah membawa role system, jangan kirim dua kali.
+  const userSystem =
+    ancestry.some((node) => node.role === "system") || messages.some((m) => m.role === "system")
+      ? null
+      : await getSystemPrompt(db, generation.chatId);
+
   const lastUser = [...messages].reverse().find((message) => message.role === "user");
   const query =
     lastUser === undefined
@@ -675,7 +691,9 @@ export async function runGeneration(
       body: {
         model,
         messages: [
-          // Konteks dokumen lebih dulu, lalu sumber web.
+          // Prompt bawaan → prompt pengguna → konteks dokumen → sumber web → riwayat.
+          { role: "system", content: DEFAULT_SYSTEM_PROMPT },
+          ...(userSystem ? [{ role: "system", content: userSystem }] : []),
           ...(contextSystem ? [{ role: "system", content: contextSystem }] : []),
           ...(searchSystem ? [{ role: "system", content: searchSystem }] : []),
           ...messages,

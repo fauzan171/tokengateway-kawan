@@ -19,6 +19,7 @@ import {
 import { createChat } from "./chats";
 import { runGeneration, type GenerateConfig } from "./generate";
 import { sendMessage } from "./messages";
+import { setSystemPrompt } from "./system-prompt";
 import { CONNECTION_API_KEY_PURPOSE, encryptSecret } from "@/lib/secrets";
 import type { Db } from "@/lib/db";
 
@@ -178,7 +179,32 @@ describe("runGeneration", () => {
     const body = request?.body as { model: string; stream: boolean; messages: unknown[] };
     expect(body.stream).toBe(true);
     expect(body.model).toBe(modelFor("usage-absent"));
-    expect(body.messages).toEqual([{ role: "user", content: "Halo" }]);
+    // Prompt bawaan selalu dikirim lebih dulu (WO-1), lalu riwayat.
+    const sent = body.messages as { role: string; content: string }[];
+    expect(sent).toHaveLength(2);
+    expect(sent[0]?.role).toBe("system");
+    expect(sent[0]?.content).toContain("Jawab dengan bahasa yang dipakai pengguna.");
+    expect(sent[1]).toEqual({ role: "user", content: "Halo" });
+  });
+
+  it("mengirim system prompt pengguna tepat setelah prompt bawaan (WO-1)", async () => {
+    const { chatId, generationId } = await seedGeneration("usage-absent");
+    await setSystemPrompt(db, {
+      chatId,
+      userId,
+      content: "Kamu adalah analis keuangan. Jawab dengan tabel.",
+    });
+
+    await run(generationId);
+
+    const body = fixture.requests.at(-1)?.body as { messages: { role: string; content: string }[] };
+    expect(body.messages[0]?.role).toBe("system");
+    expect(body.messages[1]).toEqual({
+      role: "system",
+      content: "Kamu adalah analis keuangan. Jawab dengan tabel.",
+    });
+    // Tetap satu system per lapisan: prompt bawaan + prompt pengguna, tidak dobel.
+    expect(body.messages.filter((m) => m.role === "system")).toHaveLength(2);
   });
 
   it("pembatalan sebelum potongan pertama: stopped, tanpa token (SDD-4.6)", async () => {
