@@ -684,6 +684,9 @@ export function ChatView({
                     {t("chat.webSearchUnavailable")}
                   </p>
                 )}
+                {note === "truncated" && !isEditing && (
+                  <p className="mb-1 text-xs text-muted-foreground">{t("chat.truncated")}</p>
+                )}
                 {isEditing ? (
                   <div className="w-full max-w-[85%] rounded-2xl border bg-background p-3 shadow-xs space-y-2">
                     <textarea

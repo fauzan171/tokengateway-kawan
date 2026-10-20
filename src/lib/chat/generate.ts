@@ -124,6 +124,40 @@ function messageText(contentJson: string): string {
 }
 
 /**
+ * Anggaran karakter riwayat. Model di gateway menerima konteks terbatas dan
+ * memotong dari awal (yaitu instruksi sistem) bila kelebihan, jadi riwayat
+ * dipangkas di sisi kita. 4 karakter/token adalah perkiraan kasar yang
+ * sengaja konservatif untuk bahasa Indonesia.
+ */
+const HISTORY_CHAR_BUDGET = 120_000;
+
+function messageLength(message: ChatCompletionMessage): number {
+  return typeof message.content === "string"
+    ? message.content.length
+    : message.content.reduce((sum, part) => sum + (part.type === "text" ? part.text.length : 0), 0);
+}
+
+/**
+ * Pangkas giliran terlama sampai muat, tanpa memutus pasangan user/assistant.
+ *
+ * Pemotongan selalu per dua pesan dari depan, dan pesan `user` terakhir tidak
+ * pernah dibuang: tanpa itu pertanyaan aktif ikut hilang.
+ */
+function trimHistory(
+  messages: readonly ChatCompletionMessage[],
+  budget = HISTORY_CHAR_BUDGET,
+): ChatCompletionMessage[] {
+  let total = messages.reduce((sum, message) => sum + messageLength(message), 0);
+  let start = 0;
+  while (total > budget && start + 2 <= messages.length - 1) {
+    total -= messageLength(messages[start] ?? ({} as ChatCompletionMessage));
+    total -= messageLength(messages[start + 1] ?? ({} as ChatCompletionMessage));
+    start += 2;
+  }
+  return messages.slice(start);
+}
+
+/**
  * Menyusun riwayat pesan untuk gateway dari jalur ancestry.
  *
  * Placeholder assistant milik generasi ini dikeluarkan (isinya belum ada), dan
@@ -274,6 +308,36 @@ function transportError(err: unknown): GenerationError {
 }
 
 /**
+ * 429 dan 5xx layak diulang; sisanya (4xx lain) tidak akan berubah dengan
+ * percobaan baru.
+ */
+function isTransient(status: number): boolean {
+  return status === STATUS.TOO_MANY_REQUESTS || status >= 500;
+}
+
+/** Backoff eksponensial (1s, 2s) dengan jitter; `Retry-After` menang bila ada. */
+function retryDelayMs(retryAfter: string | null, attempt: number): number {
+  const seconds = retryAfter === null ? Number.NaN : Number(retryAfter.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 30_000);
+  const base = 1000 * 2 ** (attempt - 1);
+  return base + Math.floor(Math.random() * 250);
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+/**
  * Membuka stream SSE ke gateway dan memanggil `onDelta` untuk tiap potongan.
  *
  * `signal` adalah pembatalan DARI LUAR (worker berhenti); batas waktu total
@@ -326,28 +390,58 @@ async function streamGateway(input: {
     idle.abort();
   }, OUTBOUND_LIMITS.streamIdleTimeoutMs);
 
-  const combined = AbortSignal.any([input.signal, idle.signal]);
-
-  let response: Response;
-  try {
-    // POST ber-body: redirect TIDAK diikuti (kredensial & isi tidak dikirim
-    // ulang ke tujuan lain); `fetchOutbound` menolaknya sebagai BAD_URL.
-    response = await fetchOutbound(
-      url,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify(input.body),
-        signal: combined,
+  // Stop pengguna harus memutus koneksi SEGERA, bukan menunggu potongan
+  // berikutnya: stream yang sedang diam akan menggantung sampai idle timeout.
+  const stopSignal = new AbortController();
+  const stopPoll = setInterval(() => {
+    void input.shouldStop().then(
+      (stop) => {
+        if (stop) stopSignal.abort();
       },
-      input.outbound,
+      () => {},
     );
-  } catch (err) {
-    clearTimeout(idleTimer);
-    if (input.signal.aborted) throw err;
-    if (idleFired) throw new GenerationError("TIMEOUT", PROVIDER_MESSAGES.TIMEOUT, true);
-    throw transportError(err);
+  }, 1000);
+
+  const combined = AbortSignal.any([input.signal, idle.signal, stopSignal.signal]);
+
+  // Retry HANYA untuk 429/5xx dan hanya sebelum ada potongan: mengulang setelah
+  // streaming mulai akan menduplikasi teks. Backoff menghormati `Retry-After`.
+  const MAX_ATTEMPTS = 3;
+
+  let response!: Response;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      // POST ber-body: redirect TIDAK diikuti (kredensial & isi tidak dikirim
+      // ulang ke tujuan lain); `fetchOutbound` menolaknya sebagai BAD_URL.
+      response = await fetchOutbound(
+        url,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(input.body),
+          signal: combined,
+        },
+        input.outbound,
+      );
+    } catch (err) {
+      clearTimeout(idleTimer);
+      clearInterval(stopPoll);
+      if (stopSignal.signal.aborted) throw new StopRequested();
+      if (input.signal.aborted) throw err;
+      if (idleFired) throw new GenerationError("TIMEOUT", PROVIDER_MESSAGES.TIMEOUT, true);
+      throw transportError(err);
+    }
+
+    if (response.ok || attempt >= MAX_ATTEMPTS || !isTransient(response.status)) break;
+
+    // Buang body percobaan gagal supaya koneksi tidak menggantung.
+    await response.body?.cancel().catch(() => {});
+    await sleep(retryDelayMs(response.headers.get("retry-after"), attempt), input.signal);
+    if (input.signal.aborted) throw new Error("Dibatalkan saat menunggu retry.");
+    idleFired = false;
+    bumpIdle();
   }
+
   bumpIdle();
 
   if (!response.ok) {
@@ -396,6 +490,7 @@ async function streamGateway(input: {
     if (!sawDone) {
       for (const delta of parser.flush()) {
         if (delta.kind === "done") {
+          sawDone = true;
           finishReason = delta.finishReason ?? null;
           break;
         }
@@ -403,12 +498,24 @@ async function streamGateway(input: {
         await input.onDelta(delta);
       }
     }
+    // Koneksi putus tanpa `[DONE]` maupun `finish_reason` berarti jawaban
+    // terpotong (AUD-09). Tanpa ini, kalimat menggantung tercatat `complete`.
+    if (!sawDone && finishReason === null)
+      throw new GenerationError(
+        "STREAM_INCOMPLETE",
+        "Jawaban terputus sebelum selesai.",
+        true,
+      );
   } catch (err) {
     // Pembatalan (dari luar atau karena stop) bukan galat generasi: teruskan
     // apa adanya supaya pemanggil membedakannya dari kegagalan gateway.
-    if (input.signal.aborted || err instanceof StopRequested) throw err;
+    // `GenerationError` dari loop ini juga sudah berkode, jangan dibungkus.
+    if (stopSignal.signal.aborted) throw new StopRequested();
+    if (input.signal.aborted || err instanceof StopRequested || err instanceof GenerationError)
+      throw err;
     throw transportError(err);
   } finally {
+    clearInterval(stopPoll);
     // Menutup koneksi ke gateway — juga jalur pembatalan (SDD-4.6).
     reader.cancel().catch(() => {});
   }
@@ -638,7 +745,16 @@ export async function runGeneration(
       contextSystem = buildContext(chunks).system;
       keywordOnly = !embedding && chunks.length > 0;
     } catch {
-      // Dokumen rusak/provider embedding mati: jawab tanpa rujukan.
+      // Provider embedding mati: ulangi tanpa vektor supaya dokumen tetap
+      // terpakai lewat kata kunci, dan tandai mode degradasi di UI.
+      try {
+        const chunks = await retrieveChunks(db, { userId: chat.userId, query, limit: 6 });
+        usedChunks = chunks;
+        contextSystem = buildContext(chunks).system;
+        keywordOnly = chunks.length > 0;
+      } catch {
+        // Dokumen rusak: jawab tanpa rujukan.
+      }
     }
   }
 
@@ -696,7 +812,7 @@ export async function runGeneration(
           ...(userSystem ? [{ role: "system", content: userSystem }] : []),
           ...(contextSystem ? [{ role: "system", content: contextSystem }] : []),
           ...(searchSystem ? [{ role: "system", content: searchSystem }] : []),
-          ...messages,
+          ...trimHistory(messages),
         ],
         stream: true,
       },
@@ -746,6 +862,8 @@ export async function runGeneration(
   const notePart = [
     ...(keywordOnly ? [{ kind: "note", code: "keyword-only" }] : []),
     ...(searchFailed ? [{ kind: "note", code: "web-search-unavailable" }] : []),
+    // Jawaban kena batas token provider (AUD-10): tampilkan, jangan diam.
+    ...(finishReason === "length" ? [{ kind: "note", code: "truncated" }] : []),
   ];
   // Sitasi hanya dari penanda yang benar-benar ditulis model (SDD-6.2).
   const citationParts = extractCitations(text, usedChunks).map((citation) => ({

@@ -120,13 +120,28 @@ export async function retrieveChunks(db: Db, input: RetrieveInput): Promise<Retr
       select: SELECT,
     })) as Row[];
 
-    return rows
+    const vectorHits = rows
       .map((row) => toResult(row, cosine(queryVector, decodeVector(row.embedding ?? ""))))
       .filter((result) => result.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
+
+    // Vektor kosong (mis. dokumen lama belum di-embed): jangan kembalikan
+    // hasil kosong selama pencarian kata kunci masih bisa menemukan sesuatu.
+    if (vectorHits.length > 0) return vectorHits;
   }
 
+  return keywordSearch(db, where, query, limit);
+}
+
+/** Pencarian kata kunci (REQ-NT-61). Dipakai saat embedding tidak tersedia
+ *  atau tidak menghasilkan apa pun. */
+async function keywordSearch(
+  db: Db,
+  where: { document: { userId: string; id?: { in: string[] } } },
+  query: string,
+  limit: number,
+): Promise<RetrievedChunk[]> {
   const terms = queryTerms(query);
   if (terms.length === 0) return [];
 

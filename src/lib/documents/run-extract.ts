@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "@/lib/db";
 import { chunkPages } from "./chunk";
+import { embedChunks, readEmbeddingConfig } from "./embed";
 import { ExtractError, extractText } from "./extract";
 import { readDocument } from "./storage";
 
@@ -57,21 +58,47 @@ export async function runExtract(
 
   // Idempoten: job ini boleh diulang, jadi hasil percobaan sebelumnya dibuang
   // dulu. Status `ready` ditulis dalam transaksi yang sama dengan chunk.
+  const rows = chunks.map((chunk) => ({
+    id: randomUUID(),
+    documentId,
+    ordinal: chunk.ordinal,
+    text: chunk.text,
+    page: chunk.page,
+    section: chunk.section,
+  }));
+
   await db.$transaction(async (tx) => {
     await tx.documentChunk.deleteMany({ where: { documentId } });
-    await tx.documentChunk.createMany({
-      data: chunks.map((chunk) => ({
-        id: randomUUID(),
-        documentId,
-        ordinal: chunk.ordinal,
-        text: chunk.text,
-        page: chunk.page,
-        section: chunk.section,
-      })),
-    });
+    await tx.documentChunk.createMany({ data: rows });
     await tx.document.update({
       where: { id: documentId },
       data: { status: "ready", errorCode: null },
     });
   });
+
+  // Vektor diisi SETELAH transaksi: panggilan jaringan tidak boleh menahan
+  // kunci tulis, dan dokumen tetap `ready` walau provider embedding mati —
+  // retrieval jatuh ke pencarian kata kunci.
+  const embedding = readEmbeddingConfig();
+  if (!embedding || signal?.aborted) return;
+
+  let embedded: { ordinal: number; embedding: string }[];
+  try {
+    embedded = await embedChunks(chunks, embedding);
+  } catch {
+    return;
+  }
+  if (signal?.aborted) return;
+
+  const byOrdinal = new Map(rows.map((row) => [row.ordinal, row.id]));
+  await db.$transaction(
+    embedded
+      .filter((item) => item.embedding !== "")
+      .map((item) =>
+        db.documentChunk.update({
+          where: { id: byOrdinal.get(item.ordinal) ?? "" },
+          data: { embedding: item.embedding },
+        }),
+      ),
+  );
 }
