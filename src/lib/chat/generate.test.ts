@@ -281,6 +281,66 @@ describe("runGeneration", () => {
     expect(generation.finishedAt).not.toBeNull();
   });
 
+  it("EOF tanpa [DONE] dan tanpa finish_reason → STREAM_INCOMPLETE, bukan complete (AUD-09)", async () => {
+    const { assistantMessageId, generationId } = await seedGeneration("eof-no-done");
+
+    await run(generationId);
+
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("error");
+    expect(generation.errorCode).toBe("STREAM_INCOMPLETE");
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({ where: { id: assistantMessageId } });
+    expect(assistant.status).toBe("error");
+    // Teks yang sempat masuk tetap disimpan, bukan dibuang: pengguna melihat
+    // sampai mana jawaban berhenti.
+    expect(assistant.contentJson).toContain("Kalimat yang menggantung");
+  });
+
+  it("finish_reason=length memunculkan catatan truncated (AUD-10)", async () => {
+    const { assistantMessageId, generationId } = await seedGeneration("length-truncated");
+
+    await run(generationId);
+
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("complete");
+    expect(generation.finishReason).toBe("length");
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({ where: { id: assistantMessageId } });
+    const parsed = JSON.parse(assistant.contentJson) as { parts: { kind: string; code?: string }[] };
+    expect(parsed.parts.some((part) => part.kind === "note" && part.code === "truncated")).toBe(true);
+  });
+
+  it("429 sekali lalu sukses: permintaan diulang, hasil akhir complete (WO-5)", async () => {
+    const { generationId } = await seedGeneration("rate-limited-once");
+    const before = fixture.requests.length;
+
+    await run(generationId);
+
+    const attempts = fixture.requests.slice(before).filter((req) => req.scenario === "rate-limited-once");
+    expect(attempts.length).toBe(2);
+
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("complete");
+  });
+
+  it("429 terus-menerus berhenti di 3 percobaan, tidak menggantung (WO-5)", async () => {
+    const { generationId } = await seedGeneration("rate-limited");
+    const before = fixture.requests.length;
+
+    await run(generationId);
+
+    expect(fixture.requests.length - before).toBe(3);
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("error");
+    // SDD-3.2 tidak menyediakan `reason` khusus 429: tetap UPSTREAM_ERROR
+    // dengan pesan "Terlalu banyak permintaan" (lihat providers/errors.ts).
+    expect(generation.errorCode).toBe("UPSTREAM_ERROR");
+    const events = await db.generationEvent.findMany({ where: { generationId }, orderBy: { seq: "asc" } });
+    expect(events.at(-1)?.kind).toBe("error");
+    expect(events.at(-1)?.payloadJson).toContain("Terlalu banyak permintaan");
+  });
+
   it("koneksi tanpa kunci yang cocok → galat setup, tidak menulis event", async () => {
     await db.connection.deleteMany({ where: { userId } });
     const chat = await createChat(db, { userId });

@@ -25,10 +25,13 @@ export const SCENARIOS = [
   "timeout",
   "unauthorized",
   "rate-limited",
+  "rate-limited-once",
   "bad-request",
   "server-error",
   "corrupted",
   "drop",
+  "eof-no-done",
+  "length-truncated",
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];
@@ -132,6 +135,9 @@ export const TOOL_CALL_NAME = "lookup_weather";
 export const TOOL_CALL_ID = "call_fixture_1";
 
 export const CORRUPTED_BODY = '{"choices":[{"delta":{"content":"terpotong';
+
+/** Sekali pakai untuk skenario `rate-limited-once`; direset tiap fixture. */
+let retriedOnce = false;
 
 async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
   switch (scenario) {
@@ -242,6 +248,49 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
       return;
     }
 
+    case "rate-limited-once": {
+      // 429 pada percobaan pertama, sukses pada percobaan berikutnya: menguji
+      // retry benar-benar dijalankan, bukan hanya 429 berulang.
+      if (!retriedOnce) {
+        retriedOnce = true;
+        res.writeHead(429, { "content-type": "application/json", "retry-after": "0" });
+        res.end(JSON.stringify({ error: { message: "Terlalu banyak permintaan.", type: "rate_limit_error" } }));
+        return;
+      }
+      sseHeaders(res);
+      for (const piece of ["Setelah ", "retry."]) {
+        await writeEvent(res, chunkEvent(piece, false));
+      }
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
+    case "eof-no-done": {
+      // Stream ditutup rapi TANPA `[DONE]` dan tanpa `finish_reason`: jawaban
+      // terpotong yang tampak sukses (AUD-09).
+      sseHeaders(res);
+      await writeEvent(res, chunkEvent("Kalimat yang menggantung", false));
+      res.end();
+      return;
+    }
+
+    case "length-truncated": {
+      sseHeaders(res);
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [{ index: 0, delta: { content: "Jawaban panjang yang terpotong" }, finish_reason: "length" }],
+        })}\n\n`,
+      );
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
     case "bad-request": {
       // Body memuat penanda rahasia: uji memastikan ia tidak bocor ke log.
       res.writeHead(400, {
@@ -282,6 +331,7 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
 
 export async function startProviderFixture(): Promise<ProviderFixture> {
   const requests: RecordedRequest[] = [];
+  retriedOnce = false;
 
   const server = createServer((req, res) => {
     void (async () => {
