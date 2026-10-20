@@ -2,7 +2,7 @@
 export function BrandMark({ className = "size-9" }: { className?: string }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- aset merek statis, bukan kandidat optimasi
-    <img src="/brand/kawan-mark.png" alt="" width={512} height={439} className={`${className} dark:invert`} />
+    <img src="/brand/kawan-mark.png" alt="" width={843} height={735} className={`${className} dark:invert`} />
   );
 }
 
