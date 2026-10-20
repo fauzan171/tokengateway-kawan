@@ -6,15 +6,15 @@
  * menyimpang.
  */
 
-import type { Metadata } from "next";
 import Link from "next/link";
 import { PRIVACY_EFFECTIVE_DATE, PRIVACY_SECTIONS } from "@/lib/legal/privacy";
 import { serverT } from "@/lib/page-i18n";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Kebijakan privasi — Kawan",
-  description: "Data apa yang disimpan Kawan, di mana, dan cara menghapusnya.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("privasi");
+}
 
 /** Tanggal ISO → "18 Oktober 2026" tanpa dependensi tambahan. */
 function formatDate(iso: string): string {

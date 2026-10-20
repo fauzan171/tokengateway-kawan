@@ -6,18 +6,18 @@
  * (pengguna biasa tidak melihat panel) dan di setiap route admin (403).
  */
 
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
 import { AdminPanel } from "@/components/admin-panel";
 import { serverT } from "@/lib/page-i18n";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Admin — Kawan",
-  description: "Pengguna, pendaftaran, dan status sistem.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("admin");
+}
 
 export default async function AdminPage() {
   const t = await serverT();

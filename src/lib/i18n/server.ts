@@ -8,6 +8,8 @@
  */
 
 import { cookies } from "next/headers";
+import type { Metadata } from "next";
+import { messages, type MessageKey } from "./messages";
 import type { Locale } from "@/lib/settings/settings";
 
 export const LOCALE_COOKIE = "kawan-locale";
@@ -22,4 +24,22 @@ export async function readLocale(): Promise<Locale> {
   const store = await cookies();
   const value = store.get(LOCALE_COOKIE)?.value;
   return isLocale(value) ? value : "id";
+}
+
+/**
+ * Metadata halaman mengikuti bahasa aktif.
+ *
+ * `metadata` statis dievaluasi sekali saat build, jadi judul tab tidak akan
+ * pernah berubah bahasa. Halaman memakai `generateMetadata` + fungsi ini.
+ * `id` sengaja bukan `metadata` statis: satu jalur kode, tidak ada dua sumber.
+ */
+export async function pageMetadata(key: string): Promise<Metadata> {
+  const locale = await readLocale();
+  const table = messages[locale] ?? messages.id;
+  const judul = `meta.${key}.title` as MessageKey;
+  const deskripsi = `meta.${key}.description` as MessageKey;
+  return {
+    title: table[judul] ?? messages.id[judul],
+    description: table[deskripsi] ?? messages.id[deskripsi],
+  };
 }

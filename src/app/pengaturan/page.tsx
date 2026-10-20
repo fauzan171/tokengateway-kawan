@@ -5,16 +5,16 @@
  * formulir ke Client Component. Tanpa sesi, pengguna dialihkan ke `/masuk`.
  */
 
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { ChangePasswordForm } from "@/components/change-password-form";
 import { serverT } from "@/lib/page-i18n";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Pengaturan — Kawan",
-  description: "Ubah kata sandi akun Kawan kamu.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("pengaturan");
+}
 
 export default async function PengaturanPage() {
   const t = await serverT();

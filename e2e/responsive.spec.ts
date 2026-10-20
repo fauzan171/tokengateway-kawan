@@ -17,9 +17,11 @@ const TOUCH_MIN = 24;
 
 async function login(page: Page, email: string): Promise<void> {
   await page.goto("/masuk");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Kata sandi").fill(E2E_PASSWORD);
-  await page.getByRole("button", { name: "Masuk" }).click();
+  // Selektor berdasarkan tipe input, bukan label: test bahasa Inggris memakai
+  // label "Password", jadi label tidak bisa jadi penanda.
+  await page.locator('input[type="email"]').fill(email);
+  await page.locator('input[type="password"]').fill(E2E_PASSWORD);
+  await page.locator('button[type="submit"]').click();
   // Tujuan setelah masuk berbeda per peran (admin → /admin, pengguna → /), jadi
   // penanda yang sah cuma "sudah keluar dari /masuk".
   await page.waitForURL((url) => !url.pathname.startsWith("/masuk"), { timeout: 15_000 });
@@ -95,4 +97,31 @@ test("composer chat bisa dipakai di layar sempit", async ({ page }) => {
   await kotak.fill("halo dari layar sempit");
   await expect(kotak).toHaveValue("halo dari layar sempit");
   await tanpaGulirHorizontal(page, "/ (composer terisi)");
+});
+
+/**
+ * `metadata` statis dievaluasi saat build dan tidak pernah ikut bahasa. Assert
+ * ini menjaga `generateMetadata` tidak diam-diam diganti balik ke `metadata`.
+ *
+ * Halaman berpagar sesi dialihkan ke `/masuk` sebelum metadata dirender, jadi
+ * yang diuji lebih dulu halaman publik, lalu satu halaman pribadi setelah masuk.
+ */
+test("judul tab mengikuti bahasa", async ({ page, context }) => {
+  await context.addCookies([
+    { name: "kawan-locale", value: "en", domain: "127.0.0.1", path: "/" },
+  ]);
+
+  await page.goto("/privasi");
+  await expect(page).toHaveTitle("Privacy policy — Kawan");
+
+  await page.goto("/masuk");
+  await expect(page).toHaveTitle("Kawan — AI Chat by tokengateway.ai.id");
+
+  await login(page, E2E_EMAIL);
+  await page.goto("/pengaturan");
+  await expect(page).toHaveTitle("Settings — Kawan");
+
+  await context.clearCookies();
+  await page.goto("/privasi");
+  await expect(page).toHaveTitle("Kebijakan privasi — Kawan");
 });

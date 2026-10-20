@@ -5,16 +5,16 @@
  * Component yang memuat laporan dan menyediakan unduhan CSV.
  */
 
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { UsageReport } from "@/components/usage-report";
 import { serverT } from "@/lib/page-i18n";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Pemakaian — Kawan",
-  description: "Jumlah token yang dipakai per hari dan per model.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("pemakaian");
+}
 
 export default async function UsagePage() {
   const t = await serverT();

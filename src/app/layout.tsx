@@ -3,8 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import { LocaleProvider } from "@/lib/i18n/context";
-import { messages } from "@/lib/i18n/messages";
-import { readLocale } from "@/lib/i18n/server";
+import { pageMetadata, readLocale } from "@/lib/i18n/server";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,10 +15,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: messages.id["app.title"],
-  description: messages.id["app.description"],
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("home");
+}
 
 export default async function RootLayout({
   children,

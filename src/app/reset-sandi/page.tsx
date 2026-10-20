@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { ResetPasswordForm, ResetPasswordShell } from "@/components/reset-password-form";
 import { validatePassword } from "@/lib/auth/validation";
 import { serverT } from "@/lib/page-i18n";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Kawan — Chat AI by tokengateway.ai.id",
-  description: "Tetapkan kata sandi baru untuk akun Kawan.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("resetSandi");
+}
 
 type ResetSandiPageProps = {
   searchParams: Promise<{ token?: string }>;

@@ -1,15 +1,15 @@
-import type { Metadata } from "next";
 import { AuthForm, type AuthFormValues } from "@/components/auth-form";
 import { validateRegister } from "@/lib/auth/validation";
 import { readAppConfig } from "@/lib/admin/config";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
 import { serverT } from "@/lib/page-i18n";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Kawan — Chat AI by tokengateway.ai.id",
-  description: "Buat akun Kawan dengan email dan kata sandi.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("daftar");
+}
 
 export default async function DaftarPage() {
   const t = await serverT();

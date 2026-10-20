@@ -10,15 +10,15 @@
  * sebagai `draft` tetap punya jalan kembali untuk menguji koneksinya.
  */
 
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { ConnectGatewayForm } from "@/components/connect-gateway-form";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Hubungkan Gateway — Kawan",
-  description: "Hubungkan gateway AI milikmu ke Kawan.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("onboarding");
+}
 
 export default async function OnboardingPage() {
   const session = await auth();

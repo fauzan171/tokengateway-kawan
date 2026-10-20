@@ -5,16 +5,16 @@
  * Component yang memuat dan menyimpan preferensi sendiri.
  */
 
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { SettingsForm } from "@/components/settings-form";
 import { serverT } from "@/lib/page-i18n";
+import { pageMetadata } from "@/lib/i18n/server";
+import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Preferensi — Kawan",
-  description: "Tema, bahasa, ukuran font, dan cara mengirim pesan.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMetadata("preferensi");
+}
 
 export default async function SettingsPage() {
   const t = await serverT();
