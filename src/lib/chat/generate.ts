@@ -765,7 +765,10 @@ export async function runGeneration(
   const lastUserRow = [...ancestry].reverse().find((row) => row.role === "user");
   if (query.trim() !== "" && webSearchRequested(lastUserRow?.contentJson)) {
     try {
-      sources = await webSearch(query, { limit: 5 });
+      sources = await webSearch(query, {
+        limit: 5,
+        outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
+      });
     } catch {
       // Isi query tidak dicatat: hanya penanda bahwa pencarian gagal.
       searchFailed = true;

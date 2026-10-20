@@ -7,8 +7,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const outboundSeen = vi.hoisted(() => [] as unknown[]);
+
 vi.mock("@/lib/net", () => ({
-  assertOutboundAllowed: async (url: string) => url,
+  assertOutboundAllowed: async (url: string, options?: unknown) => {
+    outboundSeen.push(options);
+    return url;
+  },
   // Tanpa ini modul yang memakai fetchOutbound akan gagal sebelum stub dipanggil.
   fetchOutbound: (url: string, init: RequestInit) => fetch(url, init),
   DEFAULT_OUTBOUND_OPTIONS: { allowInsecureHttp: false, allowlist: [] },
@@ -138,5 +143,15 @@ describe("webSearch", () => {
     expect(error).toMatchObject({ retryable: true });
     // Alamat internal tidak boleh ikut ke pesan galat.
     expect((error as Error).message).not.toContain("10.0.0.1");
+  });
+
+  it("meneruskan kebijakan outbound dari pemanggil, bukan konstanta statis", async () => {
+    process.env["WEBSEARCH_BASE_URL"] = "http://127.0.0.1:8888";
+    fetchMock.mockResolvedValue(jsonResponse({ results: [] }));
+    const outbound = { allowInsecureHttp: true, allowlist: ["127.0.0.1:8888"] };
+
+    await webSearch("q", { outbound });
+
+    expect(outboundSeen.at(-1)).toEqual(outbound);
   });
 });

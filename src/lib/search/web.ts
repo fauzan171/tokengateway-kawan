@@ -10,7 +10,12 @@
  */
 
 import { ApiError } from "@/lib/api/errors";
-import { assertOutboundAllowed, fetchOutbound, DEFAULT_OUTBOUND_OPTIONS } from "@/lib/net";
+import {
+  assertOutboundAllowed,
+  fetchOutbound,
+  DEFAULT_OUTBOUND_OPTIONS,
+  type OutboundPolicyOptions,
+} from "@/lib/net";
 
 export type WebSearchConfig = {
   baseUrl: string;
@@ -64,7 +69,7 @@ type SearxngResponse = {
 /** Mencari di web. Mengembalikan `[]` untuk query kosong, tanpa jaringan. */
 export async function webSearch(
   query: string,
-  options: { limit?: number; signal?: AbortSignal } = {},
+  options: { limit?: number; signal?: AbortSignal; outbound?: OutboundPolicyOptions } = {},
 ): Promise<SearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -78,7 +83,8 @@ export async function webSearch(
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", String(limit));
 
-  const target = await assertOutboundAllowed(url.toString(), DEFAULT_OUTBOUND_OPTIONS);
+  const outbound = options.outbound ?? DEFAULT_OUTBOUND_OPTIONS;
+  const target = await assertOutboundAllowed(url.toString(), outbound);
   const signal = options.signal ?? AbortSignal.timeout(TIMEOUT_MS);
 
   let response: Response;
@@ -93,7 +99,7 @@ export async function webSearch(
         },
         signal,
       },
-      DEFAULT_OUTBOUND_OPTIONS,
+      outbound,
     );
   } catch (err) {
     // Penolakan redirect tetap BAD_URL: itu keputusan kebijakan, bukan gangguan.
