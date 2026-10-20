@@ -183,6 +183,11 @@ export const id = {
   "gateway.securityAfter": " saat kamu mengobrol. Artinya permintaan itu melewati server Kawan, bukan dikirim langsung dari perangkatmu. Key tidak pernah dikembalikan utuh ke browser setelah tersimpan.",
   "gateway.noKeyTitle": "Belum punya API key? Dapatkan di tokengateway.ai.id",
   "gateway.openSite": "Buka tokengateway.ai.id",
+  "gateway.defaultTitle": "Pakai langganan",
+  "gateway.defaultName": "Langganan",
+  "gateway.defaultHint": "Pakai gateway yang sudah disiapkan server. Tanpa API key, tanpa isian.",
+  "gateway.defaultCta": "Pakai langganan",
+  "gateway.defaultUnavailable": "Server ini belum menyediakan langganan. Isi manual di bawah.",
 
   "auth.loginTitle": "Masuk ke Kawan",
   "auth.loginSubtitle": "Gunakan email dan kata sandi akunmu.",
@@ -556,6 +561,11 @@ export const en: Record<MessageKey, string> = {
   "gateway.securityAfter": " while you chat. That means requests pass through Kawan's server rather than going straight from your device. The key is never returned in full to the browser once saved.",
   "gateway.noKeyTitle": "No API key yet? Get one at tokengateway.ai.id",
   "gateway.openSite": "Open tokengateway.ai.id",
+  "gateway.defaultTitle": "Use subscription",
+  "gateway.defaultName": "Subscription",
+  "gateway.defaultHint": "Use the gateway this server already provides. No API key, no fields.",
+  "gateway.defaultCta": "Use subscription",
+  "gateway.defaultUnavailable": "This server does not provide a subscription yet. Fill the form below.",
 
   "auth.loginTitle": "Sign in to Kawan",
   "auth.loginSubtitle": "Use your account email and password.",

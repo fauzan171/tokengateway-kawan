@@ -101,7 +101,7 @@ function fieldForCode(code: string | undefined): FieldName {
   return "baseUrl"; // BAD_URL | BAD_SCHEME | BAD_HOST
 }
 
-export function ConnectGatewayForm() {
+export function ConnectGatewayForm({ defaultBaseUrl }: { defaultBaseUrl: string | null }) {
   const t = useT();
   const router = useRouter();
   const fieldId = useId();
@@ -191,6 +191,33 @@ export function ConnectGatewayForm() {
     }
   }
 
+  async function handleUseDefault() {
+    if (busy) return;
+    setFormError(null);
+    setErrors({});
+    setSaving(true);
+    try {
+      const response = await fetch("/api/kawan/v1/connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useDefault: true, name: t("gateway.defaultName"), skipTest: false }),
+      });
+
+      if (!response.ok) {
+        const { message } = await readError(response, t("gateway.saveFailed"));
+        setFormError(message);
+        return;
+      }
+
+      router.replace("/");
+      router.refresh();
+    } catch {
+      setFormError(t("common.network"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -253,6 +280,37 @@ export function ConnectGatewayForm() {
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {t("gateway.subtitle")}
         </p>
+
+        {/* Jalur cepat: gateway bawaan operator. Tanpa isian apa pun. */}
+        <section aria-labelledby={`${fieldId}-default`} className="mt-6 rounded-lg border p-4">
+          <h2 id={`${fieldId}-default`} className="text-sm font-medium">
+            {t("gateway.defaultTitle")}
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {defaultBaseUrl
+              ? t("gateway.defaultHint")
+              : t("gateway.defaultUnavailable")}
+          </p>
+          {defaultBaseUrl ? (
+            <p className="mt-1 break-all text-xs text-muted-foreground">{defaultBaseUrl}</p>
+          ) : null}
+          <Button
+            type="button"
+            onClick={handleUseDefault}
+            disabled={busy || defaultBaseUrl === null}
+            aria-busy={saving}
+            className="mt-3 h-11 w-full"
+          >
+            {saving ? (
+              <>
+                <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
+                {t("common.saving")}
+              </>
+            ) : (
+              t("gateway.defaultCta")
+            )}
+          </Button>
+        </section>
 
         <form noValidate onSubmit={handleSubmit} className="mt-6 space-y-5">
           {FIELDS.map((field) => {

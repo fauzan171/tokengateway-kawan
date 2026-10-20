@@ -12,6 +12,7 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { loadConfig } from "@/lib/config/env";
 import { ConnectGatewayForm } from "@/components/connect-gateway-form";
 import { pageMetadata } from "@/lib/i18n/server";
 import type { Metadata } from "next";
@@ -24,5 +25,8 @@ export default async function OnboardingPage() {
   const session = await auth();
   if (!session?.user) redirect("/masuk");
 
-  return <ConnectGatewayForm />;
+  // Hanya URL yang dikirim ke klien. Key gateway bawaan tetap di server.
+  const defaultBaseUrl = loadConfig().defaultGateway?.baseUrl ?? null;
+
+  return <ConnectGatewayForm defaultBaseUrl={defaultBaseUrl} />;
 }
