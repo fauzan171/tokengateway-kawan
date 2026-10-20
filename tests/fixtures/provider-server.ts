@@ -32,6 +32,7 @@ export const SCENARIOS = [
   "drop",
   "eof-no-done",
   "length-truncated",
+  "no-done-marker",
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];
@@ -271,6 +272,28 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
       // terpotong yang tampak sukses (AUD-09).
       sseHeaders(res);
       await writeEvent(res, chunkEvent("Kalimat yang menggantung", false));
+      res.end();
+      return;
+    }
+
+    case "no-done-marker": {
+      // Bentuk balasan 9Router yang TERBUKTI dari produksi: tidak pernah
+      // mengirim `data: [DONE]`, hanya `finish_reason` di delta terakhir.
+      // Parser harus tetap menutup stream sebagai `done` (stream-parse.ts:157).
+      sseHeaders(res);
+      for (const piece of ["Jawaban ", "tanpa DONE."]) {
+        await writeEvent(res, chunkEvent(piece, false));
+      }
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+          usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
+        })}\n\n`,
+      );
       res.end();
       return;
     }

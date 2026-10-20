@@ -341,6 +341,26 @@ describe("runGeneration", () => {
     expect(events.at(-1)?.payloadJson).toContain("Terlalu banyak permintaan");
   });
 
+  it("provider tanpa [DONE] tapi ada finish_reason → tetap complete, bukan STREAM_INCOMPLETE (9Router)", async () => {
+    const { assistantMessageId, generationId } = await seedGeneration("no-done-marker");
+
+    await run(generationId);
+
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("complete");
+    expect(generation.finishReason).toBe("stop");
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({ where: { id: assistantMessageId } });
+    expect(assistant.status).toBe("complete");
+    const parsed = JSON.parse(assistant.contentJson) as { parts: { kind: string; text?: string }[] };
+    expect(parsed.parts.map((p) => p.text ?? "").join("")).toBe("Jawaban tanpa DONE.");
+    // Bukan error, jadi tidak boleh ada catatan truncated.
+    expect(parsed.parts.some((p) => p.kind === "note")).toBe(false);
+
+    const usage = await db.usageRecord.findFirstOrThrow({ where: { userId } });
+    expect(usage.totalTokens).toBe(18);
+  });
+
   it("koneksi tanpa kunci yang cocok → galat setup, tidak menulis event", async () => {
     await db.connection.deleteMany({ where: { userId } });
     const chat = await createChat(db, { userId });
