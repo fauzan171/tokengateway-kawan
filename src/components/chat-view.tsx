@@ -646,7 +646,7 @@ export function ChatView({
   }
 
   return (
-    <div className="flex flex-1 flex-col h-[calc(100dvh-5rem)] max-w-4xl w-full mx-auto p-4">
+    <div className="flex min-h-0 flex-1 flex-col max-w-4xl w-full mx-auto p-4">
       {/* Area Pesan */}
       {/* Pesan baru diumumkan pembaca layar tanpa memindahkan fokus (WCAG 4.1.3). */}
       <div role="log" aria-live="polite" aria-relevant="additions" className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4">
@@ -670,7 +670,7 @@ export function ChatView({
             return (
               <div
                 key={m.id}
-                className={`group flex flex-col ${
+                className={`group flex min-w-0 flex-col ${
                   m.role === "user" ? "items-end" : "items-start"
                 }`}
               >
@@ -688,7 +688,7 @@ export function ChatView({
                   <p className="mb-1 text-xs text-muted-foreground">{t("chat.truncated")}</p>
                 )}
                 {isEditing ? (
-                  <div className="w-full max-w-[85%] rounded-2xl border bg-background p-3 shadow-xs space-y-2">
+                  <div className="w-full min-w-0 max-w-[85%] rounded-2xl border bg-background p-3 shadow-xs space-y-2">
                     <textarea
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
@@ -719,7 +719,7 @@ export function ChatView({
                   </div>
                 ) : (
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                    className={`min-w-0 max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                       m.role === "user"
                         ? "bg-primary text-primary-foreground ml-auto"
                         : "bg-muted border border-border text-foreground"
@@ -743,7 +743,7 @@ export function ChatView({
                       m.role === "assistant" ? (
                         <Markdown text={text} />
                       ) : (
-                        <p className="whitespace-pre-wrap">{text}</p>
+                        <p className="whitespace-pre-wrap break-words">{text}</p>
                       )
                     ) : images.length > 0 ? null : m.status === "streaming" ? (
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">

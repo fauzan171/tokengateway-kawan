@@ -96,7 +96,7 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
   const lang = /language-(\w+)/.exec(className ?? "")?.[1];
   if (lang === "mermaid") return <MermaidDiagram code={code.replace(/\n$/, "")} />;
   return (
-    <div className="relative my-2">
+    <div className="relative my-2 min-w-0 max-w-full">
       <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs leading-relaxed">
         <code className={className}>{children}</code>
       </pre>
@@ -107,7 +107,7 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
 
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
-    <div className="kawan-markdown text-sm leading-relaxed">
+    <div className="kawan-markdown min-w-0 max-w-full break-words text-sm leading-relaxed">
       <ReactMarkdown
         remarkPlugins={REMARK}
         rehypePlugins={REHYPE}
@@ -130,8 +130,8 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
             </a>
           ),
           table: ({ children }) => (
-            <div className="my-2 overflow-x-auto">
-              <table className="w-full border-collapse text-xs">{children}</table>
+            <div className="my-2 max-w-full overflow-x-auto">
+              <table className="w-max min-w-full border-collapse text-xs">{children}</table>
             </div>
           ),
           th: ({ children }) => <th className="border px-2 py-1 text-left font-medium">{children}</th>,

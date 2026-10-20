@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { Menu, MessageCircle, Plus, Settings, X } from "lucide-react";
+import { Menu, Plus, Settings, X } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { ChatView } from "@/components/chat-view";
@@ -77,7 +78,7 @@ export default function Home() {
 
   const navigation = (
     <div className="flex h-full min-h-0 flex-col p-5">
-      <div className="mb-6 flex items-center gap-3 text-xl font-semibold"><span className="rounded-xl bg-foreground p-2 text-background"><MessageCircle aria-hidden className="size-5" /></span>Kawan</div>
+      <div className="mb-6 flex items-center gap-3 text-xl font-semibold"><BrandMark className="size-9" />Kawan</div>
       <Button className="h-11 w-full justify-start gap-3" onClick={() => { setActiveChatId(null); navigate("chat"); }}><Plus aria-hidden />{t("nav.newChat")}</Button>
       <ChatSidebar activeChatId={activeChatId} onSelect={(id) => { setActiveChatId(id); navigate("chat"); }} />
       <nav aria-label={t("nav.main")} className="mt-4 space-y-1 border-t pt-3">
@@ -95,9 +96,9 @@ export default function Home() {
   );
 
   return (
-    <div className="flex min-h-dvh bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       <a href="#content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-4">{t("nav.skip")}</a>
-      <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:block">{navigation}</aside>
+      <aside className="hidden h-full w-64 shrink-0 overflow-y-auto border-r bg-sidebar md:block">{navigation}</aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-20 items-center justify-between border-b px-5 sm:px-9">
           <div className="flex items-center gap-3">
@@ -116,7 +117,7 @@ export default function Home() {
           </div>
           <span className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">{t("home.preview")}</span>
         </header>
-        <main id="content" className="flex flex-1 flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
+        <main id="content" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
           {section === "chat" ? (
             <ChatView initialChatId={activeChatId} onChatCreated={setActiveChatId} />
           ) : section === "settings" ? (

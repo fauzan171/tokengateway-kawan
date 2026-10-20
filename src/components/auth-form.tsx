@@ -20,7 +20,8 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { CircleAlert, CircleCheck, LoaderCircle, MessageCircle } from "lucide-react";
+import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/context";
@@ -224,9 +225,7 @@ export function AuthForm({ mode, notice, closed = false, onValidate }: AuthFormP
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm">
         <div className="mb-7 flex items-center gap-3 text-xl font-semibold">
-          <span className="rounded-xl bg-foreground p-2 text-background">
-            <MessageCircle aria-hidden className="size-5" />
-          </span>
+          <BrandMark className="size-9" />
           Kawan
         </div>
 
