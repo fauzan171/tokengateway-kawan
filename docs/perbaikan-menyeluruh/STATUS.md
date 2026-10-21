@@ -138,6 +138,28 @@ FIX-04 sebagian (konteks server). Belum disentuh: FIX-05…23, fase R1–R5.
 
 `reports/FIX-03.md` sudah ditulis. Laporan untuk FIX-01/02/04 belum ada.
 
+## Insiden produksi 2026-10-21 19:12–19:16 — migrasi belum diterapkan
+
+Restart `kawan-worker` setelah commit `a143533` membuat proses crash-loop:
+
+```
+PrismaClientKnownRequestError: The table `main.WorkerHeartbeat`
+does not exist in the current database.
+```
+
+Sebab: `prisma/migrations/sqlite/20261021000000_add_title_source_and_worker_heartbeat`
+ada di repo tetapi **belum pernah diterapkan** ke `dev.db`. Gate CI memakai
+`migrate deploy` di DB bersih, jadi tidak menangkap keadaan ini.
+
+Perbaikan: `npx prisma migrate deploy --schema prisma/schema.sqlite.prisma`
+(aplikatif, additive — kolom `Chat.titleSource` default `'auto'`, 18 baris lama
+tetap sah). Verifikasi: `WorkerHeartbeat` ada, satu baris heartbeat ditulis
+(`workerId=…-2302141`, `version=0.2.0`), `kawan-worker` online tanpa restart
+tambahan, `kawanku.tokengateway.ai.id` 200.
+
+**Pelajaran:** setiap migrasi baru wajib dijalankan ke `dev.db` sebelum restart
+pm2; commit kode saja tidak cukup.
+
 ## Blocker eksternal
 
 | Kebutuhan | FIX | Dampak |
