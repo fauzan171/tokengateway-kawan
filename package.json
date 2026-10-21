@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "check:docs": "python3 tasks/nontechnical-v1/tools/check_docs.py",
     "check:licenses": "node scripts/check-licenses.mjs",
-    "worker": "tsx --env-file-if-exists=.env src/worker.ts"
+    "worker": "tsx --env-file-if-exists=.env src/worker.ts",
+    "deploy": "next build && pm2 restart kawan kawan-worker --update-env"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
