@@ -144,7 +144,8 @@ let retriedOnce = false;
 async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
   switch (scenario) {
     case "redirect": {
-      res.writeHead(307, { location: "/redirect-target" });
+      // Lintas host: kredensial tidak boleh ikut ke tujuan redirect.
+      res.writeHead(307, { location: "http://127.0.0.1:1/models" });
       res.end();
       return;
     }
@@ -374,10 +375,6 @@ export async function startProviderFixture(): Promise<ProviderFixture> {
         body,
       });
       try {
-        if (req.url === "/redirect-target") {
-          await handle(res, "usage-present");
-          return;
-        }
         await handle(res, scenario);
       } catch {
         if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
