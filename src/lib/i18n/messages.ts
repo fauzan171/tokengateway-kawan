@@ -352,7 +352,7 @@ export const id = {
   "home.importFile": "Impor berkas",
   "home.importOk": "Impor berhasil.",
   "home.importFailed": "Impor gagal.",
-  "home.aboutBody": "Chat pribadi dengan kunci API milikmu sendiri. Versi 0.1.0 — fondasi antarmuka; fitur chat belum tersedia.",
+  "home.aboutBody": "Chat pribadi dengan kunci API milikmu sendiri. Versi 0.2.0 — percakapan, pencarian web, dan ekspor ke Markdown, PDF, DOCX, serta XLSX.",
   "home.footer": "Kawan · Ruang untuk percakapan bermakna",
 
   "media.image": "Buat gambar",
@@ -733,7 +733,7 @@ export const en: Record<MessageKey, string> = {
   "home.importFile": "Import file",
   "home.importOk": "Import succeeded.",
   "home.importFailed": "Import failed.",
-  "home.aboutBody": "Private chat with your own API key. Version 0.1.0 — the interface foundation; chat features are not available yet.",
+  "home.aboutBody": "Private chat with your own API key. Version 0.2.0 — conversations, web search, and export to Markdown, PDF, DOCX, and XLSX.",
   "home.footer": "Kawan · Room for meaningful conversations",
 
   "media.image": "Create image",
