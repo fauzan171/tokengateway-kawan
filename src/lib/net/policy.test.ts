@@ -205,7 +205,11 @@ describe("assertRedirectAllowed", () => {
 
   it("menerima redirect ke origin yang sama", async () => {
     await expect(
-      assertRedirectAllowed("https://api.example.test/v1", "https://api.example.test/v2", options()),
+      assertRedirectAllowed(
+        "https://api.example.test/v1",
+        "https://api.example.test/v2",
+        options({ resolve: resolver({ "api.example.test": ["8.8.8.8"] }) }),
+      ),
     ).resolves.toBeInstanceOf(URL);
   });
 

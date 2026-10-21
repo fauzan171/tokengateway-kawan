@@ -17,6 +17,9 @@ describe("worker shutdown deadline", () => {
     vi.doMock("@/lib/jobs/worker", () => ({ createWorker: vi.fn(() => ({ run: () => running, stop })) }));
     vi.doMock("@/lib/chat/generate", () => ({ runGeneration: vi.fn() }));
     vi.doMock("@/lib/config/env", () => ({ loadConfig: () => ({ databaseUrl: "file:./test.db" }) }));
+    // `worker.ts` memanggil reconcileGenerations saat startup dan shutdown;
+    // tanpa mock, db palsu `{}` melempar dan main() keluar lewat process.exit.
+    vi.doMock("@/lib/chat/recovery", () => ({ reconcileGenerations: vi.fn(async () => {}) }));
     vi.doMock("@/lib/api/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
     vi.spyOn(process, "on").mockImplementation(((event: string, listener: (signal: NodeJS.Signals) => void) => {
       handlers.set(event, listener);

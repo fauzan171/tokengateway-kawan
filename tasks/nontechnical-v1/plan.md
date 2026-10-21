@@ -1,6 +1,8 @@
 # Plan — Kawan (scope nontechnical-v1)
 
-Status: rencana kerja untuk implementer. NT-P0 selesai dan gate-nya lulus; NT-P1 dikerjakan dan WP-NT-P1-01 sampai WP-NT-P1-05 selesai — gate NT-P1 belum dibuka karena WP-NT-P1-06 belum dikerjakan.
+> Arah produk diperbarui 17 Oktober 2026: baca [scope aktif](../ACTIVE-SCOPE.md) terlebih dahulu. Keputusan agen, prioritas, dan pengurangan scope di sana mengesampingkan bagian lama yang bertentangan.
+
+Status: rencana kerja untuk implementer. Fondasi NT-P0/NT-P1 dan backend NT-P2/NT-P3 sudah di-merge; UI NT-P3 belum lengkap. `ad32864` adalah commit konsolidasi historis, bukan HEAD saat ini. Gate NT-P1 lulus 2026-10-16. Sisa NT-P3 yang belum ditutup (WP-NT-P3-11, WP-NT-P3-14, ditambah WP-NT-P2-08 dan WP-NT-P2-09 yang dipindahkan) dirinci di `prompt-full.md` Tahap 1. NT-P4 dan seterusnya belum dimulai.
 Baseline referensi: `f8ae8a6c328946dc62cd0712961a0632574581bf` (dipin, bukan `main`).
 
 Dokumen ini menjawab: apa dikerjakan lebih dulu, apa yang bergantung pada apa, mana yang boleh paralel, dan kapan sebuah pekerjaan boleh dimulai atau disebut selesai. Requirement ada di `prd.md`; desain teknis di `sdd.md`; keputusan cakupan di `coverage.md`.
@@ -92,7 +94,7 @@ Catatan verifikasi WP-NT-P1-04: batas bawaan 5 percobaan / 15 menit. Setelah bat
 
 Catatan verifikasi WP-NT-P1-05: `POST /api/account/password` mengambil token sesi dengan mendekode cookie HttpOnly di sisi server, bukan dengan menaruh `sid` di objek sesi — objek sesi ikut terkirim ke peramban lewat `/api/auth/session`, sehingga token mentah di sana akan terbaca JavaScript. Halaman `/pengaturan` disediakan sebagai antarmuka.
 
-Catatan verifikasi WP-NT-P1-06: tabel `PasswordResetToken` mengikuti konvensi **squash** repo (ditambahkan ke `_schema.sql` dan kedua salinan init), karena `check-migrations.mjs` menuntut setiap `migration.sql` identik dengan `_schema.sql` sehingga direktori migrasi baru tidak mungkin lulus. Konsekuensinya: `dev.db` yang sudah ada tidak mendapat tabel baru dan harus dibangun ulang (`rm dev.db && npx prisma migrate deploy --config prisma7.config.ts`). Aman selama belum ada deployment produksi (0 tag, PostgreSQL belum dipakai); **konsekuensi ini harus ditinjau ulang sebelum rilis pertama**. Tiga klaim inti diuji mandor lewat HTTP pada server yang berjalan: token dipakai dua kali ditolak, token kedaluwarsa ditolak tanpa mengubah sandi, dan kedua sesi pengguna dicabut setelah reset berhasil.
+Catatan historis WP-NT-P1-06: tabel reset pernah ditambahkan ke snapshot init untuk development. Ini bukan prosedur upgrade yang aman. Jangan menghapus database pengguna atau mengubah init yang telah diterapkan. Sebelum perubahan schema berikutnya, perbaiki checker agar mendukung migrasi additive berpasangan dan uji upgrade pada salinan database. Bukti reset HTTP historis ada di laporan NT-P1.
 
 ### NT-P2 — Koneksi gateway dan model
 
@@ -132,7 +134,7 @@ Catatan verifikasi WP-NT-P1-06: tabel `PasswordResetToken` mengikuti konvensi **
 | WP-NT-P3-12 | Pesan sistem per chat | REQ-NT-31 | SDD-3.4 | P3-03 | ya | Dikirim sebagai peran sistem |
 | WP-NT-P3-13 | Judul otomatis + ganti manual | REQ-NT-29 | SDD-3.4 | P3-03 | ya | Judul muncul; ganti manual menang |
 | WP-NT-P3-14 | Pemetaan galat provider di UI + tombol coba lagi | REQ-NT-28 | SDD-5.4 | P3-05 | ya | Setiap jenis galat punya tindakan |
-| WP-NT-P3-15 | Pencatatan `UsageRecord` dari respons gateway | REQ-NT-71 | SDD-2.2 | P3-04 | ya | `reported=false` bila tidak ada usage |
+| WP-NT-P3-15 | Pencatatan `UsageRecord` dari respons gateway | REQ-NT-71 | SDD-2.2 | P3-04 | ya | Satu pencatat di `lib/chat/usage.ts`; dipakai generasi, normalisasi dan integrasi diuji; konsolidasi 17 Oktober 2026 |
 
 **Gate NT-P3:** alur B (edit/regenerate/cabang) lulus E2E; streaming tahan putus; tidak ada token hilang/ganda pada fixture.
 

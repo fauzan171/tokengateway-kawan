@@ -93,6 +93,14 @@ function run(generationId: string): Promise<void> {
 }
 
 describe("runGeneration", () => {
+  it("tidak mengikuti redirect gateway atau mengirim key ke target redirect", async () => {
+    const { generationId } = await seedGeneration("redirect");
+    const before = fixture.requests.length;
+    await run(generationId);
+    expect(fixture.requests.slice(before).map((request) => request.path)).toEqual(["/chat/completions"]);
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("error");
+  });
   it("menyusun jawaban utuh walau potongan byte terbelah (unicode-split)", async () => {
     const { chatId, assistantMessageId, generationId } = await seedGeneration("unicode-split");
 

@@ -19,6 +19,7 @@ import { createWorker, type JobHandler } from "@/lib/jobs/worker";
 import { runGeneration } from "@/lib/chat/generate";
 import { runExtract } from "@/lib/documents/run-extract";
 import { cleanupOrphans } from "@/lib/documents/remove";
+import { reconcileGenerations } from "@/lib/chat/recovery";
 
 const IDLE_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -70,6 +71,7 @@ async function main(): Promise<void> {
     handlers,
     idleMs: IDLE_MS,
     shutdownGraceMs: SHUTDOWN_GRACE_MS,
+    beforeClaim: () => reconcileGenerations(db),
   });
 
   const controller = new AbortController();
@@ -96,6 +98,7 @@ async function main(): Promise<void> {
   log("started", { kinds: Object.keys(handlers) });
   await worker.run(controller.signal);
 
+  await reconcileGenerations(db);
   if (force) clearTimeout(force);
   await closeDb();
   log("stopped");

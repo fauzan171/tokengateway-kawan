@@ -38,6 +38,8 @@ export type WorkerOptions = {
   /** Batas waktu job berjalan saat shutdown sebelum ditandai `indeterminate`. */
   shutdownGraceMs?: number;
   now?: () => Date;
+  /** Rekonsiliasi domain setelah penyapuan lease, sebelum klaim berikutnya. */
+  beforeClaim?: () => Promise<void>;
 };
 
 export type Worker = {
@@ -89,6 +91,21 @@ export function createWorker(options: WorkerOptions): Worker {
   const master = new AbortController();
   const running = new Map<string, Claim>();
 
+  async function abandonClaim(held: Claim): Promise<number> {
+    const { count } = await db.job.updateMany({
+      where: { id: held.id, leaseToken: held.leaseToken, state: { in: ["leased", "running"] } },
+      data: {
+        state: "indeterminate",
+        lastError: `worker berhenti saat job berjalan (${workerId})`,
+        finishedAt: now(),
+        leaseOwner: null,
+        leaseToken: null,
+        leaseExpiresAt: null,
+      },
+    });
+    return count;
+  }
+
   async function processOne(held: Claim): Promise<void> {
     const handler = handlers[held.kind];
     if (!handler) {
@@ -135,6 +152,7 @@ export function createWorker(options: WorkerOptions): Worker {
     } finally {
       clearInterval(beat);
       master.signal.removeEventListener("abort", cancel);
+      if (controller.signal.aborted) await abandonClaim(held);
       running.delete(held.id);
     }
   }
@@ -142,18 +160,7 @@ export function createWorker(options: WorkerOptions): Worker {
   async function abandonRunning(): Promise<number> {
     let total = 0;
     for (const held of [...running.values()]) {
-      const { count } = await db.job.updateMany({
-        where: { id: held.id, leaseToken: held.leaseToken, state: { in: ["leased", "running"] } },
-        data: {
-          state: "indeterminate",
-          lastError: `worker berhenti saat job berjalan (${workerId})`,
-          finishedAt: now(),
-          leaseOwner: null,
-          leaseToken: null,
-          leaseExpiresAt: null,
-        },
-      });
-      total += count;
+      total += await abandonClaim(held);
       running.delete(held.id);
     }
     return total;
@@ -171,6 +178,7 @@ export function createWorker(options: WorkerOptions): Worker {
       while (!stopSignal.aborted) {
         // Lease worker yang mati tidak menyandera job: sapu sebelum klaim.
         await releaseExpired(db, now());
+        await options.beforeClaim?.();
 
         const held = await claim(db, { workerId, leaseMs, now: now() });
         if (!held) {

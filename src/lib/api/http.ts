@@ -42,7 +42,7 @@ export async function fetchJson<T>(
 
   let response: Response;
   try {
-    response = await fetchOutbound(
+response = await fetchOutbound(
       url,
       {
         method: options.method ?? "GET",

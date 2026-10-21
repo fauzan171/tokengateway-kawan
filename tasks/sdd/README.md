@@ -1,5 +1,7 @@
 # SDD Kawan — Software Design Description
 
+> Referensi historis. Untuk pekerjaan baru baca [scope aktif](../ACTIVE-SCOPE.md). Instruksi full-parity di bawah bukan scope default.
+
 Status: design specification untuk implementasi, bukan laporan aplikasi yang sudah bekerja. Baseline Open WebUI `f8ae8a6c328946dc62cd0712961a0632574581bf`. SDD ini melengkapi [PRD](../prd.md), [plan](../plan.md), [schema contract](../schema-contract.md) dan [backlog](../todo.md); scope penuh tetap berlaku.
 
 SDD di sini adalah Software Design Description sekaligus dasar kerja **spec-driven development**: kontrak diselesaikan sebelum coding, setiap perubahan traced ke requirement/task/test, dan spec diperbarui saat keputusan berubah.

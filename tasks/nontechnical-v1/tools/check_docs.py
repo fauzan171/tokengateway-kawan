@@ -17,10 +17,12 @@ Keluar dengan kode 1 bila ada pelanggaran.
 import os
 import re
 import sys
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DOCS = ["README.md", "prd.md", "sdd.md", "plan.md", "coverage.md", "execution-prompt.md"]
+DOCS = sorted(str(path.relative_to(ROOT)) for path in Path(ROOT).rglob("*.md"))
+DOCS.append("../ACTIVE-SCOPE.md")
 
 RE_REQ = re.compile(r"\bREQ-NT-\d{2}\b")
 RE_WP = re.compile(r"\bWP-NT-P\d{1,2}-\d{2}\b")
@@ -120,7 +122,7 @@ def main():
             path = target.split("#", 1)[0]
             if not path:
                 continue
-            resolved = os.path.normpath(os.path.join(ROOT, path))
+            resolved = os.path.normpath(os.path.join(ROOT, os.path.dirname(name), path))
             if not os.path.exists(resolved):
                 errors.append(f"{name}: link relatif tidak ditemukan -> {target}")
 

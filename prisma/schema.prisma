@@ -31,6 +31,7 @@ model User {
   credential Credential?
   sessions   Session[]
   passwordResetTokens PasswordResetToken[]
+  connections Connection[]
   chats     Chat[]
   folders   Folder[]
   connections Connection[]

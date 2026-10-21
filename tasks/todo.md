@@ -1,5 +1,7 @@
 # Backlog Kawan — full-feature parity
 
+> Referensi historis. Untuk pekerjaan baru baca [scope aktif](ACTIVE-SCOPE.md). Instruksi full-parity di bawah bukan scope default.
+
 Baseline `f8ae8a6c328946dc62cd0712961a0632574581bf`. Semua task belum dimulai; v1 tasks di archive bukan scope aktif.
 
 [PRD](prd.md) · [Plan](plan.md) · [Schema](schema-contract.md) · [Coverage](coverage.json) · [Reference](reference/README.md) · [Acceptance scenarios](acceptance-scenarios.md)

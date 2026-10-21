@@ -46,6 +46,7 @@ import { buildSearchSystem, webSearchRequested } from "@/lib/search/prompt";
 import { webSearch, type SearchResult } from "@/lib/search/web";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
+import { recordUsage } from "./usage";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
@@ -390,7 +391,7 @@ async function streamGateway(input: {
     idle.abort();
   }, OUTBOUND_LIMITS.streamIdleTimeoutMs);
 
-  // Stop pengguna harus memutus koneksi SEGERA, bukan menunggu potongan
+// Stop pengguna harus memutus koneksi SEGERA, bukan menunggu potongan
   // berikutnya: stream yang sedang diam akan menggantung sampai idle timeout.
   const stopSignal = new AbortController();
   const stopPoll = setInterval(() => {
@@ -554,37 +555,6 @@ export async function publishEvent(
       },
     });
     return seq;
-  });
-}
-
-export type UsageInput = {
-  userId: string;
-  chatId: string | null;
-  model: string;
-  /** `false` bila gateway tidak melaporkan usage → token dikosongkan. */
-  reported: boolean;
-  promptTokens?: number | null;
-  completionTokens?: number | null;
-  totalTokens?: number | null;
-};
-
-/**
- * Mencatat pemakaian (REQ-NT-71). Bila gateway tidak melaporkan usage,
- * `reported=0` dan angka token dibiarkan kosong — TIDAK diisi nol karangan.
- */
-export async function recordUsage(db: Db, input: UsageInput): Promise<void> {
-  const reported = input.reported;
-  await db.usageRecord.create({
-    data: {
-      id: randomUUID(),
-      userId: input.userId,
-      chatId: input.chatId,
-      model: input.model,
-      promptTokens: reported ? (input.promptTokens ?? null) : null,
-      completionTokens: reported ? (input.completionTokens ?? null) : null,
-      totalTokens: reported ? (input.totalTokens ?? null) : null,
-      reported: reported ? 1 : 0,
-    },
   });
 }
 
@@ -905,9 +875,6 @@ export async function runGeneration(
     userId: chat.userId,
     chatId: generation.chatId,
     model,
-    reported: usage !== null,
-    promptTokens: usage?.promptTokens ?? null,
-    completionTokens: usage?.completionTokens ?? null,
-    totalTokens: usage?.totalTokens ?? null,
+    usage,
   });
 }

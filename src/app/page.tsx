@@ -86,7 +86,7 @@ export default function Home() {
           <Button key={id} variant="ghost" className="h-10 w-full justify-start" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
         ))}
       </nav>
-      <nav aria-label={t("nav.account")} className="mt-4 space-y-1 border-t pt-3">
+<nav aria-label={t("nav.account")} className="mt-4 space-y-1 border-t pt-3">
         {[["/preferensi", t("nav.preferences")], ["/pemakaian", t("nav.usage")], ["/admin", t("nav.admin")], ["/privasi", t("nav.privacy")]].map(([href, label]) => (
           <a key={href} href={href!} className="flex h-10 items-center rounded-md px-3 text-sm font-medium hover:bg-muted">{label}</a>
         ))}
@@ -115,7 +115,7 @@ export default function Home() {
             </Dialog.Root>
             <span className="text-sm font-medium">{t(SECTION_LABEL[section] ?? "home.newChatHeader")}</span>
           </div>
-          <span className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">{t("home.preview")}</span>
+<span className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">{t("home.preview")}</span>
         </header>
         <main id="content" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
           {section === "chat" ? (
@@ -123,7 +123,7 @@ export default function Home() {
           ) : section === "settings" ? (
             <section className="mx-auto w-full max-w-3xl py-12"><Settings aria-hidden className="mb-5 size-7" /><h1 className="text-3xl font-semibold">{t("home.settingsTitle")}</h1><p className="mt-3 text-muted-foreground">{t("home.settingsSubtitle")}</p><div className="mt-10 rounded-2xl border p-6"><label htmlFor="theme" className="block font-medium">{t("settings.theme")}</label><p className="mt-2 text-sm text-muted-foreground">{t("home.themeHint")}</p><select id="theme" value={theme} onChange={event => { const value = event.target.value as Theme; setTheme(value); try { localStorage.setItem("kawan-theme", value); } catch { /* Theme remains usable without storage. */ } }} className="mt-5 min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"><option value="system">{t("settings.theme.system")}</option><option value="light">{t("settings.theme.light")}</option><option value="dark">{t("settings.theme.dark")}</option></select></div><div className="mt-6 rounded-2xl border p-6"><h2 className="font-medium">{t("home.dataTitle")}</h2><p className="mt-2 text-sm text-muted-foreground">{t("home.dataBody")}</p><div className="mt-5 flex flex-wrap items-center gap-3"><a href="/api/kawan/v1/export" download className="inline-flex min-h-11 items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted">{t("home.exportAll")}</a><label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted">{t("home.importFile")}<input type="file" accept="application/json,.json" className="sr-only" onChange={async event => { const file = event.target.files?.[0]; if (!file) return; const res = await fetch("/api/kawan/v1/chats/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() }); setImportNote(res.ok ? t("home.importOk") : t("home.importFailed")); event.target.value = ""; }} /></label><span role="status" aria-live="polite" className="text-sm text-muted-foreground">{importNote}</span></div></div></section>
           ) : (
-            <section className="mx-auto w-full max-w-3xl py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">{t("home.aboutBody")}</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-block underline">by tokengateway.ai.id</a></section>
+<section className="mx-auto w-full max-w-3xl py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">{t("home.aboutBody")}</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-block underline">by tokengateway.ai.id</a></section>
           )}
           <footer className="text-center text-xs leading-6 text-muted-foreground">{t("home.footer")}</footer>
         </main>

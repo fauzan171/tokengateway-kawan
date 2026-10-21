@@ -30,9 +30,10 @@ export const SCENARIOS = [
   "server-error",
   "corrupted",
   "drop",
-  "eof-no-done",
+"eof-no-done",
   "length-truncated",
   "no-done-marker",
+  "redirect",
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];
@@ -142,6 +143,11 @@ let retriedOnce = false;
 
 async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
   switch (scenario) {
+    case "redirect": {
+      res.writeHead(307, { location: "/redirect-target" });
+      res.end();
+      return;
+    }
     case "unicode-split": {
       sseHeaders(res);
       // Bangun seluruh respons lebih dulu, lalu tulis sebagai potongan byte
@@ -368,6 +374,10 @@ export async function startProviderFixture(): Promise<ProviderFixture> {
         body,
       });
       try {
+        if (req.url === "/redirect-target") {
+          await handle(res, "usage-present");
+          return;
+        }
         await handle(res, scenario);
       } catch {
         if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });

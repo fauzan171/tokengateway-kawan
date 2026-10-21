@@ -1,5 +1,7 @@
 # PRD Kawan — full-feature Open WebUI parity
 
+> Referensi historis. Untuk pekerjaan baru baca [scope aktif](ACTIVE-SCOPE.md). Instruksi full-parity di bawah bukan scope default.
+
 Baseline: `f8ae8a6c328946dc62cd0712961a0632574581bf`. Semua requirement di dokumen ini mandatory; status planned, belum implemented/verified.
 
 Technical design dan developer handoff: [SDD](sdd/README.md), [contract registry](sdd/contract-registry.json) dan [work orders](sdd/work-orders/README.md). SDD mendetailkan implementasi requirement ini, bukan mengubah scope/claim verification.
