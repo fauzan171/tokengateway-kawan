@@ -352,6 +352,33 @@ export function ChatSidebar({
                         <Download aria-hidden className="size-4" />
                         {t("sidebar.exportMarkdown")}
                       </a>
+                      <a
+                        href={`/api/kawan/v1/chats/${chat.id}/transfer?format=pdf`}
+                        download
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                        onClick={() => setMenuId(null)}
+                      >
+                        <Download aria-hidden className="size-4" />
+                        {t("sidebar.exportPdf")}
+                      </a>
+                      <a
+                        href={`/api/kawan/v1/chats/${chat.id}/transfer?format=docx`}
+                        download
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                        onClick={() => setMenuId(null)}
+                      >
+                        <Download aria-hidden className="size-4" />
+                        {t("sidebar.exportDocx")}
+                      </a>
+                      <a
+                        href={`/api/kawan/v1/chats/${chat.id}/transfer?format=xlsx`}
+                        download
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                        onClick={() => setMenuId(null)}
+                      >
+                        <Download aria-hidden className="size-4" />
+                        {t("sidebar.exportXlsx")}
+                      </a>
                       <MenuItem icon={<Trash2 aria-hidden />} destructive onClick={() => { setMenuId(null); void removeChat(chat.id); }}>
                         {t("common.delete")}
                       </MenuItem>

@@ -13,6 +13,13 @@ import { randomUUID } from "node:crypto";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
 import { messageText } from "./content";
+export {
+  exportChatDocxBytes,
+  exportChatPdfBytes,
+  exportChatXlsxBytes,
+  type ChatTranscript,
+  type ChatTranscriptMessage,
+} from "./document-export";
 
 export const CHAT_FORMAT = "kawan.chat.v1";
 export const EXPORT_FORMAT = "kawan.export.v1";
