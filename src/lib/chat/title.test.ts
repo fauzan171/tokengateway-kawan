@@ -95,15 +95,25 @@ describe("maybeSetAutoTitle", () => {
     expect(row.title).toBe("Judul pilihanku");
   });
 
-  it("judul manual yang persis judul bawaan dianggap belum diganti", async () => {
-    // Batasan yang diketahui: skema beku tanpa kolom penanda, jadi penandanya
-    // hanya nilai judul. Perilaku ini didokumentasikan, bukan bug tak terduga.
+  it("judul manual yang persis judul bawaan tetap tidak ditimpa", async () => {
+    // Penandanya kolom `titleSource`, bukan nilai judul (audit G02).
     const chat = await createChat(db, { userId });
     await setManualTitle(db, { chatId: chat.id, userId, title: DEFAULT_CHAT_TITLE });
 
     const title = await maybeSetAutoTitle(db, { chatId: chat.id, userId, content: "Halo" });
 
-    expect(title).toBe("Halo");
+    expect(title).toBeNull();
+    const row = await db.chat.findUniqueOrThrow({ where: { id: chat.id } });
+    expect(row.title).toBe(DEFAULT_CHAT_TITLE);
+    expect(row.titleSource).toBe("manual");
+  });
+
+  it("judul otomatis menaikkan titleRevision", async () => {
+    const chat = await createChat(db, { userId });
+    await maybeSetAutoTitle(db, { chatId: chat.id, userId, content: "Halo" });
+    const row = await db.chat.findUniqueOrThrow({ where: { id: chat.id } });
+    expect(row.titleSource).toBe("auto");
+    expect(row.titleRevision).toBe(1);
   });
 
   it("chat pengguna lain tidak tersentuh", async () => {

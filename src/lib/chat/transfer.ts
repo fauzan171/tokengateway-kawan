@@ -210,7 +210,8 @@ export async function importChat(db: Db, userId: string, raw: unknown): Promise<
   const chatId = randomUUID();
 
   await db.$transaction(async (tx) => {
-    await tx.chat.create({ data: { id: chatId, userId, title } });
+    // Judul hasil impor adalah pilihan pengguna, bukan judul bawaan.
+    await tx.chat.create({ data: { id: chatId, userId, title, titleSource: "manual" } });
     await tx.chatMessage.createMany({
       data: messages.map((message, index) => ({
         id: idMap.get(message.id)!,

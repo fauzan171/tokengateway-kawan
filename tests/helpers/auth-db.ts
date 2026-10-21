@@ -11,13 +11,21 @@
  * benar-benar bisa dipakai.
  */
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { closeDb, getDb, type Db } from "@/lib/db";
 
-const MIGRATION = "prisma/migrations/sqlite/00000000000000_init/migration.sql";
+const MIGRATIONS_DIR = "prisma/migrations/sqlite";
+
+/** Seluruh migrasi SQLite, urut nama seperti urutan penerapan Prisma. */
+export function sqliteMigrations(): string[] {
+  return readdirSync(MIGRATIONS_DIR)
+    .filter((name) => statSync(join(MIGRATIONS_DIR, name)).isDirectory())
+    .sort()
+    .map((name) => readFileSync(join(MIGRATIONS_DIR, name, "migration.sql"), "utf8"));
+}
 
 export type TempDb = {
   db: Db;
@@ -34,7 +42,9 @@ export async function createTempDb(): Promise<TempDb> {
   const file = join(dir, "test.db");
 
   const raw = new Database(file);
-  raw.exec(readFileSync(MIGRATION, "utf8"));
+  // Seluruh migrasi diterapkan berurutan, bukan hanya init: helper yang hanya
+  // tahu init akan lolos walau migrasi kedua tidak pernah dijalankan.
+  for (const sql of sqliteMigrations()) raw.exec(sql);
   raw.close();
 
   const db = await getDb(`file:${file}`);

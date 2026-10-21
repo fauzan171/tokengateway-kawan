@@ -15,12 +15,16 @@
  * untuk rekonsiliasi klien setelah SSE selesai (SDD-4.4).
  */
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
 import { startGeneration } from "./start-generation";
 import { validateAttachments } from "./attachments";
 import { CHAT_FIELDS, toPublicChat, type ChatRow, type PublicChat } from "./chats";
+import { idempotencyDigest, isUniqueViolation } from "./idempotency";
+
+/** Nama operasi untuk digest; satu kunci tidak boleh dipakai lintas operasi. */
+export const OPERATION_SEND_MESSAGE = "chat.messages.send";
 
 const CONTENT_MAX = 100_000;
 const IDEMPOTENCY_KEY_MAX = 200;
@@ -93,40 +97,6 @@ function toPublicMessage(row: MessageRow): ChatMessageDto {
   };
 }
 
-/**
- * Digest kanonik dari isi permintaan yang bermakna (content + parentId + model).
- * Urutan field tetap dan `parentId`/`model` yang absen dinormalkan ke `null`
- * supaya dua permintaan yang sama menghasilkan digest yang sama (SDD-4.7).
- */
-export function idempotencyDigest(input: {
-  content: string;
-  parentId: string | null;
-  model: string | null;
-  attachments?: readonly { mime: string; dataUrl: string }[];
-  webSearch?: boolean;
-}): string {
-  const images = (input.attachments ?? []).map((a) => [a.mime, a.dataUrl]);
-  const canonical = JSON.stringify([
-    input.content,
-    input.parentId,
-    input.model,
-    images,
-    input.webSearch === true,
-  ]);
-  return createHash("sha256").update(canonical).digest("hex");
-}
-
-/** Kode unik Prisma (P2002). Duck-typing: modul ini tidak perlu mengimpor tipe
- *  klien Prisma hanya untuk satu pengecekan. */
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "P2002"
-  );
-}
-
 export type SendMessageInput = {
   userId: string;
   chatId: string;
@@ -195,7 +165,14 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
   const images = validateAttachments(input.attachments);
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
   const webSearch = input.webSearch === true;
-  const digest = idempotencyDigest({ content, parentId, model, attachments: images, webSearch });
+  // Digest memuat owner + operasi + chat, jadi kunci yang sama pada chat atau
+  // operasi lain tidak memutar ulang hasil milik chat lain (FIX-03).
+  const digest = idempotencyDigest({
+    owner: input.userId,
+    operation: OPERATION_SEND_MESSAGE,
+    chatId: input.chatId,
+    payload: [content, parentId, model, images.map((a) => [a.mime, a.dataUrl]), webSearch],
+  });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {

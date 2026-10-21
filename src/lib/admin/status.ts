@@ -18,11 +18,20 @@ import type { Db } from "@/lib/db";
 import { readEmbeddingConfig } from "@/lib/documents/embed";
 import { readMediaConfig } from "@/lib/media/config";
 import { readWebSearchConfig } from "@/lib/search/web";
+import { workerHealth } from "@/lib/jobs/worker-heartbeat";
 
 export type SystemStatus = {
   version: string;
   database: { ok: boolean };
-  worker: { lastHeartbeat: string | null; pendingJobs: number; failedJobs: number };
+  worker: {
+    lastHeartbeat: string | null;
+    pendingJobs: number;
+    failedJobs: number;
+    /** Proses worker yang denyutnya masih segar — bukan turunan heartbeat job. */
+    alive: number;
+    stale: number;
+    versions: string[];
+  };
   counts: { users: number; chats: number; documents: number };
   optional: { webSearch: boolean; imageGen: boolean; stt: boolean; tts: boolean; embedding: boolean };
 };
@@ -54,6 +63,7 @@ export async function systemStatus(db: Db, input: { config: Config }): Promise<S
   let pendingJobs = 0;
   let failedJobs = 0;
   let lastHeartbeat: string | null = null;
+  let health = { alive: 0, stale: 0, lastSeenAt: null as string | null, versions: [] as string[] };
   let users = 0;
   let chats = 0;
   let documents = 0;
@@ -86,6 +96,7 @@ export async function systemStatus(db: Db, input: { config: Config }): Promise<S
         if (at && (!latest || at.getTime() > latest.getTime())) latest = at;
       }
       lastHeartbeat = latest ? latest.toISOString() : null;
+      health = await workerHealth(db);
     } catch {
       // Tabel belum ada / koneksi putus di tengah: status tetap dikembalikan.
     }
@@ -96,7 +107,16 @@ export async function systemStatus(db: Db, input: { config: Config }): Promise<S
   return {
     version: await readVersion(),
     database: { ok: databaseOk },
-    worker: { lastHeartbeat, pendingJobs, failedJobs },
+    worker: {
+      // Denyut proses adalah sumber utama; heartbeat job hanya cadangan untuk
+      // instalasi lama yang belum pernah menulis baris `WorkerHeartbeat`.
+      lastHeartbeat: health.lastSeenAt ?? lastHeartbeat,
+      pendingJobs,
+      failedJobs,
+      alive: health.alive,
+      stale: health.stale,
+      versions: health.versions,
+    },
     counts: { users, chats, documents },
     optional: {
       webSearch: Boolean(readWebSearchConfig()),

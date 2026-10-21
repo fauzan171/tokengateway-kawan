@@ -1,20 +1,27 @@
 // Menjaga agar migrasi tetap portabel untuk SQLite dan PostgreSQL.
 //
-// Dua hal yang diperiksa:
-//   1. Setiap migration.sql identik dengan prisma/migrations/_schema.sql.
-//      Karena DDL-nya identik, skema hasil di kedua provider tidak bisa
-//      berbeda satu sama lain.
-//   2. Tidak ada konstruksi SQL yang hanya dikenal salah satu provider.
+// Yang diperiksa:
+//   1. Migrasi init dibekukan: checksum-nya harus sama dengan yang tercatat di
+//      prisma/migrations/checksums.json. Init yang sudah pernah diterapkan tidak
+//      boleh diedit diam-diam; perubahan skema harus lewat migrasi baru.
+//   2. Urutan nama migrasi sama di kedua provider.
+//   3. Setiap migration.sql tidak kosong dan tidak memakai konstruksi SQL yang
+//      hanya dikenal salah satu provider. Migrasi tambahan boleh berbeda isinya
+//      dari init (provider-specific dibuktikan lewat test perilaku, bukan teks).
 //
-// Ini pengganti uji "bandingkan schema hasil" yang mahal: dua skrip identik
-// menghasilkan skema identik, dan itu lebih mudah dibuktikan.
+// Dua skrip identik untuk init menghasilkan skema awal yang identik; itu lebih
+// mudah dibuktikan daripada membandingkan schema hasil di dua server.
 
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const MIGRATIONS_DIR = "prisma/migrations";
+// Bisa diarahkan ke salinan sementara oleh test (uji penolakan tamper).
+const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR ?? "prisma/migrations";
 const REFERENCE = join(MIGRATIONS_DIR, "_schema.sql");
+const MANIFEST = join(MIGRATIONS_DIR, "checksums.json");
 const PROVIDERS = ["sqlite", "postgresql"];
+const INIT = "00000000000000_init";
 
 // Konstruksi yang bikin DDL hanya jalan di satu provider.
 const FORBIDDEN = [
@@ -34,6 +41,8 @@ const FORBIDDEN = [
   /\bIF\s+NOT\s+EXISTS\b/i,
 ];
 
+const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+
 const failures = [];
 
 const reference = readFileSync(REFERENCE, "utf8");
@@ -43,6 +52,31 @@ for (const pattern of FORBIDDEN) {
     failures.push(`${REFERENCE} memakai konstruksi terlarang: ${pattern}`);
   }
 }
+
+let manifest;
+try {
+  manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
+} catch (error) {
+  failures.push(`${MANIFEST} tidak ada atau bukan JSON: ${error.message}`);
+  manifest = {};
+}
+
+const referenceHash = sha256(REFERENCE);
+if (manifest[INIT] !== referenceHash) {
+  failures.push(
+    `${REFERENCE} berubah (sha256 ${referenceHash}); init yang sudah diterapkan tidak boleh diedit, buat migrasi baru`,
+  );
+}
+
+/** Nama direktori migrasi, urut seperti urutan penerapan. */
+function migrationNames(provider) {
+  const dir = join(MIGRATIONS_DIR, provider);
+  return readdirSync(dir)
+    .filter((name) => statSync(join(dir, name)).isDirectory())
+    .sort();
+}
+
+const lists = {};
 
 for (const provider of PROVIDERS) {
   const providerDir = join(MIGRATIONS_DIR, provider);
@@ -58,22 +92,24 @@ for (const provider of PROVIDERS) {
     failures.push(`${providerDir}/migration_lock.toml tidak menyatakan provider "${provider}"`);
   }
 
-  let migrationDirs;
+  let names;
   try {
-    migrationDirs = readdirSync(providerDir).filter((name) =>
-      statSync(join(providerDir, name)).isDirectory(),
-    );
+    names = migrationNames(provider);
   } catch {
     failures.push(`${providerDir} tidak ada`);
     continue;
   }
+  lists[provider] = names;
 
-  if (migrationDirs.length === 0) {
+  if (names.length === 0) {
     failures.push(`${providerDir} tidak punya migrasi`);
     continue;
   }
+  if (names[0] !== INIT) {
+    failures.push(`${providerDir}: migrasi pertama harus ${INIT}, bukan ${names[0]}`);
+  }
 
-  for (const name of migrationDirs) {
+  for (const name of names) {
     const file = join(providerDir, name, "migration.sql");
     let sql;
     try {
@@ -82,25 +118,34 @@ for (const provider of PROVIDERS) {
       failures.push(`${file} tidak ada`);
       continue;
     }
-    if (sql !== reference) {
-      failures.push(`${file} berbeda dari ${REFERENCE}`);
+    if (sql.trim() === "") {
+      failures.push(`${file} kosong`);
+      continue;
+    }
+    // Init harus identik dengan referensi; migrasi tambahan boleh berbeda.
+    if (name === INIT) {
+      if (sql !== reference) failures.push(`${file} berbeda dari ${REFERENCE}`);
+      if (sha256(file) !== manifest[INIT]) {
+        failures.push(`${file} tidak cocok dengan checksum init di ${MANIFEST}`);
+      }
+    }
+    for (const pattern of FORBIDDEN) {
+      if (pattern.test(sql)) failures.push(`${file} memakai konstruksi terlarang: ${pattern}`);
     }
   }
 }
 
 // Nama migrasi harus sama di kedua provider.
-const namesOf = (provider) =>
-  readdirSync(join(MIGRATIONS_DIR, provider))
-    .filter((name) => statSync(join(MIGRATIONS_DIR, provider, name)).isDirectory())
-    .sort()
-    .join(",");
-
-const sqliteNames = namesOf("sqlite");
-const postgresNames = namesOf("postgresql");
-if (sqliteNames !== postgresNames) {
+if (lists.sqlite && lists.postgresql && lists.sqlite.join(",") !== lists.postgresql.join(",")) {
   failures.push(
-    `daftar migrasi tidak sama: sqlite=[${sqliteNames}] postgresql=[${postgresNames}]`,
+    `daftar migrasi tidak sama: sqlite=[${lists.sqlite.join(",")}] postgresql=[${lists.postgresql.join(",")}]`,
   );
+}
+
+// Manifest harus mencakup init saja; entri tambahan untuk migrasi yang tidak
+// ada berarti checksum basi yang menyesatkan.
+for (const name of Object.keys(manifest)) {
+  if (name !== INIT) failures.push(`${MANIFEST} memuat entri tak dikenal: ${name}`);
 }
 
 if (failures.length > 0) {
@@ -109,4 +154,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`check-migrations: OK (${PROVIDERS.length} provider, migrasi identik)`);
+console.log(`check-migrations: OK (${PROVIDERS.length} provider, init dibekukan, urutan sama)`);

@@ -14,7 +14,8 @@ import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import type { Config } from "@/lib/config/env";
 import type { Db } from "@/lib/db";
 import { createChat } from "./chats";
-import { getChat, idempotencyDigest, sendMessage } from "./messages";
+import { getChat, sendMessage } from "./messages";
+import { idempotencyDigest } from "./idempotency";
 
 const state = vi.hoisted(() => ({
   userId: "",
@@ -211,16 +212,16 @@ describe("sendMessage", () => {
     expect(messages[1].status).toBe("streaming");
   });
 
-  it("digest kanonik: urutan field tetap, parentId/model absen = null", () => {
-    expect(idempotencyDigest({ content: "a", parentId: null, model: null })).toBe(
-      idempotencyDigest({ content: "a", parentId: null, model: null }),
-    );
-    expect(idempotencyDigest({ content: "a", parentId: null, model: null })).not.toBe(
-      idempotencyDigest({ content: "a", parentId: "msg_1", model: null }),
-    );
-    expect(idempotencyDigest({ content: "a", parentId: null, model: "gpt-4o-mini" })).not.toBe(
-      idempotencyDigest({ content: "a", parentId: null, model: "gpt-4o" }),
-    );
+  it("digest kanonik: owner+operasi+chat ikut, payload berbeda menghasilkan kunci berbeda", () => {
+    const base = { owner: "u1", operation: "chat.messages.send", chatId: "c1", payload: ["a", null, null, [], false] };
+    expect(idempotencyDigest(base)).toBe(idempotencyDigest({ ...base }));
+    // Kunci yang sama tidak boleh memutar ulang hasil milik owner/chat lain.
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, owner: "u2" }));
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, chatId: "c2" }));
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, operation: "chat.stop" }));
+    // Payload yang berbeda (model lain, parent lain) harus berbeda.
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, payload: ["a", "msg_1", null, [], false] }));
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, payload: ["a", null, "gpt-4o", [], false] }));
   });
 });
 

@@ -38,6 +38,11 @@ jobs:
       - name: Generate kedua klien Prisma
         run: npm run db:generate
 
+      - name: Validasi schema sumber dan SQLite
+        run: |
+          ./node_modules/.bin/prisma validate --schema prisma/schema.prisma
+          ./node_modules/.bin/prisma validate --schema prisma/schema.sqlite.prisma
+
       - name: Cek dokumen baseline
         run: python3 tasks/nontechnical-v1/tools/check_docs.py
 

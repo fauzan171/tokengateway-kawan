@@ -169,3 +169,54 @@ describe("matriks kapabilitas ChatView", () => {
     expect(container.querySelector("textarea")).not.toBeNull();
   });
 });
+
+/**
+ * FIX-03 — idempotensi kiriman. Dua klik sebelum balasan server tiba tidak
+ * boleh menghasilkan dua job: satu action ID, satu permintaan POST.
+ */
+describe("idempotensi kiriman (FIX-03)", () => {
+  function typeInto(textarea: HTMLTextAreaElement, text: string) {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    act(() => {
+      setValue.call(textarea, text);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  it("dua klik cepat → satu POST pesan, satu Idempotency-Key", async () => {
+    stub({ caps: NONE });
+    await mount();
+
+    const posts: { url: string; key: string | null }[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/kawan/v1/chat" && init?.method === "POST") {
+        return json({ id: "c1" });
+      }
+      if (url === "/api/kawan/v1/chat/c1/messages") {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        posts.push({ url, key: headers["Idempotency-Key"] ?? null });
+        // Tahan balasan supaya klik kedua jatuh sebelum `isStreaming` menyala.
+        await new Promise((r) => setTimeout(r, 20));
+        return json({ generationId: "g1", assistantMessageId: "a1", userMessageId: "u1" });
+      }
+      if (url.startsWith("/api/kawan/v1/chat/c1/stream")) {
+        return { ok: false, status: 500, body: null } as unknown as Response;
+      }
+      if (url.startsWith("/api/kawan/v1/chat/")) return json({ messages: [] });
+      return json({}, 404);
+    });
+
+    const textarea = container.querySelector("textarea")!;
+    typeInto(textarea, "halo");
+
+    const form = container.querySelector("form")!;
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 60));
+    });
+
+    expect(posts.length).toBe(1);
+    expect(posts[0].key).toBeTruthy();
+  });
+});

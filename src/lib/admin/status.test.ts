@@ -79,7 +79,14 @@ describe("systemStatus", () => {
     const status = await systemStatus(broken, { config: makeConfig() });
 
     expect(status.database.ok).toBe(false);
-    expect(status.worker).toEqual({ lastHeartbeat: null, pendingJobs: 0, failedJobs: 0 });
+    expect(status.worker).toEqual({
+      lastHeartbeat: null,
+      pendingJobs: 0,
+      failedJobs: 0,
+      alive: 0,
+      stale: 0,
+      versions: [],
+    });
     expect(status.counts).toEqual({ users: 0, chats: 0, documents: 0 });
   });
 

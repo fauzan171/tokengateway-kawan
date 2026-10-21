@@ -125,6 +125,20 @@ function parseCitations(contentJson: string): CitationView[] {
   return [];
 }
 
+/** Kunci draft per chat di sessionStorage; selamat dari reload. */
+function draftKey(id: string): string {
+  return `kawan:draft:${id}`;
+}
+
+/** Draft dari sesi sebelumnya; sessionStorage bisa diblokir (mode privat). */
+function readDraft(id: string): string {
+  try {
+    return sessionStorage.getItem(draftKey(id)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function findLeaf(messages: readonly TreeNode[], startId: string): string {
   let curr = startId;
   while (true) {
@@ -183,6 +197,20 @@ export function ChatView({
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // FIX-03: action ID dibuat sekali per kiriman lalu dipakai ulang saat retry,
+  // supaya server mengenali kiriman ganda sebagai satu action yang sama.
+  const actionIdRef = useRef<string | null>(null);
+  // Penjaga sinkron: `isStreaming` baru berubah setelah render, jadi klik
+  // kedua dalam frame yang sama masih lolos tanpa ini.
+  const sendingRef = useRef(false);
+  // Stream dibatalkan saat chat berganti; delta chat lama tidak boleh masuk.
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const chatIdRef = useRef<string | null>(chatId);
+  // Draft per chat: pindah chat tidak boleh membuang ketikan.
+  const draftsRef = useRef<Map<string, string>>(new Map());
+  // Nilai `input` terbaru tanpa menjadikannya dependensi efek reset.
+  const inputRef = useRef("");
+  inputRef.current = input;
 
   // Tombol lampiran hanya muncul bila model yang dipakai chat ini mengumumkan visi
   // (REQ-NT-46: model tanpa visi tidak menampilkan tombol, bukan tombol mati).
@@ -264,6 +292,35 @@ export function ChatView({
     } catch {}
   }, []);
 
+  // FIX-03: pindah chat membatalkan stream lama, membuang action ID lama, dan
+  // memulihkan draft chat tujuan. Tanpa ini delta chat lama bisa menempel ke
+  // chat baru dan ketikan yang belum terkirim hilang.
+  useEffect(() => {
+    const prev = chatIdRef.current;
+    if (prev === chatId) return;
+    if (prev) draftsRef.current.set(prev, inputRef.current);
+    // Simpan ke sessionStorage supaya draft juga selamat dari reload.
+    try {
+      if (prev) {
+        const text = inputRef.current;
+        if (text) sessionStorage.setItem(draftKey(prev), text);
+        else sessionStorage.removeItem(draftKey(prev));
+      }
+    } catch {}
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    sendingRef.current = false;
+    actionIdRef.current = null;
+    setIsStreaming(false);
+    setActiveGenId(null);
+    setErrorState(null);
+    setMessages([]);
+    setActiveLeafId(null);
+    setInput(chatId ? draftsRef.current.get(chatId) ?? readDraft(chatId) : "");
+    chatIdRef.current = chatId;
+    // `input` dibaca lewat ref: efek ini hanya boleh jalan saat chat berganti.
+  }, [chatId]);
+
   useEffect(() => {
     if (chatId) {
       refreshChat(chatId);
@@ -297,87 +354,119 @@ export function ChatView({
     setActiveGenId(generationId);
     setErrorState(null);
 
+    const controller = new AbortController();
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = controller;
+    // Cursor = seq terakhir yang sudah diterapkan. Delta dengan seq <= cursor
+    // dibuang, jadi sambung-ulang tidak menggandakan teks.
+    let cursor = 0;
+    let attempt = 0;
+
     try {
-      const streamRes = await fetch(
-        `/api/kawan/v1/chat/${activeId}/stream?generationId=${generationId}&afterSeq=0`,
-        { headers: { Accept: "text/event-stream" } }
-      );
-
-      if (!streamRes.ok || !streamRes.body) {
-        throw new Error(t("chat.streamFailed"));
-      }
-
-      const reader = streamRes.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
-
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? "";
+        const streamRes = await fetch(
+          `/api/kawan/v1/chat/${activeId}/stream?generationId=${generationId}&afterSeq=${cursor}`,
+          { headers: { Accept: "text/event-stream" }, signal: controller.signal }
+        );
 
-        for (const frame of frames) {
-          const lines = frame.split("\n");
-          let eventType = "message";
-          let dataStr = "";
-          for (const line of lines) {
-            if (line.startsWith("event: ")) eventType = line.slice(7).trim();
-            else if (line.startsWith("data: ")) dataStr = line.slice(6).trim();
-          }
-
-          if (eventType === "part" && dataStr) {
-            try {
-              const payload = JSON.parse(dataStr);
-              if (payload.kind === "text" && payload.text) {
-                setMessages((prev) =>
-                  prev.map((msg) => {
-                    if (msg.id !== assistantMessageId) return msg;
-                    const prevText = parseText(msg.contentJson);
-                    const nextText = prevText + payload.text;
-                    return {
-                      ...msg,
-                      contentJson: JSON.stringify({ parts: [{ kind: "text", text: nextText }] }),
-                    };
-                  })
-                );
-              }
-            } catch {}
-          } else if (eventType === "done") {
-            setIsStreaming(false);
-            setActiveGenId(null);
-            await refreshChat(activeId, assistantMessageId);
-            return;
-          } else if (eventType === "error") {
-            setIsStreaming(false);
-            setActiveGenId(null);
-            try {
-              const errPayload = JSON.parse(dataStr);
-              const mapped = mapProviderError(t, errPayload.code, errPayload.message);
-              setErrorState({ ...mapped, assistantId: assistantMessageId });
-            } catch {
-              setErrorState({ message: t("chat.generationFailed"), retryable: true, assistantId: assistantMessageId });
-            }
-            await refreshChat(activeId, assistantMessageId);
-            return;
-          }
+        if (!streamRes.ok || !streamRes.body) {
+          throw new Error(t("chat.streamFailed"));
         }
+
+        const reader = streamRes.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        let finished = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // Chat berganti saat stream berjalan: hentikan, jangan tulis ke chat baru.
+          if (chatIdRef.current !== activeId) {
+            await reader.cancel().catch(() => {});
+            return;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+
+          for (const frame of frames) {
+            const lines = frame.split("\n");
+            let eventType = "message";
+            let dataStr = "";
+            for (const line of lines) {
+              if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+              else if (line.startsWith("data: ")) dataStr = line.slice(6).trim();
+            }
+
+            if (eventType === "part" && dataStr) {
+              try {
+                const payload = JSON.parse(dataStr);
+                const seq = typeof payload.seq === "number" ? payload.seq : null;
+                if (seq !== null) {
+                  if (seq <= cursor) continue;
+                  cursor = seq;
+                }
+                if (payload.kind === "text" && payload.text) {
+                  setMessages((prev) =>
+                    prev.map((msg) => {
+                      if (msg.id !== assistantMessageId) return msg;
+                      const prevText = parseText(msg.contentJson);
+                      const nextText = prevText + payload.text;
+                      return {
+                        ...msg,
+                        contentJson: JSON.stringify({ parts: [{ kind: "text", text: nextText }] }),
+                      };
+                    })
+                  );
+                }
+              } catch {}
+            } else if (eventType === "done") {
+              finished = true;
+              break;
+            } else if (eventType === "error") {
+              finished = true;
+              try {
+                const errPayload = JSON.parse(dataStr);
+                const mapped = mapProviderError(t, errPayload.code, errPayload.message);
+                setErrorState({ ...mapped, assistantId: assistantMessageId });
+              } catch {
+                setErrorState({ message: t("chat.generationFailed"), retryable: true, assistantId: assistantMessageId });
+              }
+              break;
+            }
+          }
+          if (finished) break;
+        }
+
+        if (finished) return;
+        // Server menutup stream tanpa `done`: sambung ulang dari cursor, dengan
+        // backoff supaya tidak membanjiri server saat koneksi benar-benar mati.
+        attempt += 1;
+        if (attempt > 5) throw new Error(t("chat.streamFailed"));
+        await new Promise((r) => setTimeout(r, Math.min(500 * 2 ** (attempt - 1), 8000)));
+        if (controller.signal.aborted) return;
       }
     } catch (err: unknown) {
+      if (controller.signal.aborted) return;
       const msg = err instanceof Error ? err.message : t("chat.receiveFailed");
       const mapped = mapProviderError(t, undefined, msg);
       setErrorState({ ...mapped, assistantId: assistantMessageId });
     } finally {
-      setIsStreaming(false);
-      setActiveGenId(null);
-      await refreshChat(activeId, assistantMessageId);
+      if (streamAbortRef.current === controller) streamAbortRef.current = null;
+      if (chatIdRef.current === activeId) {
+        setIsStreaming(false);
+        setActiveGenId(null);
+        await refreshChat(activeId, assistantMessageId);
+      }
     }
   }
 
   async function handleSend(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if ((!input.trim() && attachments.length === 0) || isStreaming) return;
+    // `sendingRef` menutup celah antara klik dan render `isStreaming`: dua klik
+    // dalam satu frame tetap menghasilkan satu job.
+    if ((!input.trim() && attachments.length === 0) || isStreaming || sendingRef.current) return;
 
     const userText = input.trim();
     const sending = attachments;
@@ -385,14 +474,27 @@ export function ChatView({
     setInput("");
     setAttachments([]);
     setErrorState(null);
+    sendingRef.current = true;
 
     try {
       const activeId = await ensureChat();
       const parentId = activeLeafId;
 
+      // Action ID stabil: dipakai ulang bila kiriman ini diulang setelah galat,
+      // supaya server mengenalinya sebagai action yang sama (bukan job baru).
+      if (!actionIdRef.current) {
+        actionIdRef.current =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
+
       const sendRes = await fetch(`/api/kawan/v1/chat/${activeId}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": actionIdRef.current,
+        },
         body: JSON.stringify({
           content: userText || "(gambar)",
           parentId,
@@ -437,10 +539,17 @@ export function ChatView({
       setMessages((prev) => [...prev, userNode, assistantNode]);
       setActiveLeafId(assistantMessageId);
 
+      // Kiriman diterima server: action berikutnya harus punya kunci sendiri.
+      actionIdRef.current = null;
+      sendingRef.current = false;
+
       await streamSSE(activeId, generationId, assistantMessageId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t("chat.sendError");
+      // Kunci TIDAK dibuang: percobaan ulang kiriman ini harus memakai kunci
+      // yang sama agar tidak membuat job kedua.
       setErrorState({ message: msg, retryable: false });
+      sendingRef.current = false;
       setIsStreaming(false);
       setActiveGenId(null);
     }
@@ -448,6 +557,7 @@ export function ChatView({
 
   async function handleStop() {
     if (!chatId || !activeGenId) return;
+    streamAbortRef.current?.abort();
     try {
       await fetch(`/api/kawan/v1/chat/${chatId}/generations/${activeGenId}/stop`, {
         method: "POST",

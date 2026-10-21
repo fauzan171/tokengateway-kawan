@@ -14,6 +14,7 @@
 
 import type { Db } from "@/lib/db";
 import { logger } from "@/lib/api/logger";
+import { createFence, LeaseLost, type FenceChecker } from "./fence";
 import {
   claim,
   complete,
@@ -25,7 +26,15 @@ import {
   type Claim,
 } from "./queue";
 
-export type JobHandler = (job: Claim, signal: AbortSignal) => Promise<void>;
+/**
+ * Handler menerima `fence` yang harus diperiksa sebelum setiap tulisan domain.
+ * Tanpa itu, worker yang lease-nya hilang tetap menulis hasil basi.
+ */
+export type JobHandler = (
+  job: Claim,
+  signal: AbortSignal,
+  fence: FenceChecker,
+) => Promise<void>;
 
 export type WorkerOptions = {
   db: Db;
@@ -130,20 +139,32 @@ export function createWorker(options: WorkerOptions): Worker {
     master.signal.addEventListener("abort", cancel, { once: true });
     if (master.signal.aborted) controller.abort();
 
+    const fence = createFence(db, { jobId: held.id, leaseToken: held.leaseToken });
+
     const beat = setInterval(() => {
-      void heartbeat(db, held, leaseMs, now()).then((stillHeld) => {
-        // Lease hilang: hentikan handler, hasilnya tidak boleh ditulis.
-        if (!stillHeld) controller.abort();
-      });
+      // `.catch` wajib: rejection heartbeat (DB putus) tanpa handler akan jadi
+      // unhandled rejection dan mematikan proses. Kegagalan heartbeat berarti
+      // lease tidak pasti lagi, jadi handler dihentikan.
+      void heartbeat(db, held, leaseMs, now()).then(
+        (stillHeld) => {
+          if (!stillHeld) controller.abort();
+        },
+        () => controller.abort(),
+      );
     }, heartbeatMs);
 
     running.set(held.id, held);
     try {
-      await handler(held, controller.signal);
+      await handler(held, controller.signal, fence);
       if (controller.signal.aborted) return;
+      // Tulisan domain sudah selesai; periksa ulang tanpa cache sebelum
+      // menutup job, supaya lease yang habis di detik terakhir tidak lolos.
+      if (!(await fence.heldFresh())) return;
       await complete(db, held, now());
     } catch (error) {
       if (controller.signal.aborted) return;
+      // Lease hilang bukan kegagalan job: worker lain sudah memegangnya.
+      if (error instanceof LeaseLost) return;
       const state = await fail(db, held, error, { now: now() });
       logger.error(
         { requestId: held.id, route: "worker", latencyMs: 0, result: state },

@@ -20,6 +20,8 @@ describe("worker shutdown deadline", () => {
     // `worker.ts` memanggil reconcileGenerations saat startup dan shutdown;
     // tanpa mock, db palsu `{}` melempar dan main() keluar lewat process.exit.
     vi.doMock("@/lib/chat/recovery", () => ({ reconcileGenerations: vi.fn(async () => {}) }));
+    // FIX-24: denyut proses menyentuh DB sungguhan; db palsu `{}` akan melempar.
+    vi.doMock("@/lib/jobs/worker-heartbeat", () => ({ touchWorkerHeartbeat: vi.fn(async () => {}) }));
     vi.doMock("@/lib/api/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
     vi.spyOn(process, "on").mockImplementation(((event: string, listener: (signal: NodeJS.Signals) => void) => {
       handlers.set(event, listener);
@@ -36,15 +38,23 @@ describe("worker shutdown deadline", () => {
     vi.restoreAllMocks();
   });
 
-  it("stays alive beyond the old startup deadline", async () => {
+  // `worker.ts` memasang interval denyut proses (FIX-24) yang tidak boleh
+  // dihitung sebagai timer shutdown. Buang setelah boot; test ini hanya
+  // menguji deadline force-exit.
+  const boot = async () => {
     await import("./worker");
+    vi.clearAllTimers();
+  };
+
+  it("stays alive beyond the old startup deadline", async () => {
+    await boot();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(process.exit).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("arms the deadline only on the first shutdown signal", async () => {
-    await import("./worker");
+    await boot();
     expect(vi.getTimerCount()).toBe(0);
     handlers.get("SIGTERM")!("SIGTERM");
     expect(stop).toHaveBeenCalledTimes(1);

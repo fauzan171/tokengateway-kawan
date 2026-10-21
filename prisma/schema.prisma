@@ -34,7 +34,6 @@ model User {
   connections Connection[]
   chats     Chat[]
   folders   Folder[]
-  connections Connection[]
   documents Document[]
   prompts   Prompt[]
   setting   UserSetting?
@@ -231,6 +230,10 @@ model Chat {
   id               String   @id
   userId           String
   title            String
+  /// "manual" setelah pengguna mengganti judul; "auto" sesudah derivasi.
+  /// Judul otomatis tidak boleh menimpa judul manual (FIX-04).
+  titleSource      String   @default("auto")
+  titleRevision    Int      @default(0)
   modelRef         String?
   currentMessageId String?
   folderId         String?
@@ -413,6 +416,22 @@ model UserSetting {
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Denyut proses worker (FIX-24, SDD-8.5).
+///
+/// Sebelumnya status worker disimpulkan dari `Job.heartbeatAt`; worker yang
+/// sehat tetapi antrean kosong karena itu tampak mati. Baris ini ditulis
+/// worker idle setiap beberapa detik, jadi kesegarannya membuktikan proses
+/// hidup — bukan keberadaan job.
+model WorkerHeartbeat {
+  workerId     String   @id
+  version      String
+  capabilities String   @default("[]")
+  startedAt    DateTime @default(now())
+  lastSeenAt   DateTime
+
+  @@index([lastSeenAt])
 }
 
 /// Konfigurasi runtime yang dapat diubah admin (REQ-NT-76). Satu baris, id = "app".

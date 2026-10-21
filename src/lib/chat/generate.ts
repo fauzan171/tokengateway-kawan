@@ -44,12 +44,14 @@ import { retrieveChunks, type RetrievedChunk } from "@/lib/documents/retrieve";
 import { extractCitations } from "@/lib/documents/citations";
 import { buildSearchSystem, webSearchRequested } from "@/lib/search/prompt";
 import { webSearch, type SearchResult } from "@/lib/search/web";
+import { assertHeld, LeaseLost, type FenceChecker } from "@/lib/jobs/fence";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
 import { recordUsage } from "./usage";
 import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
+import { getCachedModels, resolveModel } from "@/lib/connections/model-cache";
 
 /** Model cadangan bila chat belum pernah memilih model. */
 export const DEFAULT_MODEL = "deepseek-v4.1-flash";
@@ -63,6 +65,47 @@ const DEFAULT_SYSTEM_PROMPT = [
   "Gunakan markdown bila membantu keterbacaan: daftar, tabel, atau blok kode.",
 ].join("\n");
 
+/** Zona waktu bawaan bila pengguna belum punya preferensi (SDD-3.4). */
+export const DEFAULT_TIMEZONE = "Asia/Jakarta";
+
+/**
+ * Blok konteks server untuk model (audit G02/G01).
+ *
+ * Hanya item yang benar-benar diketahui server: waktu, zona waktu, judul chat,
+ * dan model. Batas pengetahuan dan jendela konteks model TIDAK ditebak — server
+ * tidak punya metadata resminya, jadi ditulis apa adanya.
+ */
+export function buildRuntimeContext(input: {
+  now: Date;
+  timezone: string;
+  chatTitle: string;
+  model: string;
+}): string {
+  // Zona waktu IANA divalidasi `Intl` (sumber yang sama dengan runtime), bukan
+  // daftar nama tulisan tangan; nilai tidak sah jatuh ke bawaan.
+  let timezone = DEFAULT_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: input.timezone });
+    timezone = input.timezone;
+  } catch {
+    timezone = DEFAULT_TIMEZONE;
+  }
+  const local = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(input.now);
+
+  return [
+    "## Konteks dari server",
+    `Waktu server (UTC): ${input.now.toISOString()}`,
+    `Zona waktu: ${timezone} (waktu lokal ${local})`,
+    `Judul chat: ${input.chatTitle}`,
+    `Model: ${input.model}`,
+    "Batas pengetahuan dan jendela konteks model: tidak diketahui server",
+  ].join("\n");
+}
+
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
 
 /**
@@ -74,6 +117,9 @@ export type GenerateConfig = {
   encryptionKey: Buffer;
   allowInsecureHttp: boolean;
   outboundAllowlist: readonly string[];
+  /** TTL cache model untuk memeriksa ketersediaan model pilihan pengguna
+   *  (audit A01). Tanpa nilai, pemeriksaan dilewati; `Config` penuh mengisinya. */
+  modelCacheTtlSeconds?: number;
 };
 
 /** Galat jalur generasi dengan kode yang disimpan ke `Generation.errorCode`. */
@@ -409,119 +455,136 @@ async function streamGateway(input: {
   // streaming mulai akan menduplikasi teks. Backoff menghormati `Retry-After`.
   const MAX_ATTEMPTS = 3;
 
-  let response!: Response;
-  for (let attempt = 1; ; attempt += 1) {
+  // Satu tempat pembersihan untuk SEMUA jalur keluar (T13): timer idle, poll
+  // stop, dan reader tidak boleh tertinggal saat galat non-2xx, retry, atau
+  // sukses. Tanpa ini, timer idle tetap menyala setelah stream selesai.
+  const cleanup = () => {
+    clearTimeout(idleTimer);
+    clearInterval(stopPoll);
+  };
+
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+  try {
+    let response!: Response;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        // POST ber-body: redirect TIDAK diikuti (kredensial & isi tidak dikirim
+        // ulang ke tujuan lain); `fetchOutbound` menolaknya sebagai BAD_URL.
+        response = await fetchOutbound(
+          url,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify(input.body),
+            signal: combined,
+          },
+          input.outbound,
+        );
+      } catch (err) {
+        if (stopSignal.signal.aborted) throw new StopRequested();
+        if (input.signal.aborted) throw err;
+        if (idleFired) throw new GenerationError("TIMEOUT", PROVIDER_MESSAGES.TIMEOUT, true);
+        throw transportError(err);
+      }
+
+      if (response.ok || attempt >= MAX_ATTEMPTS || !isTransient(response.status)) break;
+
+      // Buang body percobaan gagal supaya koneksi tidak menggantung.
+      await response.body?.cancel().catch(() => {});
+      await sleep(retryDelayMs(response.headers.get("retry-after"), attempt), input.signal);
+      if (input.signal.aborted) throw new Error("Dibatalkan saat menunggu retry.");
+      idleFired = false;
+      bumpIdle();
+    }
+
+    bumpIdle();
+
+    if (!response.ok) {
+      // 401/403 gateway BUKAN 401 akun: dipetakan jadi kode provider (SDD-5.4).
+      const failure = fromUpstreamStatus(response.status);
+      const detail = await readFailureDetail(response);
+      logUpstreamFailure(input.generationId, response.status, detail);
+      // 400/422 dapat dibedakan dari 5xx lewat kode diagnostik, tanpa mengubah
+      // kosakata `reason` (AUD-02). Sisanya pakai `reason` apa adanya.
+      const code =
+        response.status === STATUS.BAD_REQUEST || response.status === STATUS.UNPROCESSABLE
+          ? INVALID_REQUEST_CODE
+          : failure.reason;
+      throw new GenerationError(code, failure.message, failure.retryable);
+    }
+    if (!response.body) {
+      throw new GenerationError("UPSTREAM_ERROR", DISCONNECTED_MESSAGE, true);
+    }
+
+    const parser = createStreamParser();
+    reader = response.body.getReader();
+    let usage: StreamUsage | null = null;
+    let sawDone = false;
+    let finishReason: string | null = null;
+
     try {
-      // POST ber-body: redirect TIDAK diikuti (kredensial & isi tidak dikirim
-      // ulang ke tujuan lain); `fetchOutbound` menolaknya sebagai BAD_URL.
-      response = await fetchOutbound(
-        url,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify(input.body),
-          signal: combined,
-        },
-        input.outbound,
-      );
+      for (;;) {
+        const { done, value } = await reader.read();
+        bumpIdle();
+        if (done) break;
+        // Setiap potongan diperiksa (SDD-4.6): begitu `cancelRequestedAt` terisi,
+        // potongan yang baru dibaca ini TIDAK ditulis dan koneksi ditutup —
+        // tidak ada token yang tersimpan setelah pembatalan.
+        if (await input.shouldStop()) throw new StopRequested();
+        for (const delta of parser.push(value)) {
+          if (delta.kind === "done") {
+            sawDone = true;
+            finishReason = delta.finishReason ?? null;
+            break;
+          }
+          if (delta.kind === "usage" && delta.usage) usage = delta.usage;
+          await input.onDelta(delta);
+        }
+        if (sawDone) break;
+      }
+      if (!sawDone) {
+        for (const delta of parser.flush()) {
+          if (delta.kind === "done") {
+            sawDone = true;
+            finishReason = delta.finishReason ?? null;
+            break;
+          }
+          if (delta.kind === "usage" && delta.usage) usage = delta.usage;
+          await input.onDelta(delta);
+        }
+      }
+      // Koneksi putus tanpa `[DONE]` maupun `finish_reason` berarti jawaban
+      // terpotong (AUD-09). Tanpa ini, kalimat menggantung tercatat `complete`.
+      if (!sawDone && finishReason === null)
+        throw new GenerationError(
+          "STREAM_INCOMPLETE",
+          "Jawaban terputus sebelum selesai.",
+          true,
+        );
     } catch (err) {
-      clearTimeout(idleTimer);
-      clearInterval(stopPoll);
+      // Pembatalan (dari luar atau karena stop) bukan galat generasi: teruskan
+      // apa adanya supaya pemanggil membedakannya dari kegagalan gateway.
+      // `GenerationError` dari loop ini juga sudah berkode, jangan dibungkus.
       if (stopSignal.signal.aborted) throw new StopRequested();
-      if (input.signal.aborted) throw err;
-      if (idleFired) throw new GenerationError("TIMEOUT", PROVIDER_MESSAGES.TIMEOUT, true);
+      // `LeaseLost` bukan kegagalan provider: teruskan supaya worker berhenti
+      // tanpa memetakannya jadi galat generasi.
+      if (
+        input.signal.aborted ||
+        err instanceof StopRequested ||
+        err instanceof GenerationError ||
+        err instanceof LeaseLost
+      )
+        throw err;
       throw transportError(err);
     }
 
-    if (response.ok || attempt >= MAX_ATTEMPTS || !isTransient(response.status)) break;
-
-    // Buang body percobaan gagal supaya koneksi tidak menggantung.
-    await response.body?.cancel().catch(() => {});
-    await sleep(retryDelayMs(response.headers.get("retry-after"), attempt), input.signal);
-    if (input.signal.aborted) throw new Error("Dibatalkan saat menunggu retry.");
-    idleFired = false;
-    bumpIdle();
-  }
-
-  bumpIdle();
-
-  if (!response.ok) {
-    // 401/403 gateway BUKAN 401 akun: dipetakan jadi kode provider (SDD-5.4).
-    const failure = fromUpstreamStatus(response.status);
-    const detail = await readFailureDetail(response);
-    logUpstreamFailure(input.generationId, response.status, detail);
-    // 400/422 dapat dibedakan dari 5xx lewat kode diagnostik, tanpa mengubah
-    // kosakata `reason` (AUD-02). Sisanya pakai `reason` apa adanya.
-    const code =
-      response.status === STATUS.BAD_REQUEST || response.status === STATUS.UNPROCESSABLE
-        ? INVALID_REQUEST_CODE
-        : failure.reason;
-    throw new GenerationError(code, failure.message, failure.retryable);
-  }
-  if (!response.body) {
-    throw new GenerationError("UPSTREAM_ERROR", DISCONNECTED_MESSAGE, true);
-  }
-
-  const parser = createStreamParser();
-  const reader = response.body.getReader();
-  let usage: StreamUsage | null = null;
-  let sawDone = false;
-  let finishReason: string | null = null;
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      bumpIdle();
-      if (done) break;
-      // Setiap potongan diperiksa (SDD-4.6): begitu `cancelRequestedAt` terisi,
-      // potongan yang baru dibaca ini TIDAK ditulis dan koneksi ditutup —
-      // tidak ada token yang tersimpan setelah pembatalan.
-      if (await input.shouldStop()) throw new StopRequested();
-      for (const delta of parser.push(value)) {
-        if (delta.kind === "done") {
-          sawDone = true;
-          finishReason = delta.finishReason ?? null;
-          break;
-        }
-        if (delta.kind === "usage" && delta.usage) usage = delta.usage;
-        await input.onDelta(delta);
-      }
-      if (sawDone) break;
-    }
-    if (!sawDone) {
-      for (const delta of parser.flush()) {
-        if (delta.kind === "done") {
-          sawDone = true;
-          finishReason = delta.finishReason ?? null;
-          break;
-        }
-        if (delta.kind === "usage" && delta.usage) usage = delta.usage;
-        await input.onDelta(delta);
-      }
-    }
-    // Koneksi putus tanpa `[DONE]` maupun `finish_reason` berarti jawaban
-    // terpotong (AUD-09). Tanpa ini, kalimat menggantung tercatat `complete`.
-    if (!sawDone && finishReason === null)
-      throw new GenerationError(
-        "STREAM_INCOMPLETE",
-        "Jawaban terputus sebelum selesai.",
-        true,
-      );
-  } catch (err) {
-    // Pembatalan (dari luar atau karena stop) bukan galat generasi: teruskan
-    // apa adanya supaya pemanggil membedakannya dari kegagalan gateway.
-    // `GenerationError` dari loop ini juga sudah berkode, jangan dibungkus.
-    if (stopSignal.signal.aborted) throw new StopRequested();
-    if (input.signal.aborted || err instanceof StopRequested || err instanceof GenerationError)
-      throw err;
-    throw transportError(err);
+    return { usage, finishReason };
   } finally {
-    clearInterval(stopPoll);
+    cleanup();
     // Menutup koneksi ke gateway — juga jalur pembatalan (SDD-4.6).
-    reader.cancel().catch(() => {});
+    reader?.cancel().catch(() => {});
   }
-
-  return { usage, finishReason };
 }
 
 /**
@@ -627,7 +690,17 @@ export async function runGeneration(
   config: GenerateConfig,
   generationId: string,
   signal: AbortSignal,
+  /**
+   * Lease job yang memegang generasi ini. Bila diberikan, setiap tulisan
+   * diperiksa terhadapnya; lease yang hilang menghentikan worker tanpa
+   * menulis apa pun (FIX-02). Test yang memanggil langsung boleh melewatkannya.
+   */
+  fence?: FenceChecker,
 ): Promise<void> {
+  const held = async () => {
+    if (fence) await assertHeld(fence);
+  };
+
   const generation = await db.generation.findUnique({
     where: { id: generationId },
     select: { id: true, chatId: true, userMessageId: true, assistantMessageId: true },
@@ -636,11 +709,40 @@ export async function runGeneration(
 
   const chat = await db.chat.findUnique({
     where: { id: generation.chatId },
-    select: { id: true, userId: true, modelRef: true },
+    select: { id: true, userId: true, modelRef: true, title: true },
   });
   if (!chat) throw new GenerationSetupError("Chat untuk generasi ini tidak ditemukan.");
 
-  const model = chat.modelRef ?? DEFAULT_MODEL;
+  const active = await getActiveConnection(db, chat.userId);
+  if (!active) throw new GenerationSetupError("Belum ada koneksi aktif.");
+
+  // Model pilihan pengguna menang; model bawaan hanya bila chat belum memilih,
+  // dan fallback itu DILAPORKAN, bukan disembunyikan (audit A01).
+  const cached = config.modelCacheTtlSeconds
+    ? await getCachedModels(db, {
+        connectionId: active.id,
+        ttlSeconds: config.modelCacheTtlSeconds,
+        now: new Date(),
+      })
+    : null;
+  const resolution = resolveModel({
+    modelRef: chat.modelRef,
+    available: cached ? cached.models : null,
+    defaultModel: DEFAULT_MODEL,
+  });
+  if (!resolution.ok) {
+    // Model tidak tersedia → galat jelas, bukan penggantian model diam-diam.
+    await failGeneration(
+      db,
+      generationId,
+      generation.assistantMessageId,
+      new GenerationError("MODEL_UNAVAILABLE", resolution.message, false),
+      "",
+      new Date(),
+    );
+    return;
+  }
+  const model = resolution.model;
 
   const rows = await db.chatMessage.findMany({
     where: { chatId: generation.chatId },
@@ -746,8 +848,13 @@ export async function runGeneration(
   }
   const searchSystem = buildSearchSystem(sources) ?? null;
 
-  const active = await getActiveConnection(db, chat.userId);
-  if (!active) throw new GenerationSetupError("Belum ada koneksi aktif.");
+  if (resolution.fallback) {
+    await publishEvent(db, generationId, "note", {
+      code: "MODEL_FALLBACK",
+      model,
+      message: `Chat belum memilih model; dipakai model bawaan "${model}".`,
+    });
+  }
 
   const { baseUrl, apiKey } = await openApiKey(db, config, active.id, chat.userId);
 
@@ -770,6 +877,14 @@ export async function runGeneration(
     }
   }
 
+  // Stop yang masuk SEBELUM dispatch tidak boleh memulai panggilan provider
+  // berbayar (FIX-02). Stop setelah dispatch hanya menjamin tidak ada token
+  // baru yang ditulis, bukan pembatalan biaya di sisi gateway (SDD-4.6).
+  if (await stopIfRequested(db, generationId)) {
+    await stopGeneration(db, generationId, generation.assistantMessageId, text, new Date());
+    return;
+  }
+
   let usage: StreamUsage | null;
   let finishReason: string | null;
   try {
@@ -780,8 +895,19 @@ export async function runGeneration(
       body: {
         model,
         messages: [
-          // Prompt bawaan → prompt pengguna → konteks dokumen → sumber web → riwayat.
+          // Prompt bawaan → konteks server → prompt pengguna → dokumen → web → riwayat.
           { role: "system", content: DEFAULT_SYSTEM_PROMPT },
+          {
+            role: "system",
+            content: buildRuntimeContext({
+              now: new Date(),
+              // shortcut: preferensi zona waktu per pengguna belum ada kolomnya
+              // (`UserSetting.timezone`); tambahkan saat kolom itu menyusul.
+              timezone: DEFAULT_TIMEZONE,
+              chatTitle: chat.title,
+              model,
+            }),
+          },
           ...(userSystem ? [{ role: "system", content: userSystem }] : []),
           ...(contextSystem ? [{ role: "system", content: contextSystem }] : []),
           ...(searchSystem ? [{ role: "system", content: searchSystem }] : []),
@@ -796,6 +922,9 @@ export async function runGeneration(
       signal,
       shouldStop: () => stopIfRequested(db, generationId),
       onDelta: async (delta) => {
+        // Lease hilang → jangan tulis delta basi ke pesan yang mungkin sudah
+        // dipegang worker lain.
+        await held();
         if (delta.kind === "text" && delta.text) {
           text += delta.text;
           await db.chatMessagePart.create({
@@ -816,12 +945,16 @@ export async function runGeneration(
   } catch (err) {
     // Worker berhenti: bukan galat generasi; penanganan stop menutupnya nanti.
     if (signal.aborted) return;
+    // Lease hilang: worker lain yang berhak menutup generasi ini.
+    if (err instanceof LeaseLost) return;
     // Pembatalan pengguna: simpan partial, tutup `stopped` (SDD-4.6).
     if (err instanceof StopRequested) {
+      await held();
       await stopGeneration(db, generationId, generation.assistantMessageId, text, new Date());
       return;
     }
     if (err instanceof GenerationError) {
+      await held();
       await failGeneration(db, generationId, generation.assistantMessageId, err, text, new Date());
       return;
     }
@@ -829,6 +962,9 @@ export async function runGeneration(
   }
 
   if (signal.aborted) return;
+  // Tulisan final juga difencing: lease yang habis selama streaming tidak
+  // boleh menutup generasi milik worker lain sebagai `complete`.
+  await held();
 
   const now = new Date();
   // Catatan ikut di `contentJson` karena UI membacanya dari sana (bagian `note`).

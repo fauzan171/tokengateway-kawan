@@ -107,7 +107,16 @@ export async function createChat(db: Db, input: CreateChatInput): Promise<Public
     : null;
 
   const row = await db.chat.create({
-    data: { id: randomUUID(), userId: input.userId, title, modelRef, folderId },
+    data: {
+      id: randomUUID(),
+      userId: input.userId,
+      title,
+      // Judul yang dikirim pemanggil adalah pilihan manusia; judul otomatis
+      // tidak boleh menimpanya (FIX-04).
+      titleSource: input.title === undefined || input.title === null ? "auto" : "manual",
+      modelRef,
+      folderId,
+    },
     select: CHAT_FIELDS,
   });
   return toPublicChat(row);
@@ -260,7 +269,13 @@ export async function updateChat(
 ): Promise<PublicChat> {
   const data: Record<string, unknown> = {};
 
-  if ("title" in input) data.title = normalizeTitle(input.title);
+  if ("title" in input) {
+    // Rename lewat PATCH juga manual: judul otomatis tidak boleh menimpanya,
+    // dan revisi naik supaya penulis otomatis yang lebih lambat kalah CAS.
+    data.title = normalizeTitle(input.title);
+    data.titleSource = "manual";
+    data.titleRevision = { increment: 1 };
+  }
 
   if ("folderId" in input) {
     const raw = input.folderId;
@@ -298,8 +313,33 @@ export async function updateChat(
   return toPublicChat(row);
 }
 
-/** Hapus chat beserta pesan, generasi, dan tautan berbaginya (cascade FK). */
+/**
+ * Hapus chat beserta pesan, generasi, dan tautan berbaginya (cascade FK).
+ *
+ * Job generasi TIDAK punya FK ke Chat (payload JSON), jadi ia dihapus eksplisit
+ * dalam transaksi yang sama. Tanpa itu, worker yang sedang memegang lease
+ * generasi terhapus akan menulis hasil basi; dengan baris job hilang, fence
+ * worker gagal dan worker berhenti (FIX-02/T17).
+ */
 export async function deleteChat(db: Db, userId: string, chatId: string): Promise<void> {
-  const result = await db.chat.deleteMany({ where: { id: chatId, userId } });
-  if (result.count === 0) throw chatNotFound();
+  await db.$transaction(async (tx) => {
+    const chat = await tx.chat.findFirst({
+      where: { id: chatId, userId },
+      select: { id: true },
+    });
+    if (!chat) throw chatNotFound();
+
+    const generations = await tx.generation.findMany({
+      where: { chatId },
+      select: { jobId: true },
+    });
+    const jobIds = generations
+      .map((generation) => generation.jobId)
+      .filter((jobId): jobId is string => jobId !== null);
+    if (jobIds.length > 0) {
+      await tx.job.deleteMany({ where: { id: { in: jobIds } } });
+    }
+
+    await tx.chat.delete({ where: { id: chatId } });
+  });
 }

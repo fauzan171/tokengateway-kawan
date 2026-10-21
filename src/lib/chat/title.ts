@@ -1,14 +1,12 @@
 /**
  * Judul chat otomatis dan penggantian manual (REQ-NT-29, SDD-3.4).
  *
- * Skema `Chat` dibekukan tanpa kolom penanda "judul masih bawaan", jadi
- * penandanya adalah nilai judul itu sendiri: selama judul masih sama dengan
- * judul bawaan `createChat` (`DEFAULT_CHAT_TITLE`), judul dianggap belum
- * disentuh dan boleh diisi otomatis sekali. Begitu `setManualTitle` menulis
- * judul lain, `maybeSetAutoTitle` tidak pernah menimpanya lagi.
- *
- * Konsekuensi yang diterima: chat yang sengaja dinamai persis "Chat baru"
- * dianggap belum diganti. Tidak ada kolom lain yang bisa dipakai.
+ * Penanda "judul masih otomatis" adalah kolom `Chat.titleSource`
+ * (`auto` | `manual`), bukan nilai judulnya. `setManualTitle` menulis
+ * `manual`, sehingga rename manual menang bahkan bila pengguna mengetik persis
+ * `DEFAULT_CHAT_TITLE` (audit G02). Setiap perubahan judul menaikkan
+ * `titleRevision`; penulisan otomatis memakai syarat `titleSource: "auto"`
+ * sehingga pemeriksaan dan penulisan tetap atomik (CAS).
  */
 
 import { ApiError, STATUS } from "@/lib/api/errors";
@@ -84,8 +82,8 @@ export type AutoTitleInput = {
 export async function maybeSetAutoTitle(db: Db, input: AutoTitleInput): Promise<string | null> {
   const title = deriveTitle(input.content);
   const { count } = await db.chat.updateMany({
-    where: { id: input.chatId, userId: input.userId, title: DEFAULT_CHAT_TITLE },
-    data: { title },
+    where: { id: input.chatId, userId: input.userId, titleSource: "auto" },
+    data: { title, titleRevision: { increment: 1 } },
   });
   return count === 1 ? title : null;
 }
@@ -120,7 +118,7 @@ export async function setManualTitle(db: Db, input: ManualTitleInput): Promise<P
 
   const row = (await db.chat.update({
     where: { id: chat.id },
-    data: { title },
+    data: { title, titleSource: "manual", titleRevision: { increment: 1 } },
     select: CHAT_FIELDS,
   })) as ChatRow;
   return toPublicChat(row);
