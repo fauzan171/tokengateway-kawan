@@ -29,16 +29,23 @@ export default function Home() {
   const [importNote, setImportNote] = useState("");
 
   /**
-   * Pengalihan onboarding (REQ-NT-01): pengguna yang sudah masuk tetapi belum
-   * punya koneksi aktif diarahkan ke `/onboarding`. Pemeriksaan dilakukan di
-   * klien lewat endpoint yang sudah ada — tanpa menyentuh berkas server lain.
-   * Belum masuk (401) atau jaringan gagal dibiarkan: beranda tetap tampil.
+   * Gerbang masuk + pengalihan onboarding (REQ-NT-01): pengguna yang belum
+   * masuk diarahkan ke `/masuk`, yang sudah masuk tetapi belum punya koneksi
+   * aktif diarahkan ke `/onboarding`. Pemeriksaan dilakukan di klien lewat
+   * endpoint yang sudah ada — tanpa menyentuh berkas server lain.
+   * Jaringan gagal dibiarkan: beranda tetap tampil.
    */
   useEffect(() => {
     const controller = new AbortController();
     (async () => {
       try {
         const response = await fetch("/api/kawan/v1/connections", { signal: controller.signal });
+        // Tanpa ini shell chat dirender penuh untuk anonim, dan setiap
+        // endpoint yang gagal 401 menempelkan "Sesi berakhir" di kotak input.
+        if (response.status === 401) {
+          router.replace("/masuk");
+          return;
+        }
         if (!response.ok) return;
         const payload = (await response.json().catch(() => null)) as
           | { connections?: { isActive?: boolean }[] }

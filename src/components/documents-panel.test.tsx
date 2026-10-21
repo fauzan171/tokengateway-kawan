@@ -113,4 +113,23 @@ describe("DocumentsPanel", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("/api/kawan/v1/documents/c", { method: "DELETE" });
     expect(container.textContent).not.toContain("siap.pdf");
   });
+
+  it("sesi habis (401) mengalihkan ke /masuk, bukan menempelkan galat di kotak input", async () => {
+    const assign = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...original, assign } });
+
+    fetchMock.mockResolvedValueOnce(json({ error: { code: "UNAUTHORIZED" } }, 401));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(<DocumentsPanel />);
+    });
+
+    expect(assign).toHaveBeenCalledWith("/masuk");
+    expect(container.textContent).not.toContain("Sesi berakhir");
+
+    Object.defineProperty(window, "location", { configurable: true, value: original });
+  });
 });

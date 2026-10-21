@@ -53,7 +53,8 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
     try {
       const response = await fetch(ENDPOINT);
       if (response.status === 401) {
-        setError(t("common.sessionExpired"));
+        // Sesi habis: kembali ke halaman masuk, bukan pesan galat di popup.
+        window.location.assign("/masuk");
         return;
       }
       if (!response.ok) {

@@ -73,7 +73,9 @@ export function useDocuments(): DocumentsApi {
     try {
       const response = await fetch("/api/kawan/v1/documents");
       if (response.status === 401) {
-        setError(t("common.sessionExpired"));
+        // Sesi habis: kembali ke halaman masuk, bukan menempelkan pesan galat
+        // di dalam kotak input.
+        window.location.assign("/masuk");
         return;
       }
       if (!response.ok) {
@@ -110,7 +112,7 @@ export function useDocuments(): DocumentsApi {
       try {
         const response = await fetch("/api/kawan/v1/documents", { method: "POST", body });
         if (response.status === 401) {
-          setError(t("common.sessionExpired"));
+          window.location.assign("/masuk");
           return;
         }
         const data = (await response.json().catch(() => null)) as
