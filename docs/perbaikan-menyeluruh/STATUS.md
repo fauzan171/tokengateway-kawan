@@ -129,9 +129,14 @@ menulis report sebelum turn habis.
 
 ## Sisa pekerjaan (jujur)
 
-FIX tuntas: 01, 02. Sebagian: 03 (backend idempotensi), 04 (konteks server).
-Belum disentuh: 03 sisi klien, 05–23, dan seluruh fase R1–R5.
-Tidak ada satu pun `reports/FIX-*.md` — [CC] selalu mati sebelum menulisnya.
+Commit `a143533` di `merge/main-into-feat-nt-p1`, sudah dipush. Gate final
+dijalankan ulang setelah perbaikan lint: `tsc` 0, `eslint` 0 keluhan,
+`chat-view` 7/7, `npm test` **787/787**, `npm run build` 0.
+
+FIX tuntas: 01, 02, 03 (kecuali butir judul-dari-state), 24-baseline,
+FIX-04 sebagian (konteks server). Belum disentuh: FIX-05…23, fase R1–R5.
+
+`reports/FIX-03.md` sudah ditulis. Laporan untuk FIX-01/02/04 belum ada.
 
 ## Blocker eksternal
 
