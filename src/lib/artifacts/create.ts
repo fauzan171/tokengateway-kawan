@@ -10,7 +10,7 @@ import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
 import { deleteDocument, readDocument, saveDocument, storageRoot } from "@/lib/documents/storage";
 import { mimeForFormat, sanitizeDisplayName, MAX_ARTIFACT_BYTES, type ArtifactFormat } from "./format";
-import { ArtifactError, renderArtifactBytes, type ArtifactInput } from "./render";
+import { ArtifactError, renderArtifactBytesAsync, type ArtifactInput } from "./render";
 
 /** Batas artefak per pengguna per 24 jam. */
 const DAILY_QUOTA = 100;
@@ -68,7 +68,7 @@ export async function createArtifact(
   root = storageRoot(),
 ): Promise<PublicArtifact> {
   const format = args.input.format as ArtifactFormat;
-  const bytes = renderArtifactBytes(args.input);
+  const bytes = await renderArtifactBytesAsync(args.input);
   if (bytes.byteLength > MAX_ARTIFACT_BYTES) throw new ArtifactError("TOO_LARGE");
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);

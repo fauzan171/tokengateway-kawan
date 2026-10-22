@@ -1,6 +1,10 @@
 /**
- * Renderer format teks artefak (FIX-11). PDF/DOCX/XLSX/PPTX ada di FIX-12.
+ * Renderer format teks artefak (FIX-11). Varian biner (FIX-12) lewat
+ * renderArtifactBytesAsync di bawah; renderer biner ada di render-binary.ts.
  */
+
+import { renderDocxBytes, renderPdfBytes, renderPptxBytes, renderXlsxBytes } from "./render-binary";
+import type { DocSchema } from "./document";
 
 export class ArtifactError extends Error {
   code: string;
@@ -14,7 +18,35 @@ export class ArtifactError extends Error {
 export type ArtifactInput =
   | { format: "md" | "txt" | "html"; content: string }
   | { format: "json"; content: unknown }
-  | { format: "csv"; rows: unknown[][] };
+  | { format: "csv"; rows: unknown[][] }
+  | { format: "pdf" | "docx" | "xlsx"; doc: DocSchema }
+  | { format: "pptx"; doc: DocSchema };
+
+/** Varian biner: format dokumen, bukan konten teks dari tool model. */
+export type BinaryArtifactInput = Extract<ArtifactInput, { doc: DocSchema }>;
+export type TextArtifactInput = Exclude<ArtifactInput, BinaryArtifactInput>;
+
+/** Format biner tapi diberi varian teks → salah skema, bukan render sebagian. */
+function asDoc(input: ArtifactInput): DocSchema {
+  if ("doc" in input && input.doc) return input.doc;
+  throw new ArtifactError("INVALID_DOC_SCHEMA");
+}
+
+/** Renderer asinkron: varian teks pakai renderArtifactBytes, biner pakai render-binary. */
+export async function renderArtifactBytesAsync(input: ArtifactInput): Promise<Buffer> {
+  switch (input.format) {
+    case "pdf":
+      return renderPdfBytes(asDoc(input));
+    case "docx":
+      return renderDocxBytes(asDoc(input));
+    case "xlsx":
+      return renderXlsxBytes(asDoc(input));
+    case "pptx":
+      return renderPptxBytes(asDoc(input));
+    default:
+      return renderArtifactBytes(input as TextArtifactInput);
+  }
+}
 
 /** Awalan yang membuat Excel/LibreOffice mengeksekusi sel sebagai formula. */
 const FORMULA_PREFIXES = ["=", "+", "-", "@", "\t", "\r"];
@@ -29,7 +61,7 @@ function csvCell(value: unknown): string {
   return text;
 }
 
-export function renderArtifactBytes(input: ArtifactInput): Buffer {
+export function renderArtifactBytes(input: TextArtifactInput): Buffer {
   switch (input.format) {
     case "md":
     case "txt":
