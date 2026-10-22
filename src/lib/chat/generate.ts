@@ -48,7 +48,14 @@ import { assertHeld, LeaseLost, type FenceChecker } from "@/lib/jobs/fence";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
 import { recordUsage } from "./usage";
-import { createStreamParser, type StreamUsage } from "./stream-parse";
+import { createStreamParser, type StreamUsage, type ToolCallDelta } from "./stream-parse";
+import {
+  GENERATE_FILE_TOOL,
+  GENERATE_FILE_TOOL_NAME,
+  assembleToolCalls,
+  parseGenerateFileArgs,
+} from "./file-tool";
+import { createArtifact } from "@/lib/artifacts/create";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
 import { getCachedModels, resolveModel } from "@/lib/connections/model-cache";
@@ -409,7 +416,7 @@ async function streamGateway(input: {
   signal: AbortSignal;
   /** Dipanggil sekali per potongan; `true` → pembatalan diminta pengguna. */
   shouldStop: () => Promise<boolean>;
-  onDelta: (delta: { kind: string; text?: string; usage?: StreamUsage; finishReason?: string | null }) => Promise<void>;
+  onDelta: (delta: { kind: string; text?: string; usage?: StreamUsage; finishReason?: string | null; toolCall?: ToolCallDelta }) => Promise<void>;
 }): Promise<{ usage: StreamUsage | null; finishReason: string | null }> {
   // Validasi alamat keluar dulu (SSRF, SDD-5.3) — `fetch` langsung tetap harus
   // melewatinya, sama seperti `fetchJson`.
@@ -921,6 +928,10 @@ export async function runGeneration(
   let text = "";
   let ordinal = 0;
 
+  // FIX-11: potongan tool call disatukan per index setelah stream selesai.
+  const toolsEnabled = true;
+  const toolFragments = new Map<number, { id?: string; name?: string; arguments: string }>();
+
   if (keywordOnly) {
     try {
       await db.chatMessagePart.create({
@@ -974,6 +985,7 @@ export async function runGeneration(
           ...history.messages,
         ],
         stream: true,
+        ...(toolsEnabled ? { tools: [GENERATE_FILE_TOOL] } : {}),
       },
       outbound: {
         allowInsecureHttp: config.allowInsecureHttp,
@@ -985,6 +997,14 @@ export async function runGeneration(
         // Lease hilang → jangan tulis delta basi ke pesan yang mungkin sudah
         // dipegang worker lain.
         await held();
+        if (delta.kind === "tool_call" && delta.toolCall) {
+          const slot = toolFragments.get(delta.toolCall.index) ?? { arguments: "" };
+          if (delta.toolCall.id) slot.id = delta.toolCall.id;
+          if (delta.toolCall.name) slot.name = delta.toolCall.name;
+          if (delta.toolCall.argumentsDelta) slot.arguments += delta.toolCall.argumentsDelta;
+          toolFragments.set(delta.toolCall.index, slot);
+          return;
+        }
         if (delta.kind === "text" && delta.text) {
           text += delta.text;
           await db.chatMessagePart.create({
@@ -1026,6 +1046,40 @@ export async function runGeneration(
   // boleh menutup generasi milik worker lain sebagai `complete`.
   await held();
 
+  // FIX-11: satu ronde tool. Hasil berkas dicatat sebagai part `artifact` supaya
+  // UI bisa menampilkan kartu unduhan. Kegagalan tool TIDAK menggagalkan jawaban.
+  const artifactParts: { kind: "artifact"; artifactId: string; displayName: string; format: string; sizeBytes: number }[] = [];
+  const toolCalls = assembleToolCalls(toolFragments);
+  for (const call of toolCalls.slice(0, 3)) {
+    if (call.name !== GENERATE_FILE_TOOL_NAME) continue;
+    try {
+      const args = parseGenerateFileArgs(call.arguments);
+      const artifact = await createArtifact(db, {
+        userId: chat.userId,
+        chatId: chat.id,
+        messageId: generation.assistantMessageId,
+        displayName: args.displayName,
+        input:
+          args.format === "csv"
+            ? { format: "csv", rows: args.rows ?? [] }
+            : args.format === "json"
+              ? { format: "json", content: JSON.parse(args.content ?? "null") }
+              : { format: args.format, content: args.content ?? "" },
+      });
+      if (artifact.status === "ready") {
+        artifactParts.push({
+          kind: "artifact",
+          artifactId: artifact.id,
+          displayName: artifact.displayName,
+          format: artifact.format,
+          sizeBytes: artifact.sizeBytes,
+        });
+      }
+    } catch {
+      // Argumen tidak sah atau render gagal: catat sebagai catatan, bukan galat.
+    }
+  }
+
   const now = new Date();
   // Catatan ikut di `contentJson` karena UI membacanya dari sana (bagian `note`).
   const notePart = [
@@ -1034,6 +1088,7 @@ export async function runGeneration(
     ...(searchFailed ? [{ kind: "note", code: "web-search-unavailable" }] : []),
     // Jawaban kena batas token provider (AUD-10): tampilkan, jangan diam.
     ...(finishReason === "length" ? [{ kind: "note", code: "truncated" }] : []),
+    ...(!artifactParts.length && toolFragments.size > 0 ? [{ kind: "note", code: "file-failed" }] : []),
   ];
   // Sitasi hanya dari penanda yang benar-benar ditulis model (SDD-6.2).
   const citationParts = extractCitations(text, usedChunks).map((citation) => ({
@@ -1048,6 +1103,7 @@ export async function runGeneration(
   const contentJson = JSON.stringify({
     parts: [
       ...notePart,
+      ...artifactParts,
       ...(text === "" ? [] : [{ kind: "text", text }]),
       ...citationParts,
       ...sourceParts,
