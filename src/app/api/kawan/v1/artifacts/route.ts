@@ -10,6 +10,7 @@ import { handleRouteError, jsonOk, readJson, requireContext } from "@/lib/api/ro
 import { createArtifact, listArtifacts } from "@/lib/artifacts/create";
 import { isArtifactFormat } from "@/lib/artifacts/format";
 import { ArtifactError } from "@/lib/artifacts/render";
+import { parseDocSchema } from "@/lib/artifacts/document";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,14 @@ export async function POST(request: Request): Promise<Response> {
     const body = await readJson(request);
 
     const format = body["format"];
+    // pptx internal (hanya lewat tool), zip belum ada renderernya.
+    if (format === "pptx") {
+      throw new ApiError({
+        status: STATUS.BAD_REQUEST,
+        code: "FORMAT_NOT_READY",
+        message: "Format ini belum tersedia.",
+      });
+    }
     if (!isArtifactFormat(format)) {
       throw new ApiError({
         status: STATUS.BAD_REQUEST,
@@ -41,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
         message: "Format artefak tidak didukung.",
       });
     }
-    if (format === "xlsx" || format === "docx" || format === "pdf" || format === "zip") {
+    if (format === "zip") {
       throw new ApiError({
         status: STATUS.BAD_REQUEST,
         code: "FORMAT_NOT_READY",
@@ -51,16 +60,40 @@ export async function POST(request: Request): Promise<Response> {
 
     const displayName = typeof body["displayName"] === "string" ? body["displayName"] : "";
 
-    const input =
-      format === "csv"
-        ? Array.isArray(body["rows"])
-          ? { format, rows: body["rows"] as unknown[][] }
-          : null
-        : format === "json"
-          ? { format, content: body["content"] }
-          : typeof body["content"] === "string"
+    let input: Parameters<typeof createArtifact>[1]["input"] | null;
+    if (format === "pdf" || format === "docx" || format === "xlsx") {
+      // Dokumen terstruktur: `doc` wajib, konten teks tidak diterima.
+      if ("content" in body || "rows" in body) {
+        throw new ApiError({
+          status: STATUS.BAD_REQUEST,
+          code: "INVALID_DOC_SCHEMA",
+          message: "Format dokumen hanya menerima `doc`.",
+        });
+      }
+      try {
+        input = { format, doc: parseDocSchema(body["doc"]) };
+      } catch (err) {
+        if (err instanceof ArtifactError && err.code === "INVALID_DOC_SCHEMA") {
+          throw new ApiError({
+            status: STATUS.BAD_REQUEST,
+            code: "INVALID_DOC_SCHEMA",
+            message: err.message,
+          });
+        }
+        throw err;
+      }
+    } else {
+      input =
+        format === "csv"
+          ? Array.isArray(body["rows"])
+            ? { format, rows: body["rows"] as unknown[][] }
+            : null
+          : format === "json"
             ? { format, content: body["content"] }
-            : null;
+            : typeof body["content"] === "string"
+              ? { format, content: body["content"] }
+              : null;
+    }
 
     if (!input) {
       throw new ApiError({

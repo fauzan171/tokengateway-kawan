@@ -50,9 +50,11 @@ import { imageParts } from "./content";
 import { recordUsage } from "./usage";
 import { createStreamParser, type StreamUsage, type ToolCallDelta } from "./stream-parse";
 import {
-  GENERATE_FILE_TOOL,
+  CHAT_TOOLS,
+  GENERATE_DOCUMENT_TOOL_NAME,
   GENERATE_FILE_TOOL_NAME,
   assembleToolCalls,
+  parseGenerateDocumentArgs,
   parseGenerateFileArgs,
 } from "./file-tool";
 import { createArtifact } from "@/lib/artifacts/create";
@@ -985,7 +987,7 @@ export async function runGeneration(
           ...history.messages,
         ],
         stream: true,
-        ...(toolsEnabled ? { tools: [GENERATE_FILE_TOOL] } : {}),
+        ...(toolsEnabled ? { tools: CHAT_TOOLS } : {}),
       },
       outbound: {
         allowInsecureHttp: config.allowInsecureHttp,
@@ -1051,6 +1053,30 @@ export async function runGeneration(
   const artifactParts: { kind: "artifact"; artifactId: string; displayName: string; format: string; sizeBytes: number }[] = [];
   const toolCalls = assembleToolCalls(toolFragments);
   for (const call of toolCalls.slice(0, 3)) {
+    if (call.name === GENERATE_DOCUMENT_TOOL_NAME) {
+      try {
+        const args = parseGenerateDocumentArgs(call.arguments);
+        const artifact = await createArtifact(db, {
+          userId: chat.userId,
+          chatId: chat.id,
+          messageId: generation.assistantMessageId,
+          displayName: args.displayName,
+          input: { format: args.format, doc: args.doc },
+        });
+        if (artifact.status === "ready") {
+          artifactParts.push({
+            kind: "artifact",
+            artifactId: artifact.id,
+            displayName: artifact.displayName,
+            format: artifact.format,
+            sizeBytes: artifact.sizeBytes,
+          });
+        }
+      } catch {
+        // Sama seperti generate_file: kegagalan tool tidak menggagalkan jawaban.
+      }
+      continue;
+    }
     if (call.name !== GENERATE_FILE_TOOL_NAME) continue;
     try {
       const args = parseGenerateFileArgs(call.arguments);

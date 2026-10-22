@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { assembleToolCalls, parseGenerateFileArgs, GENERATE_FILE_TOOL_NAME } from "./file-tool";
+import {
+  assembleToolCalls,
+  parseGenerateFileArgs,
+  parseGenerateDocumentArgs,
+  CHAT_TOOLS,
+  GENERATE_FILE_TOOL_NAME,
+  GENERATE_DOCUMENT_TOOL_NAME,
+} from "./file-tool";
 import { ArtifactError } from "@/lib/artifacts/render";
 
 describe("assembleToolCalls", () => {
@@ -53,5 +60,44 @@ describe("parseGenerateFileArgs", () => {
 
   it("nama tool tersedia", () => {
     expect(GENERATE_FILE_TOOL_NAME).toBe("generate_file");
+  });
+});
+
+describe("parseGenerateDocumentArgs", () => {
+  it("pdf + doc sah → lolos dengan blocks utuh", () => {
+    const doc = {
+      title: "Laporan",
+      blocks: [
+        { type: "heading", text: "Bab 1", level: 2 },
+        { type: "paragraph", text: "Isi." },
+        { type: "bullets", items: ["a"] },
+        { type: "table", headers: ["x"], rows: [["1"]] },
+        { type: "code", text: "ls", language: "bash" },
+      ],
+    };
+    const args = parseGenerateDocumentArgs({ format: "pdf", displayName: "l.pdf", doc });
+    expect(args.format).toBe("pdf");
+    expect(args.doc.title).toBe("Laporan");
+    expect(args.doc.blocks).toHaveLength(5);
+    expect(args.doc.blocks[0]).toEqual({ type: "heading", text: "Bab 1", level: 2 });
+  });
+
+  it("format pptx → INVALID_TOOL_ARGS (internal)", () => {
+    expect(() =>
+      parseGenerateDocumentArgs({ format: "pptx", displayName: "l", doc: { title: "t", blocks: [] } }),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_TOOL_ARGS" }));
+  });
+
+  it("doc title kosong → INVALID_TOOL_ARGS", () => {
+    expect(() =>
+      parseGenerateDocumentArgs({ format: "pdf", displayName: "l", doc: { title: "", blocks: [] } }),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_TOOL_ARGS" }));
+  });
+
+  it("CHAT_TOOLS: dua tool dengan nama unik", () => {
+    expect(CHAT_TOOLS).toHaveLength(2);
+    const names = CHAT_TOOLS.map((t) => t.function.name);
+    expect(new Set(names).size).toBe(2);
+    expect(names).toEqual([GENERATE_FILE_TOOL_NAME, GENERATE_DOCUMENT_TOOL_NAME]);
   });
 });

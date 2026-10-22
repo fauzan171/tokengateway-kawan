@@ -35,6 +35,7 @@ export const SCENARIOS = [
   "no-done-marker",
   "redirect",
   "file-tool",
+  "document-tool",
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];
@@ -259,6 +260,49 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
             {
               index: 0,
               delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(cut) } }] },
+              finish_reason: "tool_calls",
+            },
+          ],
+          usage: { prompt_tokens: 12, completion_tokens: 30, total_tokens: 42 },
+        })}\n\n`,
+      );
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
+    case "document-tool": {
+      sseHeaders(res);
+      const args = JSON.stringify({
+        format: "pdf",
+        displayName: "laporan",
+        doc: {
+          title: "Laporan",
+          blocks: [
+            { type: "heading", text: "Bab 1" },
+            { type: "paragraph", text: "Isi." },
+          ],
+        },
+      });
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: TOOL_CALL_ID,
+                    type: "function",
+                    function: { name: "generate_document", arguments: args },
+                  },
+                ],
+              },
               finish_reason: "tool_calls",
             },
           ],

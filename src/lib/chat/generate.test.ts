@@ -534,3 +534,26 @@ describe("runGeneration", () => {
     expect(assistant.contentJson).toContain("history-trimmed");
   });
 });
+
+describe("FIX-12: tool generate_document", () => {
+  it("membuat artefak PDF ready yang bisa diunduh", async () => {
+    const { generationId, assistantMessageId } = await seedGeneration("document-tool");
+
+    await run(generationId);
+
+    const artifacts = await db.artifact.findMany({ where: { userId } });
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0].status).toBe("ready");
+    expect(artifacts[0].format).toBe("pdf");
+    expect(artifacts[0].mime).toBe("application/pdf");
+    expect(artifacts[0].messageId).toBe(assistantMessageId);
+
+    const { openArtifactBytes } = await import("@/lib/artifacts/create");
+    const { bytes } = await openArtifactBytes(db, userId, artifacts[0].id);
+    expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({ where: { id: assistantMessageId } });
+    expect(assistant.contentJson).toContain(artifacts[0].id);
+    expect(assistant.status).toBe("complete");
+  });
+});

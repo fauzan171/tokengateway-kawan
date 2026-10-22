@@ -1,7 +1,8 @@
-/** Tool `generate_file` untuk gateway + penyatuan potongan tool call (FIX-11 3/4). */
+/** Tool `generate_file` + `generate_document` untuk gateway dan penyatuan potongan tool call. */
 
 import { ArtifactError } from "@/lib/artifacts/render";
 import { isArtifactFormat, type ArtifactFormat } from "@/lib/artifacts/format";
+import { parseDocSchema, type DocSchema } from "@/lib/artifacts/document";
 
 export const GENERATE_FILE_TOOL_NAME = "generate_file";
 
@@ -99,3 +100,125 @@ export function parseGenerateFileArgs(args: unknown): GenerateFileArgs {
   }
   return { format, displayName: record.displayName, content: record.content };
 }
+
+// ---------------------------------------------------------------------------
+// generate_document (FIX-12): dokumen terstruktur → PDF/DOCX/XLSX.
+// ---------------------------------------------------------------------------
+
+export const GENERATE_DOCUMENT_TOOL_NAME = "generate_document";
+
+const DOC_BLOCK_FORMS = [
+  {
+    type: "object",
+    properties: {
+      type: { const: "heading" },
+      text: { type: "string" },
+      level: { type: "integer", enum: [1, 2, 3] },
+    },
+    required: ["type", "text"],
+  },
+  {
+    type: "object",
+    properties: {
+      type: { const: "paragraph" },
+      text: { type: "string" },
+    },
+    required: ["type", "text"],
+  },
+  {
+    type: "object",
+    properties: {
+      type: { const: "bullets" },
+      items: { type: "array", items: { type: "string" } },
+    },
+    required: ["type", "items"],
+  },
+  {
+    type: "object",
+    properties: {
+      type: { const: "table" },
+      headers: { type: "array", items: { type: "string" } },
+      rows: { type: "array", items: { type: "array", items: { type: "string" } } },
+    },
+    required: ["type", "headers", "rows"],
+  },
+  {
+    type: "object",
+    properties: {
+      type: { const: "code" },
+      text: { type: "string" },
+      language: { type: "string" },
+    },
+    required: ["type", "text"],
+  },
+] as const;
+
+/** Tool dokumen terstruktur: satu-satunya jalan ke PDF/DOCX/XLSX. */
+export const GENERATE_DOCUMENT_TOOL: {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+} = {
+  type: "function",
+  function: {
+    name: GENERATE_DOCUMENT_TOOL_NAME,
+    description:
+      "Gunakan tool ini bila pengguna minta dokumen rapi (PDF, Word, Excel) dengan judul, bab, daftar, atau tabel.",
+    parameters: {
+      type: "object",
+      properties: {
+        format: { type: "string", enum: ["pdf", "docx", "xlsx"] },
+        displayName: { type: "string", description: "Nama dokumen yang ditampilkan" },
+        doc: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            blocks: { type: "array", items: { oneOf: [...DOC_BLOCK_FORMS] } },
+          },
+          required: ["title", "blocks"],
+          additionalProperties: false,
+        },
+      },
+      required: ["format", "displayName", "doc"],
+    },
+  },
+};
+
+/** Validasi argumen `generate_document`; lempar ArtifactError INVALID_TOOL_ARGS. */
+export function parseGenerateDocumentArgs(args: unknown): {
+  format: "pdf" | "docx" | "xlsx";
+  displayName: string;
+  doc: DocSchema;
+} {
+  if (typeof args !== "object" || args === null || Array.isArray(args)) {
+    throw new ArtifactError("INVALID_TOOL_ARGS", "Argumen tool harus objek.");
+  }
+  const record = args as Record<string, unknown>;
+  if (record.format !== "pdf" && record.format !== "docx" && record.format !== "xlsx") {
+    throw new ArtifactError("INVALID_TOOL_ARGS", "Format dokumen harus pdf, docx, atau xlsx.");
+  }
+  if (typeof record.displayName !== "string" || record.displayName === "") {
+    throw new ArtifactError("INVALID_TOOL_ARGS", "Nama dokumen wajib diisi.");
+  }
+  // Pelanggaran skema doc dari tool model tetap INVALID_TOOL_ARGS (bukan INVALID_DOC_SCHEMA).
+  let doc: DocSchema;
+  try {
+    doc = parseDocSchema(record.doc);
+  } catch (err) {
+    if (err instanceof ArtifactError && err.code === "INVALID_DOC_SCHEMA") {
+      throw new ArtifactError("INVALID_TOOL_ARGS", err.message);
+    }
+    throw err;
+  }
+  return {
+    format: record.format,
+    displayName: record.displayName,
+    doc,
+  };
+}
+
+/** Daftar tool chat untuk gateway. */
+export const CHAT_TOOLS = [GENERATE_FILE_TOOL, GENERATE_DOCUMENT_TOOL];
