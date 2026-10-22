@@ -30,8 +30,6 @@ import { IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/chat/content";
 import { applyVariables } from "@/lib/prompts/variables";
 import { useT, type Translate } from "@/lib/i18n/context";
 
-const DEFAULT_MODEL = "deepseek-v4.1-flash";
-
 interface ErrorState {
   message: string;
   retryable?: boolean;
@@ -181,7 +179,7 @@ export function ChatView({
   const [editText, setEditText] = useState("");
   const documentsApi = useDocuments();
   const [attachments, setAttachments] = useState<{ mime: string; dataUrl: string }[]>([]);
-  const [modelRef, setModelRef] = useState(DEFAULT_MODEL);
+  const [modelRef, setModelRef] = useState<string | null>(null);
   const [vision, setVision] = useState(false);
   const [webSearchAvailable, setWebSearchAvailable] = useState(false);
   const [webSearchOn, setWebSearchOn] = useState(false);
@@ -220,7 +218,12 @@ export function ChatView({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled || !Array.isArray(data?.models)) return;
-        const model = data.models.find((m: { id?: string }) => m.id === modelRef);
+        // Chat baru belum punya modelRef; untuk tombol visi pakai model pertama
+        // yang dilaporkan server. Nilai ini TIDAK disimpan: menyimpannya berarti
+        // diam-diam mengunci chat ke model tertentu (FIX-04).
+        const id: string | null =
+          modelRef ?? (typeof data.models[0]?.id === "string" ? data.models[0].id : null);
+        const model = data.models.find((m: { id?: string }) => m.id === id);
         setVision(model?.capabilities?.vision === true);
       })
       .catch(() => {});
@@ -336,7 +339,11 @@ export function ChatView({
     const res = await fetch("/api/kawan/v1/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: t("chat.newChatTitle"), model: DEFAULT_MODEL }),
+      // Judul tidak dikirim: chat baru harus tercatat `titleSource: "auto"`
+      // supaya judul otomatis bisa mengisinya (FIX-04). Model hanya dikirim
+      // bila chat ini memang sudah punya pilihan; selebihnya server yang
+      // menentukan dan melaporkan fallback-nya.
+      body: JSON.stringify(modelRef ? { modelRef } : {}),
     });
     if (!res.ok) throw new Error(t("chat.createFailed"));
     const data = await res.json();

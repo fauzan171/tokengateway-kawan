@@ -17,6 +17,10 @@ import type { Db } from "@/lib/db";
 export type PublicChat = {
   id: string;
   title: string;
+  /** `auto` = judul belum pernah diganti manusia; `manual` = rename pengguna. */
+  titleSource: string;
+  /** Naik setiap perubahan judul; 0 berarti judul masih bawaan. */
+  titleRevision: number;
   modelRef: string | null;
   currentMessageId: string | null;
   folderId: string | null;
@@ -30,6 +34,8 @@ export type PublicChat = {
 export const CHAT_FIELDS = {
   id: true,
   title: true,
+  titleSource: true,
+  titleRevision: true,
   modelRef: true,
   currentMessageId: true,
   folderId: true,
@@ -42,6 +48,8 @@ export const CHAT_FIELDS = {
 export type ChatRow = {
   id: string;
   title: string;
+  titleSource: string;
+  titleRevision: number;
   modelRef: string | null;
   currentMessageId: string | null;
   folderId?: string | null;
@@ -55,6 +63,8 @@ export function toPublicChat(row: ChatRow): PublicChat {
   return {
     id: row.id,
     title: row.title,
+    titleSource: row.titleSource,
+    titleRevision: row.titleRevision,
     modelRef: row.modelRef,
     currentMessageId: row.currentMessageId,
     folderId: row.folderId ?? null,

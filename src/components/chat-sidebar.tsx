@@ -292,7 +292,11 @@ export function ChatSidebar({
                         className="min-h-11 min-w-0 flex-1 truncate rounded-md px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-muted aria-[current=page]:font-medium"
                       >
                         {chat.pinned && <Pin aria-hidden className="mr-1 inline size-3 align-[-1px]" />}
-                        {chat.title}
+                        {/* Judul bawaan dilabeli dari state, bukan dari nilai teks:
+                            rename manual ke teks yang sama tetap tampil apa adanya. */}
+                        {chat.titleSource === "auto" && (chat.titleRevision ?? 0) === 0
+                          ? t("chat.newChatTitle")
+                          : chat.title}
                       </button>
                       <Button
                         variant="ghost"

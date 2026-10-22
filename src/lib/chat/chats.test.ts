@@ -41,6 +41,16 @@ describe("createChat", () => {
     expect(chat.archived).toBe(false);
   });
 
+  it("chat tanpa title tercatat auto/revisi 0; title eksplisit = manual (FIX-04)", async () => {
+    const auto = await createChat(db, { userId });
+    expect(auto.titleSource).toBe("auto");
+    expect(auto.titleRevision).toBe(0);
+
+    const manual = await createChat(db, { userId, title: "Chat baru" });
+    // Rename ke teks yang sama dengan judul bawaan tetap dianggap pilihan manusia.
+    expect(manual.titleSource).toBe("manual");
+  });
+
   it("title, modelRef, dan folderId disimpan", async () => {
     const folder = await db.folder.create({
       data: { id: randomUUID(), userId, name: "Folder A" },

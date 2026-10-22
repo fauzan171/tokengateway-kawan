@@ -8,6 +8,9 @@
 export type GroupableChat = {
   id: string;
   title: string;
+  /** `auto` + `titleRevision` 0 = judul masih bawaan, UI pakai label i18n. */
+  titleSource?: string;
+  titleRevision?: number;
   folderId: string | null;
   pinned: boolean;
   archived: boolean;
