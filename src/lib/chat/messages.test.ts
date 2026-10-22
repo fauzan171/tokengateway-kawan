@@ -295,3 +295,26 @@ describe("POST /api/kawan/v1/chat/{chatId}/messages", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// FIX-06: admission documentIds mengisi manifest ChatDocument.
+describe("sendMessage documentIds", () => {
+  it("menautkan dokumen ready milik pengguna ke chat", async () => {
+    const chatId = await seedChat();
+    const doc = await db.document.create({
+      data: { id: "doc_ok", userId: state.userId, filename: "a.txt", mime: "text/plain", sizeBytes: 1, storageKey: "k", status: "ready" },
+    });
+    await send(chatId, { documentIds: [doc.id] });
+    const manifest = await db.chatDocument.findMany({ where: { chatId } });
+    expect(manifest.map((m) => m.documentId)).toEqual([doc.id]);
+  });
+
+  it("menolak dokumen milik pengguna lain", async () => {
+    const chatId = await seedChat();
+    const other = await db.user.create({ data: { id: "u2", email: "u2@t.id" } });
+    const doc = await db.document.create({
+      data: { id: "doc_lain", userId: other.id, filename: "b.txt", mime: "text/plain", sizeBytes: 1, storageKey: "k", status: "ready" },
+    });
+    await expect(send(chatId, { documentIds: [doc.id] })).rejects.toMatchObject({ code: "INVALID_DOCUMENTS" });
+    expect(await db.chatDocument.count({ where: { chatId } })).toBe(0);
+  });
+});

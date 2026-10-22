@@ -105,6 +105,8 @@ export type SendMessageInput = {
   model: unknown;
   /** Lampiran gambar dari body; divalidasi `validateAttachments`. */
   attachments?: unknown;
+  /** FIX-06: dokumen yang dilampirkan ke chat (manifest ChatDocument). */
+  documentIds?: unknown;
   /** Nilai header `Idempotency-Key`; `null` bila tidak dikirim. */
   idempotencyKey: string | null;
   /** Permintaan pencarian web; hanya `true` yang dihormati (REQ-NT-51). */
@@ -140,6 +142,27 @@ function normalizeModel(value: unknown): string | null {
   return value.trim();
 }
 
+/** FIX-06: dokumen dilampirkan ke chat lewat manifest ChatDocument. */
+const MAX_DOCUMENTS = 10;
+
+function normalizeDocumentIds(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw badRequest("INVALID_DOCUMENTS", "documentIds harus berupa array.");
+  const ids = value.map((id) => {
+    if (typeof id !== "string" || id.trim() === "") {
+      throw badRequest("INVALID_DOCUMENTS", "documentIds harus berisi teks tidak kosong.");
+    }
+    return id.trim();
+  });
+  if (new Set(ids).size !== ids.length) {
+    throw badRequest("INVALID_DOCUMENTS", "documentIds tidak boleh duplikat.");
+  }
+  if (ids.length > MAX_DOCUMENTS) {
+    throw badRequest("INVALID_DOCUMENTS", `Maksimal ${MAX_DOCUMENTS} dokumen per chat.`);
+  }
+  return ids;
+}
+
 function normalizeIdempotencyKey(value: string | null): string | null {
   if (value === null) return null;
   const key = value.trim();
@@ -163,6 +186,7 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
   const parentId = normalizeParentId(input.parentId);
   const model = normalizeModel(input.model);
   const images = validateAttachments(input.attachments);
+  const documentIds = normalizeDocumentIds(input.documentIds);
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
   const webSearch = input.webSearch === true;
   // Digest memuat owner + operasi + chat, jadi kunci yang sama pada chat atau
@@ -171,7 +195,7 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
     owner: input.userId,
     operation: OPERATION_SEND_MESSAGE,
     chatId: input.chatId,
-    payload: [content, parentId, model, images.map((a) => [a.mime, a.dataUrl]), webSearch],
+    payload: [content, parentId, model, images.map((a) => [a.mime, a.dataUrl]), webSearch, documentIds],
   });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -214,6 +238,35 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
           select: { seq: true },
         });
         const baseSeq = last?.seq ?? 0;
+
+        // FIX-06: manifest dokumen chat diperbarui dalam transaksi yang sama.
+        // Hanya dokumen milik pengguna yang berstatus ready yang diterima;
+        // lampiran ulang berisi superset ID yang sudah ada tidak menimpa.
+        if (documentIds.length > 0) {
+          const owned = await tx.document.findMany({
+            where: { userId: input.userId, id: { in: documentIds }, status: "ready" },
+            select: { id: true },
+          });
+          if (owned.length !== documentIds.length) {
+            throw badRequest("INVALID_DOCUMENTS", "Ada dokumen yang tidak ditemukan, bukan milik Anda, atau belum siap.");
+          }
+          const existing = await tx.chatDocument.findMany({
+            where: { chatId: input.chatId, documentId: { in: documentIds } },
+            select: { documentId: true },
+          });
+          const existingIds = new Set(existing.map((row) => row.documentId));
+          const toAdd = documentIds.filter((id) => !existingIds.has(id));
+          if (toAdd.length > 0) {
+            await tx.chatDocument.createMany({
+              data: toAdd.map((documentId) => ({
+                id: randomUUID(),
+                chatId: input.chatId,
+                documentId,
+                ownerId: input.userId,
+              })),
+            });
+          }
+        }
 
         const userMessageId = `msg_${randomUUID()}`;
         const contentJson = JSON.stringify({

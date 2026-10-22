@@ -58,6 +58,9 @@ export type DocumentsApi = {
   documents: DocumentItem[];
   error: string | null;
   uploading: boolean;
+  /** FIX-06: dokumen yang dipilih untuk dilampirkan ke chat aktif. */
+  selectedIds: string[];
+  toggle: (id: string) => void;
   upload: (file: File) => Promise<void>;
   retry: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -68,6 +71,14 @@ export function useDocuments(): DocumentsApi {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  /** FIX-06: pilih/batal pilih dokumen ready untuk dilampirkan ke chat. */
+  const toggle = useCallback((id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -168,7 +179,7 @@ export function useDocuments(): DocumentsApi {
     [t],
   );
 
-  return { documents, error, uploading, upload, retry, remove };
+  return { documents, error, uploading, selectedIds, toggle, upload, retry, remove };
 }
 
 /** Tombol lampirkan dokumen di toolbar composer. */
@@ -202,7 +213,7 @@ export function DocumentAttachButton({ api }: { api: DocumentsApi }) {
 /** Chip lampiran di dalam kotak input, gaya ChatGPT/Gemini. */
 export function DocumentChips({ api }: { api: DocumentsApi }) {
   const t = useT();
-  const { documents, error, retry, remove } = api;
+  const { documents, error, selectedIds, toggle, retry, remove } = api;
   if (documents.length === 0 && !error) return null;
 
   return (
@@ -210,11 +221,25 @@ export function DocumentChips({ api }: { api: DocumentsApi }) {
       <div role="status" aria-live="polite">
         {documents.length > 0 && (
           <ul className="flex flex-wrap gap-1.5">
-            {documents.map((item) => (
+            {documents.map((item) => {
+              const selected = selectedIds.includes(item.id);
+              return (
               <li
                 key={item.id}
-                className="flex max-w-full items-center gap-1.5 rounded-lg border bg-muted/40 py-1 pl-2 pr-1 text-xs"
+                className={`flex max-w-full items-center gap-1.5 rounded-lg border py-1 pl-2 pr-1 text-xs ${
+                  selected ? "border-primary bg-primary/10" : "bg-muted/40"
+                }`}
               >
+                <button
+                  type="button"
+                  disabled={item.status !== "ready"}
+                  aria-pressed={selected}
+                  aria-label={t("documents.toggle", { filename: item.filename })}
+                  onClick={() => toggle(item.id)}
+                  className={`flex min-w-0 items-center gap-1.5 rounded p-0 text-left ${
+                    item.status === "ready" ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                  }`}
+                >
                 <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 max-w-40 truncate" title={item.filename}>
                   {item.filename}
@@ -223,6 +248,7 @@ export function DocumentChips({ api }: { api: DocumentsApi }) {
                 <span className={`shrink-0 ${STATUS_CLASS[item.status] ?? "text-muted-foreground"}`}>
                   {STATUS_LABEL[item.status] ? t(STATUS_LABEL[item.status]) : item.status}
                 </span>
+                </button>
                 {item.status === "failed" && (
                   <span className="shrink-0 text-destructive">
                     {item.errorCode ?? t("documents.extractFailed")}
@@ -248,7 +274,8 @@ export function DocumentChips({ api }: { api: DocumentsApi }) {
                   <Trash2 aria-hidden className="size-3.5" />
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

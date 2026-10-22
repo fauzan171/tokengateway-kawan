@@ -532,6 +532,7 @@ export function ChatView({
           content: userText || "(gambar)",
           parentId,
           attachments: sending,
+          ...(documentsApi.selectedIds.length > 0 ? { documentIds: documentsApi.selectedIds } : {}),
           ...(searchOn ? { webSearch: true } : {}),
         }),
       });
