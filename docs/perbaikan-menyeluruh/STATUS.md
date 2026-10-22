@@ -40,7 +40,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-05 | R1 | 02,03,04 | `partial` | commit `d5c690c`; report `reports/FIX-05.md`; sisa: pin revisi config, budget per model, summary provenance, revocation |
 | FIX-06 | R1 | 01,02,07 | `verified_fixture` | retrieval bounded chatId + RAG_MIN_SCORE, upload transaksional, delete order; gate penuh hijau (tsc 0, 837/837, build) |
 | FIX-07 | R0 | 01 | `partial` | commit `95a13fd`; batas byte respons + ingress JSON. Sisa: DNS pin, timeout, CSRF origin, rate limit, rotasi keyring |
-| FIX-08 | R2 | 03,05,06,07 | `planned` | — |
+| FIX-08 | R2 | 03,05,06,07 | `verified_live` | commit `ad4682f` (+schema `2d9e534`); tersaji di kawanku, `/_next/static` 200, heartbeat bersih |
 | FIX-09 | R2 | 08,04 | `verified_fixture` | commit `8a2a355`; parser + tool loop di `generate.ts` (`a5aa9a3`) |
 | FIX-10 | R2 | 09,07 | `planned` | — |
 | FIX-11 | R2 | 09,06 | `verified_fixture` | commits `ae1a657`,`d8c02c1`,`a5aa9a3`,`d711913`; tes E2E tool `generate_file` (fixture SSE) |
