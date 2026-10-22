@@ -23,8 +23,14 @@ export type RetrieveInput = {
   query: string;
   limit?: number;
   documentIds?: string[];
+  /** FIX-06: bila diisi, kandidat dibatasi dokumen yang terikat chat itu. */
+  chatId?: string;
   embedding?: EmbeddingConfig;
 };
+
+/** FIX-06: skor di bawah ini dianggap noise (audit T09: "skor positif
+ *  sekecil apa pun diterima"). shortcut: 0.2 heuristik, kalibrasi saat ada eval. */
+export const RAG_MIN_SCORE = 0.2;
 
 export type RetrievedChunk = {
   chunkId: string;
@@ -101,10 +107,21 @@ export async function retrieveChunks(db: Db, input: RetrieveInput): Promise<Retr
   const limit = clampLimit(input.limit);
 
   // WAJIB: kepemilikan ikut di `where`, bukan disaring setelah data terambil.
+  // FIX-06: chatId mengunci kandidat ke manifest dokumen chat itu.
+  let scope = input.documentIds;
+  if (input.chatId) {
+    const manifest = await db.chatDocument.findMany({
+      where: { chatId: input.chatId, chat: { userId: input.userId } },
+      select: { documentId: true },
+    });
+    const ids = manifest.map((m) => m.documentId);
+    scope = scope ? scope.filter((id) => ids.includes(id)) : ids;
+    if (scope.length === 0) return [];
+  }
   const where = {
     document: {
       userId: input.userId,
-      ...(input.documentIds ? { id: { in: input.documentIds } } : {}),
+      ...(scope ? { id: { in: scope } } : {}),
     },
   };
 
@@ -122,7 +139,7 @@ export async function retrieveChunks(db: Db, input: RetrieveInput): Promise<Retr
 
     const vectorHits = rows
       .map((row) => toResult(row, cosine(queryVector, decodeVector(row.embedding ?? ""))))
-      .filter((result) => result.score > 0)
+      .filter((result) => result.score >= RAG_MIN_SCORE)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
@@ -153,7 +170,7 @@ async function keywordSearch(
       const matched = terms.filter((term) => haystack.includes(term)).length;
       return toResult(row, matched / terms.length);
     })
-    .filter((result) => result.score > 0)
+    .filter((result) => result.score >= RAG_MIN_SCORE)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }

@@ -873,28 +873,42 @@ export async function runGeneration(
   let keywordOnly = false;
   // Di luar `try` supaya sitasi bisa dipetakan setelah streaming selesai.
   let usedChunks: RetrievedChunk[] = [];
+  // FIX-06: retrieval tidak menghasilkan apa pun / gagal — dilaporkan, bukan diam.
+  let ragDegraded = false;
   if (query.trim() !== "") {
+    // FIX-06: query retrieval = pesan terakhir + judul chat, bukan pesan saja.
+    const retrievalQuery = chat.title ? `${query}\n${chat.title}` : query;
     const embedding = readEmbeddingConfig();
     try {
       const chunks = await retrieveChunks(db, {
         userId: chat.userId,
-        query,
+        chatId: chat.id,
+        query: retrievalQuery,
         limit: 6,
         ...(embedding ? { embedding } : {}),
       });
       usedChunks = chunks;
       contextSystem = buildContext(chunks).system;
       keywordOnly = !embedding && chunks.length > 0;
+      // FIX-06: degradasi tidak diam-diam (audit T09).
+      if (chunks.length === 0) ragDegraded = true;
     } catch {
       // Provider embedding mati: ulangi tanpa vektor supaya dokumen tetap
       // terpakai lewat kata kunci, dan tandai mode degradasi di UI.
       try {
-        const chunks = await retrieveChunks(db, { userId: chat.userId, query, limit: 6 });
+        const chunks = await retrieveChunks(db, {
+          userId: chat.userId,
+          chatId: chat.id,
+          query: retrievalQuery,
+          limit: 6,
+        });
         usedChunks = chunks;
         contextSystem = buildContext(chunks).system;
         keywordOnly = chunks.length > 0;
+        if (chunks.length === 0) ragDegraded = true;
       } catch {
-        // Dokumen rusak: jawab tanpa rujukan.
+        // Dokumen rusak: jawab tanpa rujukan, tapi tandai degradasi.
+        ragDegraded = true;
       }
     }
   }
@@ -1115,6 +1129,7 @@ export async function runGeneration(
     // Jawaban kena batas token provider (AUD-10): tampilkan, jangan diam.
     ...(finishReason === "length" ? [{ kind: "note", code: "truncated" }] : []),
     ...(!artifactParts.length && toolFragments.size > 0 ? [{ kind: "note", code: "file-failed" }] : []),
+    ...(ragDegraded ? [{ kind: "note", code: "rag-degraded" }] : []),
   ];
   // Sitasi hanya dari penanda yang benar-benar ditulis model (SDD-6.2).
   const citationParts = extractCitations(text, usedChunks).map((citation) => ({

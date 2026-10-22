@@ -24,14 +24,13 @@ export async function removeDocument(
   });
   if (!document) return { removed: false };
 
-  // Berkas dulu, baris kemudian: baris yang hilang tanpa berkas terhapus
-  // meninggalkan yatim yang tidak bisa dilacak lagi. Galat penyimpanan
-  // dibiarkan naik supaya baris tetap ada dan operator bisa menyelidiki.
-  await deleteDocument(document.storageKey, input.root);
-
+  // FIX-06: baris dulu, berkas kemudian. Yatim berkas masih terlacak lewat
+  // `cleanupOrphans` (berkas tanpa baris), sebaliknya tidak. Gagal hapus
+  // berkas setelah row hilang dibiarkan ke pembersih yatim.
   // Chunk ikut cascade. Sitasi di pesan lama sengaja tidak disentuh: route
   // `chunks/[chunkId]` akan 404 karena barisnya sudah tidak ada.
   await db.document.delete({ where: { id: document.id } });
+  await deleteDocument(document.storageKey, input.root);
 
   return { removed: true };
 }

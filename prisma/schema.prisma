@@ -35,6 +35,7 @@ model User {
   chats     Chat[]
   folders   Folder[]
   documents Document[]
+  chatDocs  ChatDocument[]
   artifacts Artifact[]
   prompts   Prompt[]
   setting   UserSetting?
@@ -180,11 +181,33 @@ model Document {
   errorCode  String?
   createdAt  DateTime @default(now())
 
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chunks DocumentChunk[]
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks     DocumentChunk[]
+  chatDocs   ChatDocument[]
 
   @@index([userId, createdAt])
   @@index([status])
+}
+
+/// Manifest dokumen yang dilampirkan ke satu chat (FIX-06).
+///
+/// Retrieval hanya memakai dokumen di manifest chat itu, bukan semua dokumen
+/// pengguna. `documentId` restrict: dokumen yang masih direferensikan chat
+/// tidak ikut terhapus tanpa sengaja — penghapusan dokumen lewat
+/// `removeDocument` yang membersihkan manifest lebih dulu.
+model ChatDocument {
+  id         String   @id
+  chatId     String
+  documentId String
+  ownerId    String
+  addedAt    DateTime @default(now())
+
+  chat     Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, documentId])
+  @@index([chatId])
 }
 
 /// Potongan teks satu dokumen (REQ-NT-55, SDD-6.1).
@@ -286,6 +309,7 @@ model Chat {
   folder     Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
   messages   ChatMessage[]
   shareLinks ShareLink[]
+  chatDocs   ChatDocument[]
 
   @@index([userId, updatedAt])
   @@index([userId, folderId])

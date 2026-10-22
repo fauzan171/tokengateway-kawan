@@ -368,7 +368,12 @@ describe("runGeneration", () => {
     const parsed = JSON.parse(assistant.contentJson) as { parts: { kind: string; text?: string }[] };
     expect(parsed.parts.map((p) => p.text ?? "").join("")).toBe("Jawaban tanpa DONE.");
     // Bukan error, jadi tidak boleh ada catatan truncated.
-    expect(parsed.parts.some((p) => p.kind === "note")).toBe(false);
+    // FIX-06: satu-satunya note yang boleh muncul di chat tanpa dokumen adalah
+    // rag-degraded (retrieval memang kosong) — bukan truncated/web-search-unavailable.
+    const notes = parsed.parts.filter(
+      (p): p is { kind: "note"; code: string } => p.kind === "note" && "code" in p,
+    );
+    expect(notes.every((n) => n.code === "rag-degraded")).toBe(true);
 
     const usage = await db.usageRecord.findFirstOrThrow({ where: { userId } });
     expect(usage.totalTokens).toBe(18);

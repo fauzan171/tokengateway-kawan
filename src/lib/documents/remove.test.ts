@@ -79,7 +79,7 @@ describe("removeDocument", () => {
     ).resolves.toEqual({ removed: false });
   });
 
-  it("storageKey tidak sah: baris database dipertahankan", async () => {
+  it("storageKey tidak sah: baris sudah terhapus, galat dari penyimpanan naik (FIX-06: row dulu)", async () => {
     const id = `doc_${randomUUID()}`;
     await db.document.create({
       data: { id, userId, filename: "x", mime: "text/plain", sizeBytes: 1, storageKey: "../luar" },
@@ -88,7 +88,7 @@ describe("removeDocument", () => {
     await expect(
       removeDocument(db, { userId, documentId: id, root: storageDir }),
     ).rejects.toThrow(/tidak sah/);
-    expect(await db.document.findUnique({ where: { id } })).not.toBeNull();
+    expect(await db.document.findUnique({ where: { id } })).toBeNull();
   });
 });
 

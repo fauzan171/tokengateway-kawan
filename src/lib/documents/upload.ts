@@ -125,20 +125,23 @@ export async function uploadDocument(
   const id = `doc_${randomUUID()}`;
 
   try {
-    const row = await db.document.create({
-      data: {
-        id,
-        userId: input.userId,
-        filename,
-        mime,
-        sizeBytes: Buffer.byteLength(input.data),
-        storageKey,
-        status: "queued",
-      },
-      select: DOCUMENT_FIELDS,
+    const row = await db.$transaction(async (tx) => {
+      const created = await tx.document.create({
+        data: {
+          id,
+          userId: input.userId,
+          filename,
+          mime,
+          sizeBytes: Buffer.byteLength(input.data),
+          storageKey,
+          status: "queued",
+        },
+        select: DOCUMENT_FIELDS,
+      });
+      // FIX-06: enqueue dalam transaksi yang sama; gagal antre = row ikut rollback.
+      await enqueue(tx as unknown as Db, { kind: "document.extract", payload: { documentId: id } });
+      return created;
     });
-
-    await enqueue(db, { kind: "document.extract", payload: { documentId: id } });
 
     return toPublicDocument(row);
   } catch (err) {
