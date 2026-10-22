@@ -34,6 +34,7 @@ export const SCENARIOS = [
   "length-truncated",
   "no-done-marker",
   "redirect",
+  "file-tool",
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];
@@ -212,6 +213,56 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
             },
           ],
           usage: { prompt_tokens: 20, completion_tokens: 9, total_tokens: 29 },
+        })}\n\n`,
+      );
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
+    case "file-tool": {
+      sseHeaders(res);
+      const args = JSON.stringify({ format: "md", displayName: "laporan", content: "# Laporan\n\nIsi." });
+      // Dua potongan: argumen tool memang datang terfragmentasi di dunia nyata.
+      const cut = Math.floor(args.length / 2);
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: TOOL_CALL_ID,
+                    type: "function",
+                    function: { name: "generate_file", arguments: args.slice(0, cut) },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+      );
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(cut) } }] },
+              finish_reason: "tool_calls",
+            },
+          ],
+          usage: { prompt_tokens: 12, completion_tokens: 30, total_tokens: 42 },
         })}\n\n`,
       );
       await writeEvent(res, DONE);

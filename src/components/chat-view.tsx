@@ -92,6 +92,31 @@ function parseNotes(contentJson: string): string[] {
   return [];
 }
 
+type ArtifactView = {
+  artifactId: string;
+  displayName: string;
+  format: string;
+  sizeBytes: number;
+};
+
+function parseArtifacts(contentJson: string): ArtifactView[] {
+  try {
+    const data = JSON.parse(contentJson);
+    if (!Array.isArray(data?.parts)) return [];
+    return data.parts.filter(
+      (p: { kind?: string; artifactId?: string }) =>
+        p?.kind === "artifact" && typeof p?.artifactId === "string",
+    ) as ArtifactView[];
+  } catch {}
+  return [];
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 type SourceView = { title: string; url: string };
 
 function parseSources(contentJson: string): SourceView[] {
@@ -779,6 +804,7 @@ export function ChatView({
             const text = parseText(m.contentJson);
             const images = parseImages(m.contentJson);
             const notes = parseNotes(m.contentJson);
+            const artifacts = parseArtifacts(m.contentJson);
             const citations = parseCitations(m.contentJson);
             const sources = parseSources(m.contentJson);
             const siblings = siblingsOf(messages, m.id);
@@ -810,6 +836,28 @@ export function ChatView({
                 )}
                 {notes.includes("truncated") && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">{t("chat.truncated")}</p>
+                )}
+                {notes.includes("file-failed") && !isEditing && (
+                  <p className="mb-1 text-xs text-muted-foreground">{t("chat.fileFailed")}</p>
+                )}
+                {artifacts.length > 0 && !isEditing && (
+                  <ul className="mb-1 space-y-1">
+                    {artifacts.map((a) => (
+                      <li key={a.artifactId}>
+                        <a
+                          href={`/api/kawan/v1/artifacts/${encodeURIComponent(a.artifactId)}`}
+                          download={a.displayName}
+                          className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-xs shadow-xs hover:bg-accent"
+                        >
+                          <span className="font-medium">{a.displayName}</span>
+                          <span className="text-muted-foreground">
+                            {a.format.toUpperCase()} · {formatBytes(a.sizeBytes)}
+                          </span>
+                          <span className="text-primary">{t("chat.artifactDownload")}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 )}
                 {isEditing ? (
                   <div className="w-full min-w-0 max-w-[85%] rounded-2xl border bg-background p-3 shadow-xs space-y-2">

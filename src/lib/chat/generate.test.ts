@@ -465,6 +465,27 @@ describe("runGeneration", () => {
     expect(assistant.status).not.toBe("complete");
   });
 
+  it("FIX-11: tool generate_file membuat artefak ready yang bisa diunduh", async () => {
+    const { generationId, assistantMessageId } = await seedGeneration("file-tool");
+
+    await run(generationId);
+
+    const artifacts = await db.artifact.findMany({ where: { userId } });
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0].status).toBe("ready");
+    expect(artifacts[0].displayName).toBe("laporan.md");
+    expect(artifacts[0].format).toBe("md");
+    expect(artifacts[0].messageId).toBe(assistantMessageId);
+
+    const { openArtifactBytes } = await import("@/lib/artifacts/create");
+    const { bytes } = await openArtifactBytes(db, userId, artifacts[0].id);
+    expect(bytes.toString("utf8")).toContain("# Laporan");
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({ where: { id: assistantMessageId } });
+    expect(assistant.contentJson).toContain(artifacts[0].id);
+    expect(assistant.status).toBe("complete");
+  });
+
   it("riwayat di bawah budget tidak mencatat history-trimmed", async () => {
     const chat = await createChat(db, { userId });
     let parentId: string | null = null;

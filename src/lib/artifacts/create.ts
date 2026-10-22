@@ -8,7 +8,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
-import { deleteDocument, saveDocument, storageRoot } from "@/lib/documents/storage";
+import { deleteDocument, readDocument, saveDocument, storageRoot } from "@/lib/documents/storage";
 import { mimeForFormat, sanitizeDisplayName, MAX_ARTIFACT_BYTES, type ArtifactFormat } from "./format";
 import { ArtifactError, renderArtifactBytes, type ArtifactInput } from "./render";
 
@@ -145,7 +145,6 @@ export async function openArtifactBytes(
   if (artifact.status !== "ready") throw notFound();
   if (artifact.expiresAt && artifact.expiresAt.getTime() <= Date.now()) throw notFound();
 
-  const { readDocument } = await import("@/lib/documents/storage");
   const bytes = await readDocument((row as ArtifactRow).storageKey, root);
   await db.artifact.update({ where: { id }, data: { downloadCount: { increment: 1 } } });
   return { artifact, bytes };
