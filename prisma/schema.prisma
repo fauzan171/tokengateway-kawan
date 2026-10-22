@@ -39,6 +39,7 @@ model User {
   artifacts Artifact[]
   prompts   Prompt[]
   setting   UserSetting?
+  tasks     Task[]
 
   @@index([status])
 }
@@ -508,4 +509,132 @@ model AppConfig {
   id               String   @id
   registrationOpen Int      @default(1) // 0 | 1
   updatedAt        DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Task persisten (FIX-08, SDD-AG-2).
+//
+// Kepemilikan selalu lewat `Task.userId`; child row tidak dipercaya hanya karena
+// punya id. `deletedAt` adalah tombstone: daftar/detail menyembunyikannya, tetapi
+// cancel/terminalisasi masih boleh menulis metadata penghentian.
+// ---------------------------------------------------------------------------
+
+/// Tujuan pengguna yang dikerjakan agen, terpisah dari pohon Chat.
+///
+/// `activeRunId` adalah pointer tervalidasi ke run segment terbaru, bukan FK:
+/// run lama tetap boleh ada setelah terminalization.
+model Task {
+  id          String    @id
+  userId      String
+  title       String
+  /// active | archived
+  status      String    @default("active")
+  activeRunId String?
+  revision    Int       @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs     TaskRun[]
+  messages TaskMessage[]
+
+  @@index([userId, status, updatedAt, id])
+}
+
+/// Satu segmen eksekusi sebuah task.
+///
+/// `segment` bertambah saat run menunggu input/approval lalu dilanjutkan lewat
+/// job baru; run lama tidak berwenang menulis lagi (currentJobId menunjuk yang
+/// terbaru). `lastEventSeq` dialokasikan server di dalam transaksi yang menulis
+/// event, bukan dari `max(seq)+1` di luar transaksi.
+model TaskRun {
+  id                 String    @id
+  taskId             String
+  segment            Int       @default(1)
+  /// queued | running | waiting_input | waiting_approval | completed | failed |
+  /// cancelled | indeterminate
+  status             String    @default("queued")
+  revision           Int       @default(1)
+  connectionId       String?
+  modelId            String    @default("")
+  /// Pointer tervalidasi ke TaskMessage; unik supaya satu pesan tidak dipakai
+  /// dua run. Bukan FK agar pesan tidak ikut terhapus saat run dipangkas.
+  inputMessageId     String?   @unique
+  assistantMessageId String?   @unique
+  currentJobId       String?   @unique
+  lastEventSeq       Int       @default(0)
+  stepCount          Int       @default(0)
+  deadlineAt         DateTime
+  waitingExpiresAt   DateTime?
+  cancelRequestedAt  DateTime?
+  errorCode          String?
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  events   TaskEvent[]
+  messages TaskMessage[]
+  interactions TaskInteraction[]
+
+  @@index([taskId, createdAt, id])
+  @@index([status, deadlineAt])
+}
+
+/// Percakapan linear tugas. Riwayat Chat tidak dimigrasikan diam-diam.
+model TaskMessage {
+  id         String   @id
+  taskId     String
+  runId      String?
+  /// user | assistant
+  role       String
+  text       String
+  requestKey String?
+  createdAt  DateTime @default(now())
+
+  task Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  run  TaskRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@unique([runId, role])
+  @@index([taskId, createdAt, id])
+}
+
+/// Stream event durable sebuah run. `seq` unik per run; SSE menyusulnya.
+model TaskEvent {
+  id          String   @id
+  runId       String
+  seq         Int
+  kind        String
+  payloadJson String
+  createdAt   DateTime @default(now())
+
+  run TaskRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, createdAt])
+}
+
+/// Permintaan input/persetujuan yang menunggu jawaban pengguna.
+///
+/// Konsumsi memakai CAS `status=pending` + expiresAt + revision, jadi jawaban
+/// yang basi (expired/terjawab) ditolak 409, bukan diterapkan dua kali.
+model TaskInteraction {
+  id          String    @id
+  runId       String
+  /// input | approval | handover
+  kind        String
+  /// pending | accepted | rejected | expired | cancelled
+  status      String    @default("pending")
+  revision    Int       @default(1)
+  promptJson  String
+  expiresAt   DateTime
+  answerJson  String?
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  run TaskRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+  @@index([expiresAt, status])
 }
