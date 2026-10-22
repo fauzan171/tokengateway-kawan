@@ -259,7 +259,7 @@ function buildMessages(
  * yang sama persis dengan saat penyimpanan (SDD-5.2). Dekripsinya sendiri TIDAK
  * ditulis ulang di sini.
  */
-async function openApiKey(
+export async function openApiKey(
   db: Db,
   config: GenerateConfig,
   connectionId: string,

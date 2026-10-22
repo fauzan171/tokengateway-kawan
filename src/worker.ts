@@ -20,6 +20,7 @@ import { HANDLED_KINDS } from "@/lib/jobs/kinds";
 import { touchWorkerHeartbeat } from "@/lib/jobs/worker-heartbeat";
 import { runGeneration } from "@/lib/chat/generate";
 import { runExtract } from "@/lib/documents/run-extract";
+import { runTaskRun } from "@/lib/tasks/run";
 import { cleanupOrphans } from "@/lib/documents/remove";
 import { reconcileGenerations } from "@/lib/chat/recovery";
 
@@ -48,6 +49,13 @@ const handlers: Record<string, JobHandler> = {
     const config = loadConfig();
     const db = await getDb(config.databaseUrl);
     await runExtract(db, payload.documentId, signal);
+  },
+  "agent.run": async (claim, signal, fence) => {
+    const payload = JSON.parse(claim.payloadJson || "{}") as { runId?: string };
+    if (!payload.runId) throw new Error("Payload job agent.run tidak memiliki runId.");
+    const config = loadConfig();
+    const db = await getDb(config.databaseUrl);
+    await runTaskRun(db, config, payload.runId, signal, fence);
   },
   "storage.cleanup": async () => {
     const config = loadConfig();

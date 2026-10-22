@@ -10,6 +10,7 @@
 
 export const JOB_KINDS = [
   "chat.generate",
+  "agent.run",
   "document.extract",
   "document.embed",
   "usage.aggregate",
@@ -38,6 +39,7 @@ export function isIdempotentKind(kind: string): boolean {
  */
 export const HANDLED_KINDS = [
   "chat.generate",
+  "agent.run",
   "document.extract",
   "storage.cleanup",
 ] as const;
