@@ -434,4 +434,82 @@ describe("runGeneration", () => {
     });
     expect(message.status).toBe("complete");
   });
+
+  it("FIX-05: pesan user yang sendirian melebihi budget ditolak INPUT_TOO_LARGE", async () => {
+    const chat = await createChat(db, { userId });
+    const sent = await sendMessage(db, {
+      userId,
+      chatId: chat.id,
+      content: "x".repeat(4_000),
+      parentId: null,
+      model: modelFor("usage-present"),
+      idempotencyKey: null,
+    });
+    // `sendMessage` membatasi 100_000 karakter, jadi pesan dibesarkan lewat DB
+    // untuk melewati budget estimasi (30_000 token ≈ 120_000 karakter).
+    const oversized = JSON.stringify({ parts: [{ kind: "text", text: "x".repeat(200_000) }] });
+    await db.chatMessage.update({ where: { id: sent.userMessageId }, data: { contentJson: oversized } });
+
+    await run(sent.generationId);
+
+    const events = await db.generationEvent.findMany({
+      where: { generationId: sent.generationId },
+      orderBy: { seq: "asc" },
+    });
+    expect(events.some((event) => event.kind === "error")).toBe(true);
+    expect(events.some((event) => event.payloadJson?.includes("INPUT_TOO_LARGE"))).toBe(true);
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({
+      where: { id: sent.assistantMessageId },
+    });
+    expect(assistant.status).not.toBe("complete");
+  });
+
+  it("riwayat di bawah budget tidak mencatat history-trimmed", async () => {
+    const chat = await createChat(db, { userId });
+    let parentId: string | null = null;
+    let sent: { userMessageId: string; generationId: string; assistantMessageId: string } | null =
+      null;
+    for (let i = 0; i < 20; i++) {
+      sent = await sendMessage(db, {
+        userId,
+        chatId: chat.id,
+        content: "x".repeat(4_000),
+        parentId,
+        model: modelFor("usage-present"),
+        idempotencyKey: null,
+      });
+      parentId = sent.userMessageId;
+    }
+    await run(sent!.generationId);
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({
+      where: { id: sent!.assistantMessageId },
+    });
+    expect(assistant.contentJson).not.toContain("history-trimmed");
+  });
+
+  it("riwayat di atas budget mencatat history-trimmed", async () => {
+    const chat = await createChat(db, { userId });
+    let parentId: string | null = null;
+    let sent: { userMessageId: string; generationId: string; assistantMessageId: string } | null =
+      null;
+    for (let i = 0; i < 40; i++) {
+      sent = await sendMessage(db, {
+        userId,
+        chatId: chat.id,
+        content: "x".repeat(4_000),
+        parentId,
+        model: modelFor("usage-present"),
+        idempotencyKey: null,
+      });
+      parentId = sent.userMessageId;
+    }
+    await run(sent!.generationId);
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({
+      where: { id: sent!.assistantMessageId },
+    });
+    expect(assistant.contentJson).toContain("history-trimmed");
+  });
 });

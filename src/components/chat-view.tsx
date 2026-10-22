@@ -81,14 +81,15 @@ function parseImages(contentJson: string): { mime: string; dataUrl: string }[] {
   return [];
 }
 
-function parseNote(contentJson: string): string | null {
+function parseNotes(contentJson: string): string[] {
   try {
     const data = JSON.parse(contentJson);
-    if (!Array.isArray(data?.parts)) return null;
-    const note = data.parts.find((p: { kind?: string; code?: string }) => p?.kind === "note");
-    return typeof note?.code === "string" ? note.code : null;
+    if (!Array.isArray(data?.parts)) return [];
+    return data.parts
+      .filter((p: { kind?: string; code?: string }) => p?.kind === "note" && typeof p.code === "string")
+      .map((p: { code: string }) => p.code);
   } catch {}
-  return null;
+  return [];
 }
 
 type SourceView = { title: string; url: string };
@@ -777,7 +778,7 @@ export function ChatView({
           activeMessages.map((m) => {
             const text = parseText(m.contentJson);
             const images = parseImages(m.contentJson);
-            const note = parseNote(m.contentJson);
+            const notes = parseNotes(m.contentJson);
             const citations = parseCitations(m.contentJson);
             const sources = parseSources(m.contentJson);
             const siblings = siblingsOf(messages, m.id);
@@ -792,17 +793,22 @@ export function ChatView({
                   m.role === "user" ? "items-end" : "items-start"
                 }`}
               >
-                {note === "keyword-only" && !isEditing && (
+                {notes.includes("keyword-only") && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">
                     {t("chat.keywordOnly")}
                   </p>
                 )}
-                {note === "web-search-unavailable" && !isEditing && (
+                {notes.includes("web-search-unavailable") && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">
                     {t("chat.webSearchUnavailable")}
                   </p>
                 )}
-                {note === "truncated" && !isEditing && (
+                {notes.includes("history-trimmed") && !isEditing && (
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    {t("chat.historyTrimmed")}
+                  </p>
+                )}
+                {notes.includes("truncated") && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">{t("chat.truncated")}</p>
                 )}
                 {isEditing ? (

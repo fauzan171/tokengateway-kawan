@@ -52,6 +52,7 @@ import { createStreamParser, type StreamUsage } from "./stream-parse";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
 import { getCachedModels, resolveModel } from "@/lib/connections/model-cache";
+import { estimateTokens, overBudget } from "./context-budget";
 
 /** Model cadangan bila chat belum pernah memilih model. */
 export const DEFAULT_MODEL = "deepseek-v4.1-flash";
@@ -178,6 +179,10 @@ function messageText(contentJson: string): string {
  */
 const HISTORY_CHAR_BUDGET = 120_000;
 
+/** 120_000 karakter ÷ 4 = 30_000 token, plus jatah output. Estimasi, bukan angka gateway. */
+const CONTEXT_BUDGET_TOKENS = 30_000;
+const OUTPUT_RESERVE_TOKENS = 4_000;
+
 function messageLength(message: ChatCompletionMessage): number {
   return typeof message.content === "string"
     ? message.content.length
@@ -193,7 +198,7 @@ function messageLength(message: ChatCompletionMessage): number {
 function trimHistory(
   messages: readonly ChatCompletionMessage[],
   budget = HISTORY_CHAR_BUDGET,
-): ChatCompletionMessage[] {
+): { messages: ChatCompletionMessage[]; trimmed: boolean } {
   let total = messages.reduce((sum, message) => sum + messageLength(message), 0);
   let start = 0;
   while (total > budget && start + 2 <= messages.length - 1) {
@@ -201,7 +206,7 @@ function trimHistory(
     total -= messageLength(messages[start + 1] ?? ({} as ChatCompletionMessage));
     start += 2;
   }
-  return messages.slice(start);
+  return { messages: messages.slice(start), trimmed: start > 0 };
 }
 
 /**
@@ -783,6 +788,7 @@ export async function runGeneration(
   });
   const ancestry = buildAncestryPath(rows, generation.assistantMessageId);
   const messages = buildMessages(ancestry, generation.assistantMessageId);
+  const history = trimHistory(messages);
 
   // Pohon cacat (mis. assistant ber-`parentId` NULL) membuat ancestry kosong
   // dan gateway menolak `messages: []` dengan 400 yang tidak bisa didiagnosis
@@ -798,6 +804,36 @@ export async function runGeneration(
       new GenerationError(
         "INVALID_ANCESTRY",
         "Riwayat pesan untuk generasi ini tidak lengkap.",
+        false,
+      ),
+      "",
+      new Date(),
+    );
+    return;
+  }
+
+  // FIX-05: pesan terbaru yang sendirian melebihi budget ditolak dengan alasan
+  // jelas, bukan dipangkas diam-diam. Estimasi token, bukan angka gateway.
+  const latestUser = [...history.messages].reverse().find((message) => message.role === "user");
+  const latestText =
+    typeof latestUser?.content === "string"
+      ? latestUser.content.length
+      : (latestUser?.content ?? [])
+          .reduce((sum, part) => sum + (part.type === "text" ? part.text.length : 0), 0);
+  if (
+    overBudget({
+      promptTokens: estimateTokens("x".repeat(latestText)).tokens,
+      reserveTokens: OUTPUT_RESERVE_TOKENS,
+      budgetTokens: CONTEXT_BUDGET_TOKENS,
+    })
+  ) {
+    await failGeneration(
+      db,
+      generationId,
+      generation.assistantMessageId,
+      new GenerationError(
+        "INPUT_TOO_LARGE",
+        "Pesan ini terlalu panjang untuk model yang dipilih. Pecah jadi beberapa pesan atau mulai chat baru.",
         false,
       ),
       "",
@@ -935,7 +971,7 @@ export async function runGeneration(
           ...(userSystem ? [{ role: "system", content: userSystem }] : []),
           ...(contextSystem ? [{ role: "system", content: contextSystem }] : []),
           ...(searchSystem ? [{ role: "system", content: searchSystem }] : []),
-          ...trimHistory(messages),
+          ...history.messages,
         ],
         stream: true,
       },
@@ -994,6 +1030,7 @@ export async function runGeneration(
   // Catatan ikut di `contentJson` karena UI membacanya dari sana (bagian `note`).
   const notePart = [
     ...(keywordOnly ? [{ kind: "note", code: "keyword-only" }] : []),
+    ...(history.trimmed ? [{ kind: "note", code: "history-trimmed" }] : []),
     ...(searchFailed ? [{ kind: "note", code: "web-search-unavailable" }] : []),
     // Jawaban kena batas token provider (AUD-10): tampilkan, jangan diam.
     ...(finishReason === "length" ? [{ kind: "note", code: "truncated" }] : []),
