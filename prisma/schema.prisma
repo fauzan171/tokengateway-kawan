@@ -35,6 +35,7 @@ model User {
   chats     Chat[]
   folders   Folder[]
   documents Document[]
+  artifacts Artifact[]
   prompts   Prompt[]
   setting   UserSetting?
 
@@ -206,6 +207,45 @@ model DocumentChunk {
 
   @@unique([documentId, ordinal])
   @@index([documentId])
+}
+
+/// Berkas yang dibuat asisten atau pengguna (FIX-11, SDD Artifact).
+///
+/// Byte berkas ada di storage adapter existing (`lib/documents/storage.ts`);
+/// baris ini hanya metadata + rujukan `storageKey`. `format` menentukan cara
+/// byte dibuat, `mime` menentukan header unduhan — keduanya disimpan supaya
+/// berkas lama tetap dapat diunduh walau daftar format berubah.
+model Artifact {
+  id          String   @id
+  userId      String
+  chatId      String?
+  messageId   String?
+  /// md | txt | json | csv | xlsx | docx | pdf | html | zip
+  format      String
+  /// Nama tampilan yang sudah dibersihkan; TIDAK pernah dipakai sebagai path.
+  displayName String
+  mime        String
+  sizeBytes   Int
+  sha256      String
+  storageKey  String
+  /// staged | ready | failed
+  status      String   @default("staged")
+  errorCode   String?
+  errorMessage String?
+  /// Turunan versi: id artefak sumber saat ini dibuat ulang/dikonversi.
+  parentArtifactId String?
+  /// JSON provenance: { schemaVersion, source, notes }
+  provenance  String?
+  downloadCount Int    @default(0)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  deletedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([chatId])
+  @@index([status])
 }
 
 /// Folder satu tingkat untuk mengelompokkan chat (REQ-NT-35, SDD-2.2).

@@ -1,6 +1,6 @@
 # STATUS implementasi A–J
 
-Diperbarui: 2026-10-21. Coordinator: [CC] (sesi terminal Hermes).
+Diperbarui: 2026-10-22. Eksekutor: Hermes native + [CC] GLM 5.3 Flash (WO kecil).
 Baseline: `126502da8f650c81ee26ae3e7a406d13ac8972f8` + perubahan pemilik yang
 belum commit (`README.md`, `prisma/schema.prisma`).
 
@@ -35,15 +35,15 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 |---|---|---|---|---|
 | FIX-01 | R0 | — | `verified_fixture` | — |
 | FIX-02 | R0 | 01 | `verified_fixture` | — |
-| FIX-03 | R0 | 01,02 | `planned` | state UI/replay/idempotensi |
-| FIX-04 | R1 | 03,07 | `in_progress` | konteks server + migrasi judul selesai; sisa model picker & hardcoded |
-| FIX-05 | R1 | 02,03,04 | `planned` | — |
-| FIX-06 | R1 | 01,02,07 | `planned` | — |
-| FIX-07 | R0 | 01 | `planned` | — |
+| FIX-03 | R0 | 01,02 | `verified_fixture` | commit `a143533`,`fd1823e`; report `reports/FIX-03.md` |
+| FIX-04 | R1 | 03,07 | `verified_fixture` | commit `078ad8e`; report `reports/FIX-04.md` |
+| FIX-05 | R1 | 02,03,04 | `partial` | commit `d5c690c`; report `reports/FIX-05.md`; sisa: pin revisi config, budget per model, summary provenance, revocation |
+| FIX-06 | R1 | 01,02,07 | `planned` | belum disentuh |
+| FIX-07 | R0 | 01 | `partial` | commit `95a13fd`; batas byte respons + ingress JSON. Sisa: DNS pin, timeout, CSRF origin, rate limit, rotasi keyring |
 | FIX-08 | R2 | 03,05,06,07 | `planned` | — |
-| FIX-09 | R2 | 08,04 | `planned` | — |
+| FIX-09 | R2 | 08,04 | `partial` | commit `8a2a355`; parser `tool_calls` terfragmentasi. Sisa: eksekusi tool loop di `generate.ts` |
 | FIX-10 | R2 | 09,07 | `planned` | — |
-| FIX-11 | R2 | 09,06 | `planned` | — |
+| FIX-11 | R2 | 09,06 | `in_progress` | schema `Artifact` + migrasi `20261023000000_artifact`; `src/lib/artifacts/` sedang dibuat |
 | FIX-12 | R3 | 11,17 | `planned` | — |
 | FIX-13 | R3 | 05,06,08 | `planned` | — |
 | FIX-14 | R3 | 06,11,17 | `planned` | — |
