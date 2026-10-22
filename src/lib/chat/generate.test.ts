@@ -389,4 +389,49 @@ describe("runGeneration", () => {
     await expect(run(sent.generationId)).rejects.toThrow();
     expect(await db.generationEvent.count({ where: { generationId: sent.generationId } })).toBe(0);
   });
+
+  it("FIX-05: koneksi dipin saat admission, tidak bergeser walau koneksi aktif berganti", async () => {
+    const chat = await createChat(db, { userId });
+    const sent = await sendMessage(db, {
+      userId,
+      chatId: chat.id,
+      content: "Halo",
+      parentId: null,
+      model: modelFor("usage-present"),
+      idempotencyKey: null,
+    });
+
+    const pinned = await db.generation.findUniqueOrThrow({
+      where: { id: sent.generationId },
+      select: { connectionId: true },
+    });
+    expect(pinned.connectionId).not.toBeNull();
+
+    // Koneksi lain menggantikan yang lama sebagai aktif. Generasi yang sudah
+    // admitted tetap memakai koneksi lamanya; tidak boleh pindah diam-diam.
+    await db.connection.updateMany({ where: { userId }, data: { isActive: 0 } });
+    await db.connection.create({
+      data: {
+        id: randomUUID(),
+        userId,
+        name: "gateway lain",
+        baseUrl: "http://127.0.0.1:1",
+        apiKeyEncrypted: "rusak",
+        apiKeyMask: "****",
+        keyId: "v1",
+        isActive: 1,
+        status: "active",
+      },
+    });
+
+    // Bila worker memakai koneksi aktif baru, dekripsi kunci gagal dan generasi
+    // tidak menghasilkan token. Dengan pinning, jalur lama tetap jalan.
+    await run(sent.generationId);
+
+    const message = await db.chatMessage.findUniqueOrThrow({
+      where: { id: sent.assistantMessageId },
+      select: { status: true },
+    });
+    expect(message.status).toBe("complete");
+  });
 });

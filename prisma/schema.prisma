@@ -314,6 +314,10 @@ model Generation {
   userMessageId     String
   assistantMessageId String    @unique
   jobId             String?
+  /// FIX-05: koneksi dan model dipin saat admission. NULL = baris lama sebelum
+  /// pinning ada; worker jatuh ke koneksi aktif seperti sebelumnya.
+  connectionId      String?
+  modelId           String?
   status            String    @default("queued")
   cancelRequestedAt DateTime?
   errorCode         String?

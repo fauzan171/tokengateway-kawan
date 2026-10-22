@@ -51,6 +51,21 @@ export async function startGeneration(
   });
   const baseSeq = last?.seq ?? 0;
 
+  // FIX-05: koneksi dipin di sini, saat admission. Kalau pengguna mengganti
+  // koneksi aktif sebelum worker jalan, generasi tetap memakai koneksi yang
+  // dipilih saat itu — bukan diam-diam pindah ke koneksi lain.
+  const chat = await tx.chat.findUnique({
+    where: { id: input.chatId },
+    select: { userId: true },
+  });
+  const connection = chat
+    ? await tx.connection.findFirst({
+        where: { userId: chat.userId, isActive: 1 },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      })
+    : null;
+
   const assistantMessageId = `msg_${randomUUID()}`;
   const generationId = `gen_${randomUUID()}`;
   const jobId = `job_${randomUUID()}`;
@@ -73,6 +88,8 @@ export async function startGeneration(
       userMessageId: input.userMessageId,
       assistantMessageId,
       jobId,
+      connectionId: connection?.id ?? null,
+      modelId: input.model ?? null,
       status: "queued",
     },
   });

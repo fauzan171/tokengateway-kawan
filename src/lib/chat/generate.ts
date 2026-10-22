@@ -703,7 +703,14 @@ export async function runGeneration(
 
   const generation = await db.generation.findUnique({
     where: { id: generationId },
-    select: { id: true, chatId: true, userMessageId: true, assistantMessageId: true },
+    select: {
+      id: true,
+      chatId: true,
+      userMessageId: true,
+      assistantMessageId: true,
+      connectionId: true,
+      modelId: true,
+    },
   });
   if (!generation) throw new GenerationSetupError(`Generation "${generationId}" tidak ditemukan.`);
 
@@ -713,8 +720,23 @@ export async function runGeneration(
   });
   if (!chat) throw new GenerationSetupError("Chat untuk generasi ini tidak ditemukan.");
 
-  const active = await getActiveConnection(db, chat.userId);
-  if (!active) throw new GenerationSetupError("Belum ada koneksi aktif.");
+  // FIX-05: koneksi yang dipin saat admission menang. Bila barisnya sudah
+  // dihapus, generasi gagal dengan alasan jelas — tidak pindah ke koneksi aktif
+  // lain yang mungkin milik konfigurasi berbeda. `connectionId` null hanya
+  // terjadi pada generasi lama sebelum pinning ada.
+  const active = generation.connectionId
+    ? await db.connection.findFirst({
+        where: { id: generation.connectionId, userId: chat.userId },
+        select: { id: true },
+      })
+    : await getActiveConnection(db, chat.userId);
+  if (!active) {
+    throw new GenerationSetupError(
+      generation.connectionId
+        ? "Koneksi yang dipakai generasi ini sudah dihapus atau bukan milik Anda."
+        : "Belum ada koneksi aktif.",
+    );
+  }
 
   // Model pilihan pengguna menang; model bawaan hanya bila chat belum memilih,
   // dan fallback itu DILAPORKAN, bukan disembunyikan (audit A01).
@@ -726,7 +748,9 @@ export async function runGeneration(
       })
     : null;
   const resolution = resolveModel({
-    modelRef: chat.modelRef,
+    // FIX-05: model yang dipin saat admission menang atas `Chat.modelRef` yang
+    // bisa berubah setelah pesan dikirim.
+    modelRef: generation.modelId ?? chat.modelRef,
     available: cached ? cached.models : null,
     defaultModel: DEFAULT_MODEL,
   });
