@@ -562,3 +562,70 @@ describe("FIX-12: tool generate_document", () => {
     expect(assistant.status).toBe("complete");
   });
 });
+
+describe("FIX-05: pin revisi konfigurasi koneksi", () => {
+  it("menolak jalan bila revisi koneksi bergeser setelah admission", async () => {
+    const { generationId, assistantMessageId } = await seedGeneration("usage-present");
+    const connection = await db.connection.findFirstOrThrow({ where: { userId } });
+    const pinned = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(pinned.connectionRevision).toBe(connection.revision);
+
+    // Kredensial/base URL diedit setelah pesan dikirim.
+    await db.connection.update({
+      where: { id: connection.id },
+      data: { revision: { increment: 1 } },
+    });
+
+    const before = fixture.requests.length;
+    await run(generationId);
+
+    // Tidak ada permintaan ke provider: konfigurasi baru tidak boleh dipakai.
+    expect(fixture.requests.length).toBe(before);
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("error");
+    expect(generation.errorCode).toBe("CONNECTION_CHANGED");
+    const assistant = await db.chatMessage.findUniqueOrThrow({ where: { id: assistantMessageId } });
+    expect(assistant.status).toBe("error");
+  });
+
+  it("berjalan normal saat revisi masih cocok", async () => {
+    const { generationId } = await seedGeneration("usage-present");
+    await run(generationId);
+    const generation = await db.generation.findUniqueOrThrow({ where: { id: generationId } });
+    expect(generation.status).toBe("complete");
+    expect(generation.errorCode).toBeNull();
+  });
+});
+
+describe("FIX-05: provenance budget pada catatan pemangkasan", () => {
+  it("catatan history-trimmed membawa model, sumber budget dan jumlah pesan dibuang", async () => {
+    const chat = await createChat(db, { userId });
+    let parentId: string | null = null;
+    let sent: { userMessageId: string; generationId: string; assistantMessageId: string } | null =
+      null;
+    for (let i = 0; i < 40; i++) {
+      sent = await sendMessage(db, {
+        userId,
+        chatId: chat.id,
+        content: "x".repeat(4_000),
+        parentId,
+        model: modelFor("usage-present"),
+        idempotencyKey: null,
+      });
+      parentId = sent.userMessageId;
+    }
+    await run(sent!.generationId);
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({
+      where: { id: sent!.assistantMessageId },
+    });
+    const note = JSON.parse(assistant.contentJson).parts.find(
+      (part: { code?: string }) => part.code === "history-trimmed",
+    );
+    expect(note.data.droppedMessages).toBeGreaterThan(0);
+    expect(typeof note.data.model).toBe("string");
+    expect(["gateway", "known-family", "assumed"]).toContain(note.data.budgetSource);
+    expect(note.data.contextTokens).toBeGreaterThan(0);
+    expect(note.data.reserveTokens).toBeGreaterThan(0);
+  });
+});

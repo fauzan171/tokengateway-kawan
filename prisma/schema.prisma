@@ -137,6 +137,9 @@ model Connection {
   keyId           String
   isActive        Int      @default(0) // 0 | 1
   status          String   @default("draft") // draft | active | error
+  /// FIX-05: dinaikkan setiap kali konfigurasi koneksi berubah. Generasi yang
+  /// dipin ke revisi lama tidak boleh diam-diam memakai kredensial baru.
+  revision        Int      @default(1)
   lastTestAt      DateTime?
   lastTestStatus  String?
   createdAt       DateTime @default(now())
@@ -383,6 +386,9 @@ model Generation {
   /// pinning ada; worker jatuh ke koneksi aktif seperti sebelumnya.
   connectionId      String?
   modelId           String?
+  /// FIX-05: revisi konfigurasi koneksi saat admission. Worker menolak jalan
+  /// bila `Connection.revision` sudah bergeser.
+  connectionRevision Int?
   status            String    @default("queued")
   cancelRequestedAt DateTime?
   errorCode         String?

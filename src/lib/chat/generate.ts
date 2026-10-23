@@ -62,6 +62,7 @@ import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
 import { getCachedModels, resolveModel } from "@/lib/connections/model-cache";
 import { estimateTokens, overBudget } from "./context-budget";
+import { modelBudget } from "./model-budget";
 
 /** Model cadangan bila chat belum pernah memilih model. */
 export const DEFAULT_MODEL = "deepseek-v4.1-flash";
@@ -188,10 +189,6 @@ function messageText(contentJson: string): string {
  */
 const HISTORY_CHAR_BUDGET = 120_000;
 
-/** 120_000 karakter ÷ 4 = 30_000 token, plus jatah output. Estimasi, bukan angka gateway. */
-const CONTEXT_BUDGET_TOKENS = 30_000;
-const OUTPUT_RESERVE_TOKENS = 4_000;
-
 function messageLength(message: ChatCompletionMessage): number {
   return typeof message.content === "string"
     ? message.content.length
@@ -207,7 +204,7 @@ function messageLength(message: ChatCompletionMessage): number {
 function trimHistory(
   messages: readonly ChatCompletionMessage[],
   budget = HISTORY_CHAR_BUDGET,
-): { messages: ChatCompletionMessage[]; trimmed: boolean } {
+): { messages: ChatCompletionMessage[]; trimmed: boolean; droppedMessages: number } {
   let total = messages.reduce((sum, message) => sum + messageLength(message), 0);
   let start = 0;
   while (total > budget && start + 2 <= messages.length - 1) {
@@ -215,7 +212,7 @@ function trimHistory(
     total -= messageLength(messages[start + 1] ?? ({} as ChatCompletionMessage));
     start += 2;
   }
-  return { messages: messages.slice(start), trimmed: start > 0 };
+  return { messages: messages.slice(start), trimmed: start > 0, droppedMessages: start };
 }
 
 /**
@@ -723,6 +720,7 @@ export async function runGeneration(
       userMessageId: true,
       assistantMessageId: true,
       connectionId: true,
+      connectionRevision: true,
       modelId: true,
     },
   });
@@ -741,7 +739,7 @@ export async function runGeneration(
   const active = generation.connectionId
     ? await db.connection.findFirst({
         where: { id: generation.connectionId, userId: chat.userId },
-        select: { id: true },
+        select: { id: true, revision: true },
       })
     : await getActiveConnection(db, chat.userId);
   if (!active) {
@@ -750,6 +748,29 @@ export async function runGeneration(
         ? "Koneksi yang dipakai generasi ini sudah dihapus atau bukan milik Anda."
         : "Belum ada koneksi aktif.",
     );
+  }
+
+  // FIX-05: konfigurasi koneksi dipin saat admission. Kalau kredensial atau
+  // base URL berubah sebelum worker jalan, generasi ini TIDAK diam-diam memakai
+  // konfigurasi baru — ia gagal dengan alasan yang bisa dibaca pengguna.
+  if (
+    generation.connectionRevision !== null &&
+    "revision" in active &&
+    active.revision !== generation.connectionRevision
+  ) {
+    await failGeneration(
+      db,
+      generationId,
+      generation.assistantMessageId,
+      new GenerationError(
+        "CONNECTION_CHANGED",
+        "Konfigurasi koneksi berubah setelah pesan dikirim. Kirim ulang pesan ini.",
+        false,
+      ),
+      "",
+      new Date(),
+    );
+    return;
   }
 
   // Model pilihan pengguna menang; model bawaan hanya bila chat belum memilih,
@@ -821,6 +842,14 @@ export async function runGeneration(
     return;
   }
 
+  // FIX-05 butir 2: budget per model, bukan satu konstanta global. Model besar
+  // mendapat jendela penuh, model tak dikenal jatuh ke ceiling konservatif
+  // berlabel "assumed" — angkanya tidak pernah diklaim sebagai token sebenarnya.
+  const budget = modelBudget({
+    modelId: resolution.model,
+    gatewayEntry: cached?.models.find((model) => model.id === resolution.model),
+  });
+
   // FIX-05: pesan terbaru yang sendirian melebihi budget ditolak dengan alasan
   // jelas, bukan dipangkas diam-diam. Estimasi token, bukan angka gateway.
   const latestUser = [...history.messages].reverse().find((message) => message.role === "user");
@@ -832,8 +861,8 @@ export async function runGeneration(
   if (
     overBudget({
       promptTokens: estimateTokens("x".repeat(latestText)).tokens,
-      reserveTokens: OUTPUT_RESERVE_TOKENS,
-      budgetTokens: CONTEXT_BUDGET_TOKENS,
+      reserveTokens: budget.reserveTokens,
+      budgetTokens: budget.contextTokens,
     })
   ) {
     await failGeneration(
@@ -1124,7 +1153,24 @@ export async function runGeneration(
   // Catatan ikut di `contentJson` karena UI membacanya dari sana (bagian `note`).
   const notePart = [
     ...(keywordOnly ? [{ kind: "note", code: "keyword-only" }] : []),
-    ...(history.trimmed ? [{ kind: "note", code: "history-trimmed" }] : []),
+    ...(history.trimmed
+      ? [
+          {
+            kind: "note",
+            code: "history-trimmed",
+            // FIX-05 butir 3: provenance pemangkasan konteks — berapa pesan
+            // dibuang, model apa, dan dari mana angka budgetnya. Tanpa ini
+            // pengguna tidak bisa tahu konteks mana yang tidak terkirim.
+            data: {
+              droppedMessages: history.droppedMessages,
+              model: resolution.model,
+              budgetSource: budget.budgetSource,
+              contextTokens: budget.contextTokens,
+              reserveTokens: budget.reserveTokens,
+            },
+          },
+        ]
+      : []),
     ...(searchFailed ? [{ kind: "note", code: "web-search-unavailable" }] : []),
     // Jawaban kena batas token provider (AUD-10): tampilkan, jangan diam.
     ...(finishReason === "length" ? [{ kind: "note", code: "truncated" }] : []),

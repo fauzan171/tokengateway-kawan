@@ -62,7 +62,7 @@ export async function startGeneration(
     ? await tx.connection.findFirst({
         where: { userId: chat.userId, isActive: 1 },
         orderBy: { createdAt: "asc" },
-        select: { id: true },
+        select: { id: true, revision: true },
       })
     : null;
 
@@ -89,6 +89,7 @@ export async function startGeneration(
       assistantMessageId,
       jobId,
       connectionId: connection?.id ?? null,
+      connectionRevision: connection?.revision ?? null,
       modelId: input.model ?? null,
       status: "queued",
     },
