@@ -18,6 +18,8 @@ export class ArtifactError extends Error {
 
 export type ArtifactInput =
   | { format: "md" | "txt" | "html"; content: string }
+  // FIX-16: byte media (PNG hasil image generation) masuk sebagai artefak.
+  | { format: "png"; bytes: Uint8Array }
   | { format: "json"; content: unknown }
   | { format: "csv"; rows: unknown[][] }
   | { format: "pdf" | "docx" | "xlsx"; doc: DocSchema }
@@ -25,7 +27,10 @@ export type ArtifactInput =
   | { format: "zip"; files: ZipInputEntry[] };
 
 /** Varian biner: format dokumen, bukan konten teks dari tool model. */
-export type BinaryArtifactInput = Extract<ArtifactInput, { doc: DocSchema }> | Extract<ArtifactInput, { files: ZipInputEntry[] }>;
+export type BinaryArtifactInput =
+  | Extract<ArtifactInput, { doc: DocSchema }>
+  | Extract<ArtifactInput, { files: ZipInputEntry[] }>
+  | Extract<ArtifactInput, { bytes: Uint8Array }>;
 export type TextArtifactInput = Extract<ArtifactInput, { content: unknown } | { rows: unknown[][] }>;
 
 /** Format biner tapi diberi varian teks → salah skema, bukan render sebagian. */
@@ -47,6 +52,8 @@ export async function renderArtifactBytesAsync(input: ArtifactInput): Promise<Bu
       return renderPptxBytes(asDoc(input));
     case "zip":
       return writeZip(input.files);
+    case "png":
+      return Buffer.from(input.bytes);
     default:
       return renderArtifactBytes(input as TextArtifactInput);
   }
@@ -83,5 +90,8 @@ export function renderArtifactBytes(input: TextArtifactInput): Buffer {
     }
     case "csv":
       return Buffer.from(input.rows.map((row) => row.map(csvCell).join(",")).join("\r\n"), "utf8");
+    default:
+      // Format biner tanpa varian biner = salah skema, bukan render sebagian.
+      throw new ArtifactError("INVALID_DOC_SCHEMA");
   }
 }

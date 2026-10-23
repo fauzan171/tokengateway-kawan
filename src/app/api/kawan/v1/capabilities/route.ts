@@ -70,6 +70,38 @@ function entry(
   return { state, reasonCode, checkedAt, requiresApproval: APPROVAL_REQUIRED.has(name) };
 }
 
+/**
+ * State kapabilitas MEDIA (FIX-16) dari bukti yang benar-benar dimiliki.
+ *
+ * Bug lama: STT/TTS dianggap `unsupported` karena mencari `capabilities.audio`
+ * di SELURUH daftar model chat. Model media (mis. `whisper-1`, `tts-1`) hampir
+ * tidak pernah ada di daftar itu, jadi fitur yang sudah dikonfigurasi tampak
+ * mati. Aturan sekarang:
+ *
+ *   - tidak ada model media di env            → `unconfigured`
+ *   - tidak ada koneksi aktif                 → `unconfigured`
+ *   - model media TIDAK ada di cache          → `unknown` (belum diprobe)
+ *   - model ada dan mengumumkan kapabilitas   → `available`
+ *   - model ada tetapi tidak mengumumkan      → `unsupported`
+ *
+ * `unknown` sengaja BUKAN `unsupported`: belum diprobe bukan bukti tidak ada.
+ */
+function mediaCapability(
+  name: CapabilityName,
+  modelId: string | undefined,
+  hasConnection: boolean,
+  models: readonly { id: string; capabilities?: { audio?: boolean } }[] | null,
+  checkedAt: string,
+): CapabilityEntry {
+  if (!modelId) return entry(name, "unconfigured", "MEDIA_NOT_CONFIGURED", checkedAt);
+  if (!hasConnection) return entry(name, "unconfigured", "NO_CONNECTION", checkedAt);
+  if (models === null) return entry(name, "unknown", "CAPABILITY_NOT_PROBED", checkedAt);
+  const model = models.find((candidate) => candidate.id === modelId);
+  if (!model) return entry(name, "unknown", "MEDIA_MODEL_NOT_LISTED", checkedAt);
+  if (model.capabilities?.audio === true) return entry(name, "available", "GATEWAY_ANNOUNCED", checkedAt);
+  return entry(name, "unsupported", "GATEWAY_NOT_ANNOUNCED", checkedAt);
+}
+
 /** State kapabilitas model dari bukti gateway; `null` = belum pernah diprobe. */
 function modelCapability(
   name: CapabilityName,
@@ -115,13 +147,10 @@ export async function GET(request: Request): Promise<Response> {
       vision: modelCapability("vision", announced("vision"), hasConnection, checkedAt),
       tools: modelCapability("tools", announced("tools"), hasConnection, checkedAt),
       imageGen: modelCapability("imageGen", announced("imageGen"), hasConnection, checkedAt),
-      // STT/TTS butuh penyedia media yang dikonfigurasi DAN dukungan gateway.
-      stt: media.stt
-        ? modelCapability("stt", announced("audio"), hasConnection, checkedAt)
-        : entry("stt", "unconfigured", "MEDIA_NOT_CONFIGURED", checkedAt),
-      tts: media.tts
-        ? modelCapability("tts", announced("audio"), hasConnection, checkedAt)
-        : entry("tts", "unconfigured", "MEDIA_NOT_CONFIGURED", checkedAt),
+      // STT/TTS: bukti dicari pada MODEL MEDIA yang dikonfigurasi, bukan pada
+      // seluruh daftar model chat (lihat `mediaCapability`).
+      stt: mediaCapability("stt", media.stt?.model, hasConnection, cached?.models ?? null, checkedAt),
+      tts: mediaCapability("tts", media.tts?.model, hasConnection, cached?.models ?? null, checkedAt),
       webSearch: readWebSearchConfig()
         ? entry("webSearch", "available", "SEARCH_CONFIGURED", checkedAt)
         : entry("webSearch", "unconfigured", "SEARCH_NOT_CONFIGURED", checkedAt),

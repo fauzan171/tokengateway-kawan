@@ -195,7 +195,15 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
     owner: input.userId,
     operation: OPERATION_SEND_MESSAGE,
     chatId: input.chatId,
-    payload: [content, parentId, model, images.map((a) => [a.mime, a.dataUrl]), webSearch, documentIds],
+    payload: [
+      content,
+      parentId,
+      model,
+      // FIX-16: gambar hasil pembuatan ikut digest lewat artifactId-nya.
+      images.map((a) => [a.mime, a.dataUrl ?? null, a.artifactId ?? null]),
+      webSearch,
+      documentIds,
+    ],
   });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -268,6 +276,27 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
           }
         }
 
+        // FIX-16: gambar hasil pembuatan wajib milik pengguna ini dan masih
+        // hidup — artifactId dari klien tidak dipercaya begitu saja. Diperiksa
+        // di dalam transaksi yang sama supaya tidak ada jendela TOCTOU.
+        const artifactImageIds = images
+          .map((image) => image.artifactId)
+          .filter((id): id is string => typeof id === "string");
+        if (artifactImageIds.length > 0) {
+          const ownedArtifacts = await tx.artifact.findMany({
+            where: {
+              id: { in: artifactImageIds },
+              userId: input.userId,
+              deletedAt: null,
+              status: "ready",
+            },
+            select: { id: true },
+          });
+          if (ownedArtifacts.length !== artifactImageIds.length) {
+            throw badRequest("INVALID_ATTACHMENT", "Gambar tidak ditemukan atau bukan milik Anda.");
+          }
+        }
+
         const userMessageId = `msg_${randomUUID()}`;
         const contentJson = JSON.stringify({
           parts: [
@@ -304,7 +333,13 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
               messageId: userMessageId,
               kind: "image",
               ordinal: index + 1,
-              payloadJson: JSON.stringify({ mime: image.mime, dataUrl: image.dataUrl }),
+              // FIX-16: hasil pembuatan disimpan sebagai rujukan artefak, bukan
+              // base64 permanen. Unggahan pengguna tetap membawa dataUrl-nya.
+              payloadJson: JSON.stringify(
+                image.artifactId
+                  ? { mime: image.mime, artifactId: image.artifactId }
+                  : { mime: image.mime, dataUrl: image.dataUrl },
+              ),
             },
           });
         }

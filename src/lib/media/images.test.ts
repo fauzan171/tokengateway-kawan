@@ -1,19 +1,19 @@
 /**
- * Uji pembuatan gambar (WP-NT-P8-01).
+ * Uji pembuatan gambar (WP-NT-P8-01, FIX-16).
  *
  * `@/lib/net` di-mock agar tidak ada resolusi DNS, `fetch` diganti stub.
+ * FIX-16: hasil adalah BYTE + mime dari magic bytes, bukan data URL.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/net", () => ({
   assertOutboundAllowed: async (url: string) => url,
-  // Tanpa ini modul yang memakai fetchOutbound akan gagal sebelum stub dipanggil.
   fetchOutbound: (url: string, init: RequestInit) => fetch(url, init),
   DEFAULT_OUTBOUND_OPTIONS: { allowInsecureHttp: false, allowlist: [] },
 }));
 
-const { generateImage } = await import("./images");
+const { generateImage, imageMimeFromBytes } = await import("./images");
 
 const ENV_KEYS = ["MEDIA_IMAGE_MODEL"];
 
@@ -23,6 +23,9 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: { "content-type": "application/json" },
   });
 }
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 9]);
 
 let fetchMock: ReturnType<typeof vi.fn>;
 let savedEnv: Record<string, string | undefined>;
@@ -44,6 +47,14 @@ afterEach(() => {
 
 const base = { baseUrl: "https://gw.test/v1", apiKey: "rahasia-123", prompt: "kucing" };
 
+describe("imageMimeFromBytes", () => {
+  it("mengenali PNG, JPEG, dan menolak yang tak dikenal", () => {
+    expect(imageMimeFromBytes(PNG)).toBe("image/png");
+    expect(imageMimeFromBytes(JPEG)).toBe("image/jpeg");
+    expect(imageMimeFromBytes(new Uint8Array([1, 2, 3]))).toBe("application/octet-stream");
+  });
+});
+
 describe("generateImage", () => {
   it("tanpa MEDIA_IMAGE_MODEL → 409 MEDIA_NOT_CONFIGURED, tanpa fetch", async () => {
     await expect(generateImage(base)).rejects.toMatchObject({
@@ -62,10 +73,14 @@ describe("generateImage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("b64_json → data URL PNG", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [{ b64_json: "QUJD" }] }));
+  it("b64_json → byte PNG, bukan data URL", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ data: [{ b64_json: Buffer.from(PNG).toString("base64") }] }),
+    );
     const image = await generateImage({ ...base, model: "gpt-image-1" });
-    expect(image).toEqual({ mime: "image/png", dataUrl: "data:image/png;base64,QUJD" });
+    expect(image.mime).toBe("image/png");
+    expect(Buffer.from(image.bytes)).toEqual(Buffer.from(PNG));
+    expect(image).not.toHaveProperty("dataUrl");
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://gw.test/v1/images/generations");
@@ -95,17 +110,33 @@ describe("generateImage", () => {
     }
   });
 
-  it("hanya url → diunduh jadi data URL", async () => {
+  it("hanya url → diunduh, mime dari magic bytes bukan header", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ data: [{ url: "https://cdn.test/a.png" }] }))
       .mockResolvedValueOnce(
-        new Response(new Uint8Array([1, 2, 3]), {
-          status: 200,
-          headers: { "content-type": "image/webp" },
-        }),
+        // Header berbohong: mengaku webp, isinya PNG.
+        new Response(PNG, { status: 200, headers: { "content-type": "image/webp" } }),
       );
     const image = await generateImage({ ...base, model: "gpt-image-1" });
-    expect(image.mime).toBe("image/webp");
-    expect(image.dataUrl).toBe(`data:image/webp;base64,${Buffer.from([1, 2, 3]).toString("base64")}`);
+    expect(image.mime).toBe("image/png");
+    expect(Buffer.from(image.bytes)).toEqual(Buffer.from(PNG));
+  });
+
+  it("byte bukan gambar → 502 IMAGE_FORMAT_UNSUPPORTED", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ data: [{ b64_json: Buffer.from([1, 2, 3, 4]).toString("base64") }] }),
+    );
+    await expect(generateImage({ ...base, model: "gpt-image-1" })).rejects.toMatchObject({
+      status: 502,
+      code: "IMAGE_FORMAT_UNSUPPORTED",
+    });
+  });
+
+  it("b64_json kosong → 502 IMAGE_FAILED", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [{ b64_json: "" }] }));
+    await expect(generateImage({ ...base, model: "gpt-image-1" })).rejects.toMatchObject({
+      status: 502,
+      code: "IMAGE_FAILED",
+    });
   });
 });

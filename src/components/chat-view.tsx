@@ -68,13 +68,23 @@ function parseText(contentJson: string): string {
   return "";
 }
 
-function parseImages(contentJson: string): { mime: string; dataUrl: string }[] {
+type ImageRef = { mime: string; dataUrl?: string; artifactId?: string };
+
+/** Sumber gambar: data URL unggahan, atau endpoint artefak untuk hasil buatan. */
+function imageSrc(image: ImageRef): string {
+  if (image.dataUrl) return image.dataUrl;
+  return `/api/kawan/v1/artifacts/${encodeURIComponent(image.artifactId ?? "")}`;
+}
+
+function parseImages(contentJson: string): ImageRef[] {
   try {
     const data = JSON.parse(contentJson);
     if (Array.isArray(data?.parts)) {
+      // FIX-16: gambar hasil pembuatan hanya membawa artifactId, bukan base64.
       return data.parts.filter(
-        (p: { kind?: string; dataUrl?: string }) =>
-          p?.kind === "image" && typeof p.dataUrl === "string",
+        (p: ImageRef & { kind?: string }) =>
+          p?.kind === "image" &&
+          (typeof p.dataUrl === "string" || typeof p.artifactId === "string"),
       );
     }
   } catch {}
@@ -204,7 +214,9 @@ export function ChatView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const documentsApi = useDocuments();
-  const [attachments, setAttachments] = useState<{ mime: string; dataUrl: string }[]>([]);
+  // FIX-16: hasil image generation disimpan sebagai artefak; lampiran hanya
+  // membawa id + URL unduhan, bukan base64.
+  const [attachments, setAttachments] = useState<ImageRef[]>([]);
   const [modelRef, setModelRef] = useState<string | null>(null);
   const [vision, setVision] = useState(false);
   const [webSearchAvailable, setWebSearchAvailable] = useState(false);
@@ -229,6 +241,11 @@ export function ChatView({
   const sendingRef = useRef(false);
   // Stream dibatalkan saat chat berganti; delta chat lama tidak boleh masuk.
   const streamAbortRef = useRef<AbortController | null>(null);
+  // FIX-16: pemutaran TTS dapat dibatalkan; URL objek tidak boleh menggantung.
+  const speechUrlRef = useRef<string | null>(null);
+  const speechAudioRef = useRef<HTMLAudioElement | null>(null);
+  // true selama audio TTS diputar; tombol berubah jadi "hentikan".
+  const [speaking, setSpeaking] = useState(false);
   const chatIdRef = useRef<string | null>(chatId);
   // Draft per chat: pindah chat tidak boleh membuang ketikan.
   const draftsRef = useRef<Map<string, string>>(new Map());
@@ -522,6 +539,14 @@ export function ChatView({
             : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       }
 
+      // FIX-16: kirim rujukan artefak, bukan data URL base64. Unggahan biasa
+      // tetap membawa dataUrl; hasil pembuatan membawa artifactId.
+      const wireAttachments = sending.map((image) =>
+        image.artifactId
+          ? { mime: image.mime, artifactId: image.artifactId }
+          : { mime: image.mime, dataUrl: image.dataUrl },
+      );
+
       const sendRes = await fetch(`/api/kawan/v1/chat/${activeId}/messages`, {
         method: "POST",
         headers: {
@@ -531,7 +556,7 @@ export function ChatView({
         body: JSON.stringify({
           content: userText || "(gambar)",
           parentId,
-          attachments: sending,
+          attachments: wireAttachments,
           ...(documentsApi.selectedIds.length > 0 ? { documentIds: documentsApi.selectedIds } : {}),
           ...(searchOn ? { webSearch: true } : {}),
         }),
@@ -560,6 +585,7 @@ export function ChatView({
           ],
         }),
       };
+      void wireAttachments;
       const assistantNode: TreeNode = {
         id: assistantMessageId,
         chatId: activeId,
@@ -743,6 +769,16 @@ export function ChatView({
     }
   }
 
+  /** Cabut URL objek yang sedang diputar; aman dipanggil berkali-kali. */
+  function stopSpeech() {
+    const url = speechUrlRef.current;
+    speechUrlRef.current = null;
+    if (url) URL.revokeObjectURL(url);
+    speechAudioRef.current?.pause();
+    speechAudioRef.current = null;
+    setSpeaking(false);
+  }
+
   async function handleSpeak() {
     let path: TreeNode[] = messages;
     try {
@@ -766,10 +802,16 @@ export function ChatView({
         const data = await res.json().catch(() => null);
         throw new Error(data?.error?.message || t("chat.speakFailed"));
       }
+      // FIX-16: URL objek dilacak supaya bisa dicabut saat dibatalkan, bukan
+      // hanya saat pemutaran selesai (kalau tidak, blob menggantung).
+      stopSpeech();
       const url = URL.createObjectURL(await res.blob());
       const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play().catch(() => URL.revokeObjectURL(url));
+      speechUrlRef.current = url;
+      speechAudioRef.current = audio;
+      audio.onended = stopSpeech;
+      setSpeaking(true);
+      await audio.play().catch(() => stopSpeech());
     } catch (err: unknown) {
       setErrorState({
         message: err instanceof Error ? err.message : t("chat.speakFailed"),
@@ -904,7 +946,7 @@ export function ChatView({
                           <li key={`${image.mime}-${index}`}>
                             {/* eslint-disable-next-line @next/next/no-img-element -- data URL attachment, not an optimizable asset */}
                             <img
-                              src={image.dataUrl}
+                              src={imageSrc(image)}
                               alt={t("chat.attachmentAlt", { index: index + 1 })}
                               className="max-h-56 rounded-lg border object-contain"
                             />
@@ -1093,7 +1135,7 @@ export function ChatView({
               <li key={`${file.mime}-${index}`} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element -- data URL preview, not an optimizable asset */}
                 <img
-                  src={file.dataUrl}
+                  src={imageSrc(file)}
                   alt={t("chat.attachmentAlt", { index: index + 1 })}
                   className="size-16 rounded-lg border object-cover"
                 />
@@ -1138,9 +1180,10 @@ export function ChatView({
             <MediaControls
               busy={isStreaming || mediaBusy}
               prompt={input}
+              speaking={speaking}
               {...(mediaCaps.imageGen ? { onImage: handleImage } : {})}
               {...(mediaCaps.stt ? { onTranscribe: handleTranscribe } : {})}
-              {...(mediaCaps.tts ? { onSpeak: handleSpeak } : {})}
+              {...(mediaCaps.tts ? { onSpeak: handleSpeak, onStopSpeak: stopSpeech } : {})}
             />
           )}
           {vision && (
@@ -1154,7 +1197,7 @@ export function ChatView({
                 onChange={async (e) => {
                   const files = Array.from(e.target.files ?? []);
                   e.target.value = "";
-                  const picked: { mime: string; dataUrl: string }[] = [];
+                  const picked: ImageRef[] = [];
                   for (const file of files) {
                     if (!(IMAGE_MIMES as readonly string[]).includes(file.type)) continue;
                     if (file.size > MAX_IMAGE_BYTES) {

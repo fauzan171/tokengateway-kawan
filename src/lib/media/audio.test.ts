@@ -56,7 +56,8 @@ describe("transcribeAudio", () => {
         file: audio(),
         filename: "rekaman.webm",
       }),
-    ).resolves.toEqual({ text: "halo" });
+    // FIX-16: segmen timestamp kosong bila gateway tidak mengirimnya.
+    ).resolves.toEqual({ text: "halo", segments: [], truncated: false });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://gw.test/v1/audio/transcriptions");

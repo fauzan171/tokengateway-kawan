@@ -2,15 +2,25 @@
  * Bagian isi pesan (SDD-2.2) — pembacaan murni, aman diimpor komponen klien.
  *
  * Bentuk kanonik `contentJson`: `{ parts: [{ kind: "text", text }] }`, ditambah
- * `{ kind: "image", mime, dataUrl }` bila pesan membawa gambar (REQ-NT-46).
- * Nilai rusak tidak boleh menjatuhkan pembacaan riwayat, jadi bagian yang tidak
- * dikenali dilewati. Validasi lampiran ada di `./attachments` (server-only).
+ * `{ kind: "image", mime, dataUrl }` untuk gambar unggahan (REQ-NT-46) dan
+ * `{ kind: "image", mime, artifactId }` untuk gambar hasil pembuatan (FIX-16).
+ *
+ * Gambar hasil pembuatan TIDAK disimpan sebagai base64 di riwayat: byte-nya ada
+ * di artefak (retention 7 hari), riwayat hanya menyimpan rujukannya.
  */
 
 export type ContentPart = { kind?: string; text?: string };
 
-/** Bagian gambar: data URL ditanam di `contentJson`, tanpa tabel atau disk baru. */
-export type ImagePart = { kind: "image"; mime: string; dataUrl: string };
+/**
+ * Bagian gambar. `dataUrl` untuk unggahan pengguna; `artifactId` untuk hasil
+ * pembuatan yang byte-nya hidup di penyimpanan artefak.
+ */
+export type ImagePart = {
+  kind: "image";
+  mime: string;
+  dataUrl?: string;
+  artifactId?: string;
+};
 
 /** Jenis gambar yang boleh dilampirkan; SVG sengaja tidak ada (bisa memuat skrip). */
 export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
@@ -36,10 +46,12 @@ export function messageText(contentJson: string): string {
 
 /** Bagian gambar pada satu pesan, untuk membangun permintaan ke gateway. */
 export function imageParts(contentJson: string): ImagePart[] {
-  return parseParts(contentJson).filter(
-    (part): part is ImagePart =>
-      part.kind === "image" &&
-      typeof (part as ImagePart).dataUrl === "string" &&
-      typeof (part as ImagePart).mime === "string",
-  );
+  return parseParts(contentJson).filter((part): part is ImagePart => {
+    if (part.kind !== "image") return false;
+    const candidate = part as ImagePart;
+    return (
+      typeof candidate.mime === "string" &&
+      (typeof candidate.dataUrl === "string" || typeof candidate.artifactId === "string")
+    );
+  });
 }

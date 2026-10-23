@@ -59,7 +59,7 @@ import {
   parseGenerateDocumentArgs,
   parseGenerateFileArgs,
 } from "./file-tool";
-import { createArtifact } from "@/lib/artifacts/create";
+import { createArtifact, readArtifactForModel } from "@/lib/artifacts/create";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
 import { getCachedModels, resolveModel } from "@/lib/connections/model-cache";
@@ -224,29 +224,42 @@ function trimHistory(
  * pesan tanpa teks dilewati. `buildAncestryPath` melempar pada pohon cacat;
  * itu diteruskan sebagai galat setup.
  */
-function buildMessages(
+async function buildMessages(
+  db: Db,
+  userId: string,
   path: readonly TreeNode[],
   assistantMessageId: string,
-): ChatCompletionMessage[] {
-  return path
-    .filter((node) => node.id !== assistantMessageId)
-    .map((node) => {
-      const text = messageText(node.contentJson);
-      const images = imageParts(node.contentJson);
-      // Gateway gaya OpenAI: teks + gambar dalam satu array; tanpa gambar tetap string.
-      const content: GatewayContent =
-        images.length === 0
-          ? text
-          : [
-              ...(text ? [{ type: "text" as const, text }] : []),
-              ...images.map((image) => ({
-                type: "image_url" as const,
-                image_url: { url: image.dataUrl },
-              })),
-            ];
-      return { role: node.role, content };
-    })
-    .filter((message) => message.content !== "" && (message.content as unknown[]).length !== 0);
+): Promise<ChatCompletionMessage[]> {
+  const built: ChatCompletionMessage[] = [];
+  for (const node of path) {
+    if (node.id === assistantMessageId) continue;
+    const text = messageText(node.contentJson);
+    const images = imageParts(node.contentJson);
+    // FIX-16: gambar hasil pembuatan hanya menyimpan rujukan; byte-nya dibaca
+    // dari artefak di sini. Artefak hilang/kedaluwarsa dilewati, bukan
+    // menggagalkan seluruh generasi.
+    const urls: string[] = [];
+    for (const image of images) {
+      if (image.dataUrl) {
+        urls.push(image.dataUrl);
+        continue;
+      }
+      if (!image.artifactId) continue;
+      const stored = await readArtifactForModel(db, userId, image.artifactId);
+      if (stored) urls.push(`data:${stored.mime};base64,${stored.bytes.toString("base64")}`);
+    }
+    // Gateway gaya [OI]: teks + gambar dalam satu array; tanpa gambar tetap string.
+    const content: GatewayContent =
+      urls.length === 0
+        ? text
+        : [
+            ...(text ? [{ type: "text" as const, text }] : []),
+            ...urls.map((url) => ({ type: "image_url" as const, image_url: { url } })),
+          ];
+    if (content === "" || (Array.isArray(content) && content.length === 0)) continue;
+    built.push({ role: node.role, content });
+  }
+  return built;
 }
 
 /**
@@ -819,7 +832,7 @@ export async function runGeneration(
     orderBy: { seq: "asc" },
   });
   const ancestry = buildAncestryPath(rows, generation.assistantMessageId);
-  const messages = buildMessages(ancestry, generation.assistantMessageId);
+  const messages = await buildMessages(db, chat.userId, ancestry, generation.assistantMessageId);
   const history = trimHistory(messages);
 
   // Pohon cacat (mis. assistant ber-`parentId` NULL) membuat ancestry kosong

@@ -165,6 +165,32 @@ export async function openArtifactBytes(
   return { artifact, bytes };
 }
 
+/**
+ * Byte artefak untuk dipakai model (FIX-16), tanpa menaikkan `downloadCount`.
+ *
+ * `null` — bukan galat — bila artefak tidak ada, bukan milik pengguna, belum
+ * `ready`, atau sudah kedaluwarsa: satu gambar yang hilang tidak boleh
+ * menggagalkan seluruh generasi.
+ */
+export async function readArtifactForModel(
+  db: Db,
+  userId: string,
+  id: string,
+  root = storageRoot(),
+): Promise<{ mime: string; bytes: Buffer } | null> {
+  const row = await db.artifact.findFirst({ where: { id, userId, deletedAt: null } });
+  if (!row) return null;
+  const artifact = toPublic(row as ArtifactRow);
+  if (artifact.status !== "ready") return null;
+  if (artifact.expiresAt && artifact.expiresAt.getTime() <= Date.now()) return null;
+  try {
+    const bytes = await readDocument((row as ArtifactRow).storageKey, root);
+    return { mime: artifact.mime, bytes };
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteArtifact(db: Db, userId: string, id: string, root = storageRoot()): Promise<void> {
   const row = await db.artifact.findFirst({ where: { id, userId } });
   if (!row) return;

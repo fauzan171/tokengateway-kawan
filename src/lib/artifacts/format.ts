@@ -1,6 +1,6 @@
 /** Konstanta & util format artefak (FIX-11, bagian 1/4). */
 
-export const ARTIFACT_FORMATS = ["md", "txt", "json", "csv", "html", "xlsx", "docx", "pdf", "zip"] as const;
+export const ARTIFACT_FORMATS = ["md", "txt", "json", "csv", "html", "xlsx", "docx", "pdf", "zip", "png"] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 export const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 export const MAX_ARTIFACTS_PER_RUN = 10;
@@ -21,6 +21,8 @@ export function mimeForFormat(format: ArtifactFormat): string {
     case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     case "pdf": return "application/pdf";
     case "zip": return "application/zip";
+    // FIX-16: hasil image generation disimpan sebagai artefak, bukan data URL.
+    case "png": return "image/png";
   }
 }
 
