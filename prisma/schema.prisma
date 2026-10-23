@@ -40,6 +40,7 @@ model User {
   prompts   Prompt[]
   setting   UserSetting?
   tasks     Task[]
+  memories  MemoryItem[]
 
   @@index([status])
 }
@@ -316,6 +317,7 @@ model Chat {
   messages   ChatMessage[]
   shareLinks ShareLink[]
   chatDocs   ChatDocument[]
+  memories   MemoryItem[]
 
   @@index([userId, updatedAt])
   @@index([userId, folderId])
@@ -481,6 +483,67 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// Memori eksplisit milik pengguna (FIX-13).
+///
+/// Bukan riwayat chat, bukan ringkasan otomatis: hanya butir yang disimpan
+/// karena pengguna memintanya (`consent: "explicit"`) atau usulan yang menunggu
+/// tinjauan (`consent: "proposed"`). Versi lama tidak dihapus saat dikoreksi —
+/// `status: "superseded"` + `parentId` menyimpan rantai koreksi.
+model MemoryItem {
+  id             String    @id
+  userId         String
+  /// "global" (lintas chat) atau "chat" (hanya `chatId` itu).
+  scope          String    @default("global")
+  chatId         String?
+  /// "preference" | "fact" | "instruction"
+  category       String
+  text           String
+  /// "active" | "proposed" | "revoked" | "superseded"
+  status         String    @default("active")
+  /// "explicit" | "proposed"
+  consent        String    @default("explicit")
+  version        Int       @default(1)
+  parentId       String?
+  /// Dari mana butir ini berasal: "message" | "document" | "manual".
+  sourceKind     String?
+  sourceRef      String?
+  /// Revisi sumber saat butir disimpan; sumber berubah → provenance tidak lagi
+  /// membuktikan butir yang sama.
+  sourceRevision Int?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat       Chat?            @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  parent     MemoryItem?      @relation("MemoryVersion", fields: [parentId], references: [id])
+  revisions  MemoryItem[]     @relation("MemoryVersion")
+  derived    MemoryDependency[] @relation("MemoryDependencyOwner")
+  dependsOn  MemoryDependency[] @relation("MemoryDependencyTarget")
+
+  @@index([userId, status])
+  @@index([userId, chatId])
+  @@index([parentId])
+}
+
+/// Ringkasan/cache turunan dari satu atau beberapa memori (FIX-13).
+/// Mencabut `targetId` menggugurkan semua baris yang bergantung padanya.
+model MemoryDependency {
+  id        String   @id
+  memoryId  String
+  targetId  String
+  /// "summary" | "cache" | "vector"
+  kind      String   @default("summary")
+  createdAt DateTime @default(now())
+
+  memory MemoryItem @relation("MemoryDependencyOwner", fields: [memoryId], references: [id], onDelete: Cascade)
+  target MemoryItem @relation("MemoryDependencyTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([memoryId, targetId])
+  @@index([targetId])
 }
 
 /// Preferensi tampilan dan kirim (REQ-NT-70). Satu baris per pengguna.

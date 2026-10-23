@@ -45,7 +45,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-10 | R2 | 09,07 | `verified` | `web.read` (baca HTML/PDF via kebijakan egress FIX-07, tanpa cookie/script), provenance (`fetchedAt`+`contentHash`+`reach`), system prompt memuat teks halaman nyata + penanda tautan mati/terblokir, verifikasi DOI via Crossref (`mismatch` untuk DOI fiktif). 26 tes baru. Bukti: `reports/FIX-10.md` |
 | FIX-11 | R2 | 09,06 | `verified_fixture` | commits `ae1a657`,`d8c02c1`,`a5aa9a3`,`d711913`; tes E2E tool `generate_file` (fixture SSE) |
 | FIX-12 | R3 | 11,17 | `verified` | commits `7192e8e`,`94c40ce`; renderer PDF/DOCX/XLSX/PPTX + tool `generate_document`; `Artifact.version` + lineage tervalidasi, konverter md/txt/html/csv/json, ZIP hardening (slip/bomb/symlink/duplikat). Bukti: `reports/FIX-12.md` |
-| FIX-13 | R3 | 05,06,08 | `planned` | — |
+| FIX-13 | R3 | 05,06,08 | `verified` | `MemoryItem` (scope, category, status, consent, `version`+`parentId`, provenance, `expiresAt`) + `MemoryDependency` untuk pencabutan berantai; store `create/list/correct/revoke/confirmProposal/buildMemoryContext` (hanya `active`, anggaran 4.000 char, mode `ephemeral`); API `GET/POST /memory`, `PATCH/POST/DELETE /memory/{id}`; konteks memori disuntik ke generasi. 24 tes baru. Bukti: `reports/FIX-13.md` |
 | FIX-14 | R3 | 06,11,17 | `planned` | — |
 | FIX-15 | R2/R3 | 09,11 | `planned` | — |
 | FIX-16 | R3 | 04,11,17 | `planned` | — |

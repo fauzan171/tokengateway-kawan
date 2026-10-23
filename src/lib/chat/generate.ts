@@ -45,6 +45,7 @@ import { extractCitations } from "@/lib/documents/citations";
 import { buildSearchSystem, webSearchRequested } from "@/lib/search/prompt";
 import { webSearch, type SearchResult } from "@/lib/search/web";
 import { enrichSources, type EnrichedSource } from "@/lib/sources/read";
+import { buildMemoryContext } from "@/lib/memory/store";
 import { assertHeld, LeaseLost, type FenceChecker } from "@/lib/jobs/fence";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
@@ -967,6 +968,16 @@ export async function runGeneration(
     }
   }
   const searchSystem = buildSearchSystem(enriched.length > 0 ? enriched : sources) ?? null;
+  // FIX-13: memori eksplisit pengguna. Tidak ada penyimpanan otomatis di sini —
+  // hanya membaca butir yang sudah disetujui pengguna.
+  let memorySystem: string | null = null;
+  try {
+    const memory = await buildMemoryContext(db, { userId: chat.userId, chatId: chat.id });
+    memorySystem = memory.system;
+  } catch {
+    // Memori gagal dibaca bukan alasan menggagalkan generasi.
+    memorySystem = null;
+  }
   if (resolution.fallback) {
     await publishEvent(db, generationId, "note", {
       code: "MODEL_FALLBACK",
@@ -1032,6 +1043,7 @@ export async function runGeneration(
             }),
           },
           ...(userSystem ? [{ role: "system", content: userSystem }] : []),
+          ...(memorySystem ? [{ role: "system", content: memorySystem }] : []),
           ...(contextSystem ? [{ role: "system", content: contextSystem }] : []),
           ...(searchSystem ? [{ role: "system", content: searchSystem }] : []),
           ...history.messages,
