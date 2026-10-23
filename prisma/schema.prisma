@@ -639,6 +639,10 @@ model TaskRun {
   currentJobId       String?   @unique
   lastEventSeq       Int       @default(0)
   stepCount          Int       @default(0)
+  /// FIX-22: run induk bila run ini adalah peninjau model kedua. Null = akar.
+  /// Kedalaman dibatasi 1; child tidak pernah mendapat budget lebih besar.
+  parentRunId        String?
+  depth              Int       @default(0)
   deadlineAt         DateTime
   waitingExpiresAt   DateTime?
   cancelRequestedAt  DateTime?
@@ -653,6 +657,7 @@ model TaskRun {
   interactions TaskInteraction[]
 
   @@index([taskId, createdAt, id])
+  @@index([parentRunId, status])
   @@index([status, deadlineAt])
 }
 

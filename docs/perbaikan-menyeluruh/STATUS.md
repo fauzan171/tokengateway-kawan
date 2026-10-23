@@ -54,7 +54,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-19 | R3/R4 | 09,08 | `verified_fixture` | 8 tool aplikasi lewat service (`src/lib/tools/app.ts`), owner dari konteks, aksi destruktif hanya `needs_approval`, revisi kadaluarsa ditolak. Plus 3 regresi dokumen dari riset: entri direktori ZIP, sanitasi nama sheet XLSX, tolak sumber biner di konversi. 24 tes baru. Bukti: `reports/FIX-19.md` |
 | FIX-20 | R4 | 07,08,09 | `verified_fixture` | Approval satu-pakai (`approvals.ts`) dengan digest aksi+payload+revisi, tolak pemakaian kedua/kedaluwarsa/owner lain; konektor token terenkripsi per baris + allowlist endpoint + revoke; model `ConnectorCredential` + migrasi dua provider. 12 tes. OAuth live `blocked_external`. Bukti: `reports/FIX-20.md` |
 | FIX-21 | R4 | 08,20,24 | `verified_fixture` | Zona IANA via Intl (DST digeser, jam lokal dipertahankan), occurrence unik per (jadwal, waktu), misfire `skip` bawaan, notifikasi sensitif diredaksi; model `Schedule`/`ScheduleOccurrence`/`Notification` + migrasi dua provider. 21 tes. Bukti: `reports/FIX-21.md` |
-| FIX-22 | setelah single agent | 09,18,24 | `planned` | — |
+| FIX-22 | setelah single agent | 09,18,24 | `verified_fixture` | Review model kedua terbatas (`multi-model.ts`): budget child ≤50% parent, kedalaman 1, tool subset parent, peninjau dipilih pengguna, agregasi menyebut sumber + disclaimer; `TaskRun.parentRunId`/`depth` + migrasi. 11 tes. Manfaat belum diukur. Bukti: `reports/FIX-22.md` |
 | FIX-23 | semua | 01,02 | `planned` | — |
 | FIX-24 | R0–R5 | 01 | `planned` | — |
 
