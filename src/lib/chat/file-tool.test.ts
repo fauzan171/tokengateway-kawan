@@ -106,6 +106,39 @@ describe("parseGenerateDocumentArgs", () => {
     expect(args.doc.blocks.length).toBeLessThan(500);
   });
 
+  it("600 blok dari model tetap menghasilkan dokumen (dipotong, bukan gagal)", async () => {
+    // Regresi live: model mengirim 600 paragraf, parse melempar, pengguna hanya
+    // melihat "berkas gagal dibuat" dan kehilangan seluruh dokumen.
+    const blocks = Array.from({ length: 600 }, (_, i) => ({
+      type: "paragraph",
+      text: `Kalimat pengisi nomor ${i + 1}.`,
+    }));
+    const args = parseGenerateDocumentArgs({
+      format: "pdf",
+      displayName: "Uji Batas.pdf",
+      doc: { title: "Uji Batas", blocks },
+    });
+    expect(args.truncated).toBe(true);
+    expect(args.doc.blocks).toHaveLength(500);
+
+    const { createArtifact } = await import("@/lib/artifacts/create");
+    const { createTempDb } = await import("../../../tests/helpers/auth-db");
+    const temp = await createTempDb();
+    const userId = crypto.randomUUID();
+    await temp.db.user.create({ data: { id: userId, email: `${userId}@t.test` } });
+    try {
+      const artifact = await createArtifact(temp.db, {
+        userId,
+        displayName: args.displayName,
+        input: { format: "pdf", doc: args.doc },
+      });
+      expect(artifact.status).toBe("ready");
+      expect(artifact.sizeBytes).toBeGreaterThan(1_000);
+    } finally {
+      await temp.cleanup();
+    }
+  });
+
   it("blok tak dikenal dihitung di unknownBlocks, bukan dibuang diam-diam", () => {
     const args = parseGenerateDocumentArgs({
       format: "pdf",

@@ -46,9 +46,13 @@ describe("parseDocSchema", () => {
     expect(() => parseDocSchema("string")).toThrowError(/INVALID_DOC_SCHEMA/);
   });
 
-  it("501 blok ditolak, 500 lolos", () => {
+  it("501 blok DIPOTONG ke 500 dan dilaporkan, bukan ditolak", () => {
+    // Ditolak berarti dokumen 600 paragraf hilang seluruhnya; yang benar adalah
+    // menyimpan 500 pertama dan memberi tahu bahwa sisanya dipotong.
     const blocks = Array.from({ length: 501 }, () => ({ type: "paragraph", text: "x" }));
-    expect(() => parseDocSchema({ title: "t", blocks })).toThrowError(/INVALID_DOC_SCHEMA/);
+    const parsed = parseDocSchema({ title: "t", blocks });
+    expect(parsed.blocks).toHaveLength(500);
+    expect(parsed.truncated).toBe(true);
     expect(parseDocSchema({ title: "t", blocks: blocks.slice(0, 500) }).blocks.length).toBe(500);
   });
 

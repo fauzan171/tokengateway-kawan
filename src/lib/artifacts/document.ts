@@ -36,7 +36,10 @@ export function parseDocSchema(value: unknown): ParsedDocSchema {
   const raw = value as Record<string, unknown>;
   if (typeof raw.title !== "string" || !raw.title.trim()) throw new ArtifactError("INVALID_DOC_SCHEMA");
   if (!Array.isArray(raw.blocks)) throw new ArtifactError("INVALID_DOC_SCHEMA");
-  if (raw.blocks.length > DOC_LIMITS.blocks) throw new ArtifactError("INVALID_DOC_SCHEMA");
+  // >500 blok DIPOTONG, bukan ditolak. Menolak berarti model yang mengirim 600
+  // paragraf membuat tool gagal total dan pengguna hanya melihat "berkas gagal
+  // dibuat" — kehilangan seluruh dokumen karena 100 blok lebih. Bentuk salah
+  // tetap dilempar; kelebihan jumlah adalah batas, bukan kesalahan bentuk.
 
   const blocks: DocBlock[] = [];
   let unknownBlocks = 0;
@@ -54,6 +57,10 @@ export function parseDocSchema(value: unknown): ParsedDocSchema {
   const title = clip(raw.title.trim(), DOC_LIMITS.text);
 
   for (const item of raw.blocks) {
+    if (blocks.length >= DOC_LIMITS.blocks) {
+      truncated = true;
+      break;
+    }
     if (remaining <= 0) {
       truncated = true;
       break;
