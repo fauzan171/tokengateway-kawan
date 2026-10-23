@@ -187,15 +187,17 @@ describe("runGeneration", () => {
     const body = request?.body as { model: string; stream: boolean; messages: unknown[] };
     expect(body.stream).toBe(true);
     expect(body.model).toBe(modelFor("usage-absent"));
-    // Prompt bawaan → konteks server (FIX-04) → riwayat.
+    // FIX-18: SATU pesan sistem (urutan otoritas tetap) → riwayat.
     const sent = body.messages as { role: string; content: string }[];
-    expect(sent).toHaveLength(3);
+    expect(sent).toHaveLength(2);
     expect(sent[0]?.role).toBe("system");
-    expect(sent[0]?.content).toContain("Jawab dengan bahasa yang dipakai pengguna.");
+    // Kebijakan server selalu paling awal.
+    expect(sent[0]?.content).toContain("urutan otoritas");
+    // FIX-18: fakta kemampuan menyatakan tool yang benar-benar ada.
+    expect(sent[0]?.content).toContain("## Fakta kemampuan");
     // FIX-04: blok konteks server membawa waktu/judul/model, bukan tebakan.
-    expect(sent[1]?.role).toBe("system");
-    expect(sent[1]?.content).toContain("## Konteks dari server");
-    expect(sent[2]).toEqual({ role: "user", content: "Halo" });
+    expect(sent[0]?.content).toContain("## Konteks dari server");
+    expect(sent[1]).toEqual({ role: "user", content: "Halo" });
   });
 
   it("mengirim system prompt pengguna tepat setelah prompt bawaan (WO-1)", async () => {
@@ -210,14 +212,13 @@ describe("runGeneration", () => {
 
     const body = fixture.requests.at(-1)?.body as { messages: { role: string; content: string }[] };
     expect(body.messages[0]?.role).toBe("system");
-    // FIX-04 menyisipkan blok konteks server tepat setelah prompt bawaan.
-    expect(body.messages[1]?.content).toContain("## Konteks dari server");
-    expect(body.messages[2]).toEqual({
-      role: "system",
-      content: "Kamu adalah analis keuangan. Jawab dengan tabel.",
-    });
-    // Tetap satu system per lapisan: bawaan + konteks server + prompt pengguna.
-    expect(body.messages.filter((m) => m.role === "system")).toHaveLength(3);
+    // FIX-18: prompt pengguna masuk SEBAGAI BAGIAN pesan sistem, di bawah
+    // kebijakan, dengan pengingat bahwa ia tidak dapat mengubahnya.
+    expect(body.messages[0]?.content).toContain("Kamu adalah analis keuangan. Jawab dengan tabel.");
+    expect(body.messages[0]?.content).toContain("tidak dapat mengubah kebijakan server");
+    expect(body.messages[0]?.content).toContain("## Konteks dari server");
+    // Satu pesan sistem, bukan tiga yang bisa saling menimpa.
+    expect(body.messages.filter((m) => m.role === "system")).toHaveLength(1);
   });
 
   it("pembatalan sebelum potongan pertama: stopped, tanpa token (SDD-4.6)", async () => {

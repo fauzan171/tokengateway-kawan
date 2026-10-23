@@ -62,6 +62,7 @@ import {
 import { createArtifact, readArtifactForModel } from "@/lib/artifacts/create";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
+import { composeSystemPrompt } from "./prompt-builder";
 import { getCachedModels, resolveModel } from "@/lib/connections/model-cache";
 import { estimateTokens, overBudget } from "./context-budget";
 import { modelBudget } from "./model-budget";
@@ -69,16 +70,13 @@ import { modelBudget } from "./model-budget";
 /** Model cadangan bila chat belum pernah memilih model. */
 export const DEFAULT_MODEL = "deepseek-v4.1-flash";
 
-/** Instruksi dasar yang selalu dikirim paling awal (WO-1). */
-const DEFAULT_SYSTEM_PROMPT = [
-  "Kamu adalah asisten AI yang membantu dan jujur.",
-  "Jawab dengan bahasa yang dipakai pengguna.",
-  "Sesuaikan panjang jawaban dengan kebutuhan pertanyaan; jangan memotong jawaban yang butuh penjelasan.",
-  "Jika tidak yakin, katakan tidak yakin. Jangan mengarang fakta, angka, atau sumber.",
-  "Gunakan markdown bila membantu keterbacaan: daftar, tabel, atau blok kode.",
-].join("\n");
-
-/** Zona waktu bawaan bila pengguna belum punya preferensi (SDD-3.4). */
+/**
+ * Zona waktu bawaan bila pengguna belum punya preferensi (SDD-3.4).
+ *
+ * FIX-18: instruksi dasar tidak lagi berupa konstanta di berkas ini — seluruh
+ * pesan sistem dirakit `composeSystemPrompt` (prompt-builder.ts) dengan urutan
+ * otoritas yang tetap, supaya dokumen/web tidak bisa terbaca sebagai perintah.
+ */
 export const DEFAULT_TIMEZONE = "Asia/Jakarta";
 
 /**
@@ -1041,24 +1039,33 @@ export async function runGeneration(
       apiKey,
       body: {
         model,
+        // FIX-18: satu pesan sistem dengan urutan otoritas tetap. Data dari
+        // dokumen/web/memori dibungkus sebagai DATA, bukan instruksi; prompt
+        // pengguna tidak dapat menimpa kebijakan.
         messages: [
-          // Prompt bawaan → konteks server → prompt pengguna → dokumen → web → riwayat.
-          { role: "system", content: DEFAULT_SYSTEM_PROMPT },
           {
             role: "system",
-            content: buildRuntimeContext({
-              now: new Date(),
-              // shortcut: preferensi zona waktu per pengguna belum ada kolomnya
-              // (`UserSetting.timezone`); tambahkan saat kolom itu menyusul.
-              timezone: DEFAULT_TIMEZONE,
-              chatTitle: chat.title,
-              model,
-            }),
+            content: composeSystemPrompt({
+              tools: toolsEnabled ? CHAT_TOOLS.map((tool) => tool.function.name) : [],
+              webSearch: searchSystem !== null,
+              canSeeImages: history.messages.some((message) => Array.isArray(message.content)),
+              canRunCode: false,
+              ...(userSystem ? { userSystemPrompt: userSystem } : {}),
+              runtimeContext: buildRuntimeContext({
+                now: new Date(),
+                // shortcut: preferensi zona waktu per pengguna belum ada kolomnya
+                // (`UserSetting.timezone`); tambahkan saat kolom itu menyusul.
+                timezone: DEFAULT_TIMEZONE,
+                chatTitle: chat.title,
+                model,
+              }),
+              untrusted: [
+                ...(memorySystem ? [{ source: "memori", content: memorySystem }] : []),
+                ...(contextSystem ? [{ source: "dokumen", content: contextSystem }] : []),
+                ...(searchSystem ? [{ source: "web", content: searchSystem }] : []),
+              ],
+            }).content,
           },
-          ...(userSystem ? [{ role: "system", content: userSystem }] : []),
-          ...(memorySystem ? [{ role: "system", content: memorySystem }] : []),
-          ...(contextSystem ? [{ role: "system", content: contextSystem }] : []),
-          ...(searchSystem ? [{ role: "system", content: searchSystem }] : []),
           ...history.messages,
         ],
         stream: true,

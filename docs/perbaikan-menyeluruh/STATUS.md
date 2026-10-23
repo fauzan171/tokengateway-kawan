@@ -50,7 +50,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-15 | R2/R3 | 09,11 | `verified` | `calculate` (decimal.js, operand string desimal, tanpa `eval`, batas digit/eksponen, tolak bagi-nol/nonfinite) + `describe` (n, missing, kind, unit, `method`) + `countText` (kata/UTF-16/code point/grapheme/byte) + `renderChart` (SVG deklaratif, escape label, tabel alternatif) + `makeQr` (encode lalu decode ulang via `jsqr`); `POST /api/kawan/v1/tools/compute`. 36 tes baru + fixture JSONL. Bukti: `reports/FIX-15.md` |
 | FIX-16 | R3 | 04,11,17 | `verified` | Byte bukan data URL (magic bytes, bukan header); STT bertimestamp + diarization A/B; cap media per model; video jujur (ffprobe/frame/audio, tanpa klaim tonton semua); rekam setelah izin + fallback unggah; TTS cancel/revoke. 16 tes baru. Bukti: `reports/FIX-16.md` |
 | FIX-17 | R4 | 07,09,11 | `verified_fixture` | Kontrak sandbox + limit SDD-AG-5, adapter E2B (guest tanpa env, stop tak pasti = `confirmed:false`), klasifikasi aksi browser konservatif (GET berpola ubah = write), `approvalDigest`, capability `codeExecution`/`browser` berhenti di `unknown` tanpa probe. 19 tes. Gate live `blocked_external`. Bukti: `reports/FIX-17.md` |
-| FIX-18 | semua | 04 | `planned` | — |
+| FIX-18 | semua | 04 | `verified_fixture` | Satu pesan sistem dengan urutan otoritas tetap (`prompt-builder.ts`), data web/dokumen/memori dibungkus penanda yang tidak bisa ditutup isinya, penilai kualitas deterministik (`quality-eval.ts`) + dataset 17 kasus JSONL. 29 tes baru. Bukti: `reports/FIX-18.md` |
 | FIX-19 | R3/R4 | 09,08 | `planned` | — |
 | FIX-20 | R4 | 07,08,09 | `planned` | — |
 | FIX-21 | R4 | 08,20,24 | `planned` | — |
