@@ -8,10 +8,17 @@
 export {
   assertOutboundAllowed,
   assertRedirectAllowed,
+  dispatcherFor,
   fetchOutbound,
   isBlockedAddress,
+  resolvePinnedTarget,
   DEFAULT_OUTBOUND_OPTIONS,
   OUTBOUND_LIMITS,
 } from "./policy";
 
-export type { HostResolver, OutboundPolicyOptions, ResolvedAddress } from "./policy";
+export type {
+  HostResolver,
+  OutboundPolicyOptions,
+  PinnedTarget,
+  ResolvedAddress,
+} from "./policy";
