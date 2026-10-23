@@ -14,6 +14,7 @@
  */
 
 import { crc32 } from "node:zlib";
+import { TEMA } from "@/lib/artifacts/theme";
 
 export type ChatTranscriptMessage = {
   role: string;
@@ -66,12 +67,15 @@ export function exportChatPdfBytes(chat: ChatTranscript): Buffer {
   }
 
   const draw = lines.map((line) => `(${pdfString(line)}) Tj T*`).join("\n");
-  const content = `BT\n/F1 12 Tf\n50 780 Td\n14 TL\n${draw}\nET`;
+  // MediaBox dan geometri teks dari TEMA bersama (D2) supaya kedua jalur PDF
+  // memakai halaman yang sama.
+  const baseline = TEMA.page.height - TEMA.pdf.firstBaselineOffset;
+  const content = `BT\n/F1 ${TEMA.font.chat} Tf\n${TEMA.pdf.marginX} ${baseline} Td\n${TEMA.lineGap} TL\n${draw}\nET`;
 
   const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${TEMA.page.width} ${TEMA.page.height}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>`,
     `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];

@@ -27,6 +27,7 @@ export async function POST(request: Request, { params }: Params): Promise<Respon
       connectionId: body["connectionId"],
       modelId: body["modelId"],
       artifactIds: body["artifactIds"],
+      agentId: body["agentId"],
       idempotencyKey: request.headers.get("Idempotency-Key"),
     });
     return jsonOk({ run }, reqId, 202);

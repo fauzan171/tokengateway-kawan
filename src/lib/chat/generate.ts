@@ -52,13 +52,15 @@ import { imageParts } from "./content";
 import { recordUsage } from "./usage";
 import { createStreamParser, type StreamUsage, type ToolCallDelta } from "./stream-parse";
 import {
-  CHAT_TOOLS,
   GENERATE_DOCUMENT_TOOL_NAME,
   GENERATE_FILE_TOOL_NAME,
   assembleToolCalls,
   parseGenerateDocumentArgs,
   parseGenerateFileArgs,
 } from "./file-tool";
+// P3: daftar tool chat berasal dari registry, bukan konstanta lokal. Parser di
+// atas tetap dipakai di loop supaya perilakunya tidak berubah.
+import { chatToolNames, chatTools } from "@/lib/tools/registry";
 import { createArtifact, readArtifactForModel } from "@/lib/artifacts/create";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
@@ -1046,7 +1048,7 @@ export async function runGeneration(
           {
             role: "system",
             content: composeSystemPrompt({
-              tools: toolsEnabled ? CHAT_TOOLS.map((tool) => tool.function.name) : [],
+              tools: toolsEnabled ? chatToolNames() : [],
               webSearch: searchSystem !== null,
               canSeeImages: history.messages.some((message) => Array.isArray(message.content)),
               canRunCode: false,
@@ -1069,7 +1071,7 @@ export async function runGeneration(
           ...history.messages,
         ],
         stream: true,
-        ...(toolsEnabled ? { tools: CHAT_TOOLS } : {}),
+        ...(toolsEnabled ? { tools: chatTools() } : {}),
       },
       outbound: {
         allowInsecureHttp: config.allowInsecureHttp,

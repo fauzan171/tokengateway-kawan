@@ -8,9 +8,11 @@
  * menyembunyikan task dari daftar.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
+import * as registry from "@/lib/agents/registry";
 import {
+  RUN_DEADLINE_MS,
   cancelRun,
   createTask,
   deleteTask,
@@ -219,4 +221,106 @@ async function updateTerminal(runId: string): Promise<void> {
     where: { id: runId },
     data: { status: "completed", finishedAt: new Date() },
   });
+}
+describe("admission agent (K3)", () => {
+  it("agentId asing ditolak 422 AGENT_UNKNOWN tanpa menyisakan task", async () => {
+    const before = await temp.db.task.count();
+    await expect(
+      createTask(temp.db, { userId: "uA", input: "hi", agentId: "asing", idempotencyKey: null }),
+    ).rejects.toMatchObject({ code: "AGENT_UNKNOWN", status: 422 });
+    expect(await temp.db.task.count()).toBe(before);
+  });
+
+  it("agent default ditulis ke TaskRun bersama versinya", async () => {
+    const { runId } = await createTask(temp.db, {
+      userId: "uA",
+      input: "agent default",
+      agentId: "default",
+      idempotencyKey: null,
+    });
+    const run = await temp.db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.agentId).toBe("default");
+    expect(run.agentVersion).toBe(1);
+    // Deadline berasal dari definisi agent (900 detik), bukan konstanta lama.
+    const agentDeadline = registry.getAgent("default")!.limits.deadlineMs;
+    expect(agentDeadline).not.toBe(RUN_DEADLINE_MS);
+    expect(run.deadlineAt.getTime()).toBeGreaterThan(Date.now() + agentDeadline - 60_000);
+    expect(run.deadlineAt.getTime()).toBeLessThanOrEqual(Date.now() + agentDeadline);
+    const event = await temp.db.taskEvent.findFirstOrThrow({ where: { runId, kind: "run.queued" } });
+    expect(JSON.parse(event.payloadJson).data).toMatchObject({ agentId: "default", agentVersion: 1 });
+  });
+
+  it("agent khusus admin oleh non-admin ditolak 403 AGENT_FORBIDDEN", async () => {
+    // Katalog beku belum punya agent admin; definisi sintetis dipakai supaya
+    // jalur 403 terbukti tanpa menambah agent admin nyata.
+    const spy = vi.spyOn(registry, "getAgent").mockReturnValue(adminAgent(1));
+    try {
+      await expect(
+        createTask(temp.db, { userId: "uA", input: "hi", agentId: "admin-only", idempotencyKey: null }),
+      ).rejects.toMatchObject({ code: "AGENT_FORBIDDEN", status: 403 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("agent khusus admin boleh dipakai admin dan versinya ikut tersimpan", async () => {
+    await temp.db.user.create({ data: { id: "uAdmin", email: "admin@t.id", role: "admin" } });
+    const spy = vi.spyOn(registry, "getAgent").mockReturnValue(adminAgent(2));
+    try {
+      const { runId } = await createTask(temp.db, {
+        userId: "uAdmin",
+        input: "admin boleh",
+        agentId: "admin-only",
+        idempotencyKey: null,
+      });
+      const run = await temp.db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+      expect(run.agentId).toBe("admin-only");
+      expect(run.agentVersion).toBe(2);
+      expect(run.deadlineAt.getTime()).toBeLessThanOrEqual(Date.now() + 1000);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("followUp memvalidasi agent dan menulisnya ke run baru", async () => {
+    const { taskId, runId } = await admission();
+    await updateTerminal(runId);
+    await expect(
+      followUp(temp.db, { userId: "uA", taskId, input: "lanjut", agentId: "asing", idempotencyKey: null }),
+    ).rejects.toMatchObject({ code: "AGENT_UNKNOWN", status: 422 });
+    const run = await followUp(temp.db, {
+      userId: "uA",
+      taskId,
+      input: "lanjut",
+      agentId: "default",
+      idempotencyKey: null,
+    });
+    const row = await temp.db.taskRun.findUniqueOrThrow({ where: { id: run.id } });
+    expect(row.agentId).toBe("default");
+    expect(row.agentVersion).toBe(1);
+  });
+
+  it("PATCH tidak mengubah agentId (ditolak 422 AGENT_IMMUTABLE)", async () => {
+    const { taskId, runId } = await admission();
+    await expect(
+      updateTask(temp.db, { userId: "uA", taskId, agentId: "default", ifMatch: null }),
+    ).rejects.toMatchObject({ code: "AGENT_IMMUTABLE", status: 422 });
+    const run = await temp.db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.agentId).toBe("default");
+  });
+});
+
+/** Definisi agent admin sintetis untuk menguji jalur 403/izin. */
+function adminAgent(version: number) {
+  return {
+    id: "admin-only",
+    version,
+    label: "Admin",
+    description: "hanya admin",
+    systemPrompt: "x",
+    tools: [] as readonly string[],
+    defaultModelId: "deepseek-v4.1-flash",
+    limits: { maxSteps: 1, maxTokensPerRun: 1, deadlineMs: 1000 },
+    audience: "admin" as const,
+  };
 }

@@ -14,6 +14,7 @@ import {
 import ExcelJS from "exceljs";
 import PptxGenJS from "pptxgenjs";
 import type { DocSchema } from "./document";
+import { TEMA } from "./theme";
 
 // Karakter di luar Latin-1 diganti "?" — font inti Helvetica/Courier PDFKit tidak
 // punya glifnya; WinAnsi encoding melempar error bila dibiarkan.
@@ -21,7 +22,13 @@ const latin1 = (text: string) => text.replace(/[^\x00-\xFF]/g, "?");
 
 /** PDF: heading tebal + besar per level, bullets "• ", table dipisah " | ", code Courier. */
 export async function renderPdfBytes(doc: DocSchema): Promise<Buffer> {
-  const pdf = new PDFDocument({ bufferPages: true });
+  // Ukuran halaman dan margin dari TEMA (D2): dulu PDFKit memakai default Letter
+  // 612x792, berbeda dari jalur transkrip percakapan.
+  const pdf = new PDFDocument({
+    bufferPages: true,
+    size: [TEMA.page.width, TEMA.page.height],
+    margin: TEMA.margin,
+  });
   const chunks: Buffer[] = [];
   pdf.on("data", (chunk: Buffer) => chunks.push(chunk));
   const done = new Promise<void>((resolve, reject) => {
@@ -29,29 +36,29 @@ export async function renderPdfBytes(doc: DocSchema): Promise<Buffer> {
     pdf.on("error", reject);
   });
 
-  pdf.fontSize(16).font("Helvetica-Bold").text(latin1(doc.title));
+  pdf.fontSize(TEMA.font.title).font("Helvetica-Bold").text(latin1(doc.title));
   for (const block of doc.blocks) {
     switch (block.type) {
       case "heading": {
         const level = block.level ?? 1;
-        const size = level === 1 ? 16 : level === 2 ? 14 : 12;
+        const size = TEMA.font.heading[level];
         pdf.font("Helvetica-Bold").fontSize(size).text(latin1(block.text));
         break;
       }
       case "bullets":
-        pdf.font("Helvetica").fontSize(11);
+        pdf.font("Helvetica").fontSize(TEMA.font.body);
         for (const item of block.items) pdf.text(`• ${latin1(item)}`);
         break;
       case "table":
-        pdf.font("Helvetica").fontSize(11);
+        pdf.font("Helvetica").fontSize(TEMA.font.body);
         pdf.text(latin1(block.headers.join(" | ")));
         for (const row of block.rows) pdf.text(latin1(row.join(" | ")));
         break;
       case "code":
-        pdf.font("Courier").fontSize(10).text(latin1(block.text));
+        pdf.font("Courier").fontSize(TEMA.font.code).text(latin1(block.text));
         break;
       default:
-        pdf.font("Helvetica").fontSize(11).text(latin1(block.text));
+        pdf.font("Helvetica").fontSize(TEMA.font.body).text(latin1(block.text));
     }
   }
   pdf.end();

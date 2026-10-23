@@ -53,6 +53,7 @@ export async function POST(request: Request): Promise<Response> {
       connectionId: body["connectionId"],
       modelId: body["modelId"],
       artifactIds: body["artifactIds"],
+      agentId: body["agentId"],
       idempotencyKey: request.headers.get(IDEMPOTENCY_HEADER),
     });
     return jsonOk({ task: result.task, run: result.run }, reqId, 202);

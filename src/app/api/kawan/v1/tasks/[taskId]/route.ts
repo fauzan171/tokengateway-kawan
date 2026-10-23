@@ -45,6 +45,8 @@ export async function PATCH(request: Request, { params }: Params): Promise<Respo
       taskId,
       title: body["title"],
       status: body["status"],
+      // Agent beku per run: dikirim hanya supaya ditolak 422, bukan diterapkan.
+      agentId: body["agentId"],
       ifMatch: request.headers.get("if-match"),
     });
     return jsonOk({ task }, reqId);

@@ -17,6 +17,7 @@ import {
 import { createTask, cancelRun, followUp } from "./tasks";
 import { runTaskRun } from "./run";
 import { createTaskEventStream } from "./events";
+import * as registry from "@/lib/agents/registry";
 import { CONNECTION_API_KEY_PURPOSE, encryptSecret } from "@/lib/secrets";
 import type { GenerateConfig } from "@/lib/chat/generate";
 import type { Db } from "@/lib/db";
@@ -255,5 +256,34 @@ describe("createTaskEventStream", () => {
     }
     expect(out).toContain("RESOURCE_NOT_FOUND");
     expect(out).not.toContain("message.delta");
+  });
+});
+describe("agent pada run (K4)", () => {
+  it("run.started memuat agentId/agentVersion dan model bawaan agent dipakai", async () => {
+    const { runId } = await admission("Halo", "");
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+
+    const started = await db.taskEvent.findFirstOrThrow({ where: { runId, kind: "run.started" } });
+    const data = JSON.parse(started.payloadJson).data as Record<string, unknown>;
+    expect(data["agentId"]).toBe("default");
+    expect(data["agentVersion"]).toBe(1);
+    // modelId run kosong -> model bawaan agent, bukan konstanta global yang lain.
+    expect(data["modelId"]).toBe(registry.getAgent("default")!.defaultModelId);
+
+    // Prompt agent ikut terkirim, dan identitas agen lama TIDAK dibuang (R8).
+    const body = JSON.stringify(fixture.requests[fixture.requests.length - 1]!.body);
+    expect(body).toContain("Kebijakan server".slice(0, 8));
+    expect(body).toContain("agen otonom Kawan");
+  });
+
+  it("agentId yang sudah tidak ada di registry -> run.failed AGENT_UNKNOWN", async () => {
+    const { runId } = await admission("Halo", modelFor("unicode-split"));
+    await db.taskRun.update({ where: { id: runId }, data: { agentId: "sudah-dihapus" } });
+    const requestsBefore = fixture.requests.length;
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("failed");
+    expect(run.errorCode).toBe("AGENT_UNKNOWN");
+    expect(fixture.requests.length).toBe(requestsBefore);
   });
 });

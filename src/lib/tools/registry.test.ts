@@ -10,12 +10,15 @@ import { describe, expect, it } from "vitest";
 import {
   TOOL_SCHEMA_VERSION,
   ToolInputError,
+  chatToolNames,
+  chatTools,
   effectOf,
   getTool,
   listTools,
   requiresApproval,
   type ToolContext,
 } from "./registry";
+import { CHAT_TOOLS } from "@/lib/chat/file-tool";
 
 function context(overrides: Partial<ToolContext> = {}): ToolContext {
   const controller = new AbortController();
@@ -41,6 +44,8 @@ describe("listTools", () => {
       "compute.count",
       "chart.render",
       "qr.make",
+      "generate_file",
+      "generate_document",
     ]);
   });
 
@@ -56,26 +61,125 @@ describe("listTools", () => {
     expect(listTools()[0]?.effect).not.toBe("write");
   });
 
+  it("batas byte artefak mengikuti batas artefak sesungguhnya, bukan angka lebih kecil", async () => {
+    const { TOOL_LIMITS } = await import("./registry");
+    const { MAX_ARTIFACT_BYTES } = await import("@/lib/artifacts/format");
+    // PDF sah bisa > 65.536 byte; cap yang lebih kecil akan menolak dokumen
+    // yang sebenarnya diizinkan.
+    expect(TOOL_LIMITS.artifactByteCap).toBe(MAX_ARTIFACT_BYTES);
+  });
+
+  it("schema chatTools beku: mutasi tidak merambat ke registry", async () => {
+    const { chatTools } = await import("./registry");
+    const tools = chatTools();
+    expect(tools.length).toBeGreaterThan(0);
+    const schema = tools[0]!.function.parameters as { properties?: Record<string, unknown> };
+    expect(Object.isFrozen(tools[0]!.function.parameters)).toBe(true);
+    expect(() => {
+      (schema as { type: string }).type = "string";
+    }).toThrow();
+    // Panggilan berikutnya tetap menghasilkan schema yang sama.
+    expect(chatTools()[0]!.function.parameters).toEqual(tools[0]!.function.parameters);
+  });
+
   it("tidak memuat nama ganda", () => {
     const names = listTools().map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("setiap entri punya nama, schema objek tertutup, batas waktu dan byte", () => {
+  it("setiap entri punya nama, schema objek, batas waktu dan byte", () => {
     for (const tool of listTools()) {
-      expect(tool.name).toMatch(/^[a-z]+\.[a-z_]+$/);
+      expect(tool.name).toMatch(/^[a-z]+([._][a-z_]+)+$/);
       expect(tool.description.length).toBeGreaterThan(10);
       expect(tool.parameters.type).toBe("object");
-      expect(tool.parameters.additionalProperties).toBe(false);
       expect(tool.timeoutMs).toBeGreaterThan(0);
       expect(tool.byteCap).toBeGreaterThan(0);
       expect(["read", "local", "write"]).toContain(tool.effect);
     }
   });
 
+  it("entri non-chat menutup argumennya; entri chat memakai schema file-tool apa adanya", () => {
+    for (const tool of listTools()) {
+      if (tool.chatExposed === true) {
+        // Schema chat bukan milik registry: menyalinnya ke sini akan membuat
+        // dua sumber kebenaran untuk satu kontrak model.
+        const source = CHAT_TOOLS.find((candidate) => candidate.function.name === tool.name);
+        expect(source).toBeDefined();
+        expect(tool.parameters).toEqual(source!.function.parameters);
+        expect(tool.description).toBe(source!.function.description);
+        continue;
+      }
+      expect(tool.parameters.additionalProperties).toBe(false);
+    }
+  });
+
   it("app.* belum terdaftar (FIX-19 menyusul)", () => {
     expect(listTools().some((tool) => tool.name.startsWith("app."))).toBe(false);
     expect(getTool("app.list_chats")).toBeNull();
+  });
+});
+
+describe("tool chat di registry (P3)", () => {
+  it("generate_file dan generate_document terdaftar dengan effect local", () => {
+    for (const name of ["generate_file", "generate_document"]) {
+      const entry = getTool(name);
+      expect(entry).not.toBeNull();
+      expect(entry!.effect).toBe("local");
+      // Artefak milik pengguna sendiri: bukan state bersama, jadi bukan write.
+      expect(effectOf(name)).toBe("local");
+      expect(requiresApproval(name)).toBe(false);
+    }
+  });
+
+  it("payload gateway identik dengan CHAT_TOOLS lama (perilaku tidak berubah)", () => {
+    expect(chatTools()).toEqual(CHAT_TOOLS);
+    expect(chatToolNames()).toEqual(CHAT_TOOLS.map((tool) => tool.function.name));
+  });
+
+  it("hanya tool chat yang diekspos ke gateway", () => {
+    const exposed = listTools().filter((tool) => tool.chatExposed === true).map((tool) => tool.name);
+    expect(exposed).toEqual(["generate_file", "generate_document"]);
+    // compute/chart/qr belum punya jalur eksekusi di loop chat (FIX-09).
+    expect(chatToolNames()).not.toContain("compute.calculate");
+    expect(chatToolNames()).not.toContain("chart.render");
+  });
+
+  it("validator chat membungkus parser lama, bukan menulis ulang", () => {
+    const file = getTool("generate_file")!;
+    expect(() => file.validate({ format: "pdf", displayName: "x" })).toThrow(ToolInputError);
+    try {
+      file.validate({ format: "csv", displayName: "x" });
+    } catch (err) {
+      // Parser lama yang bicara; registry hanya menerjemahkan galatnya.
+      expect((err as ToolInputError).code).toBe("VALUE_REJECTED");
+      expect((err as ToolInputError).message).toBe("CSV membutuhkan rows.");
+    }
+    expect(file.validate({ format: "md", displayName: "a.md", content: "# A" })).toEqual({
+      format: "md",
+      displayName: "a.md",
+      content: "# A",
+    });
+
+    const doc = getTool("generate_document")!;
+    expect(() =>
+      doc.validate({
+        format: "pdf",
+        displayName: "a.pdf",
+        doc: { title: "A", blocks: [{ type: "paragraph", text: "isi" }] },
+      }),
+    ).not.toThrow();
+    expect(() => doc.validate({ format: "pptx", displayName: "a", doc: {} })).toThrow(ToolInputError);
+  });
+
+  it("handler chat mengembalikan argumen tervalidasi, penulisan artefak tetap di loop chat", async () => {
+    const entry = getTool("generate_file")!;
+    const result = await entry.handler(context(), { format: "txt", displayName: "a.txt", content: "isi" });
+    expect(result.status).toBe("ok");
+    expect(result.data).toEqual({ format: "txt", displayName: "a.txt", content: "isi" });
+
+    const bad = await entry.handler(context(), { format: "exe", displayName: "a" });
+    expect(bad.status).toBe("invalid");
+    expect(bad.message).toBe("Format berkas tidak didukung.");
   });
 });
 

@@ -23,11 +23,22 @@ import {
   type GenerateConfig,
 } from "@/lib/chat/generate";
 import { createStreamParser, type StreamUsage } from "@/lib/chat/stream-parse";
+import { getAgent } from "@/lib/agents/registry";
 import { appendEvent, isTerminalRun } from "./tasks";
 
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
 
-const SYSTEM_PROMPT = [
+/**
+ * Prompt bawaan untuk run yang tidak menyebut agent (baris lama sebelum K2).
+ *
+ * R8: run.ts punya prompt sendiri di samping prompt-builder chat. Prompt itu
+ * TIDAK dihapus dan TIDAK diganti diam-diam: agent "default" memakai
+ * `definition.systemPrompt` dari registry (kebijakan + fakta kemampuan), dan
+ * identitas "agen otonom" di bawah tetap dikirim sebagai blok terpisah supaya
+ * perilaku agent default setara sebelumnya. Bila kelak prompt ini dipindah ke
+ * registry, naikkan version agent default agar run lama tetap dapat direproduksi.
+ */
+const LEGACY_SYSTEM_PROMPT = [
   "Kamu adalah agen otonom Kawan. Kerjakan tujuan pengguna langkah demi langkah.",
   "Jawab dengan hasil nyata; bila ada yang belum bisa dikerjakan, katakan apa adanya.",
 ].join(" ");
@@ -46,6 +57,9 @@ type RunRow = {
   segment: number;
   connectionId: string | null;
   modelId: string;
+  /** Agent beku saat admission (K2/K4) + versinya. */
+  agentId: string;
+  agentVersion: number;
   assistantMessageId: string | null;
   deadlineAt: Date;
   cancelRequestedAt: Date | null;
@@ -118,6 +132,8 @@ export async function runTaskRun(
       segment: true,
       connectionId: true,
       modelId: true,
+      agentId: true,
+      agentVersion: true,
       assistantMessageId: true,
       deadlineAt: true,
       cancelRequestedAt: true,
@@ -168,10 +184,23 @@ export async function runTaskRun(
         now: new Date(),
       })
     : null;
+  // Agent dibekukan di baris run. Definisi yang sudah tidak ada (id dihapus
+  // dari registry) TIDAK ditebak: run gagal jujur, bukan diam-diam memakai
+  // agent lain yang mungkin punya izin berbeda.
+  const agent = getAgent(run.agentId);
+  if (!agent) {
+    await finish(db, run, "failed", {
+      messageId: run.assistantMessageId,
+      error: { code: "AGENT_UNKNOWN", message: "Agent run ini tidak dikenal lagi.", retryable: false },
+    });
+    return;
+  }
+
   const resolution = resolveModel({
     modelRef: run.modelId === "" ? null : run.modelId,
     available: cached ? cached.models : null,
-    defaultModel: DEFAULT_MODEL,
+    // modelId kosong: model bawaan AGENT, bukan konstanta global.
+    defaultModel: agent.defaultModelId || DEFAULT_MODEL,
   });
   if (!resolution.ok) {
     await finish(db, run, "failed", {
@@ -208,6 +237,8 @@ export async function runTaskRun(
       revision: run.revision + 1,
       segment: run.segment,
       modelId: resolution.model,
+      agentId: run.agentId,
+      agentVersion: run.agentVersion,
     });
   });
 
@@ -264,7 +295,11 @@ export async function runTaskRun(
           model: resolution.model,
           stream: true,
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            // Prompt agent (kebijakan + fakta kemampuan dari registry) lalu blok
+            // identitas agen otonom yang lama. Dua blok terpisah, urutan tetap:
+            // kebijakan lebih tinggi daripada identitas.
+            { role: "system", content: agent.systemPrompt },
+            { role: "system", content: LEGACY_SYSTEM_PROMPT },
             {
               role: "system",
               content: buildRuntimeContext({

@@ -11,6 +11,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { getAgent, type AgentDefinition } from "@/lib/agents/registry";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import { idempotencyDigest } from "@/lib/chat/idempotency";
 import type { Db } from "@/lib/db";
@@ -237,8 +238,14 @@ function normalizeConnectionId(value: unknown): string | null {
   return value.trim();
 }
 
-/** Default deadline satu run; dieksekusi worker sebagai batas keras. */
-const RUN_DEADLINE_MS = 30 * 60 * 1000;
+/**
+ * Deadline bawaan satu run (30 menit) — nilai agent "default".
+ *
+ * Sumber kebenaran sekarang registry agent (`limits.deadlineMs`); konstanta ini
+ * dipertahankan sebagai rujukan perilaku lama dan dipakai sebagai jaring
+ * pengaman bila definisi agent tidak menyatakan deadline yang masuk akal.
+ */
+export const RUN_DEADLINE_MS = 30 * 60 * 1000;
 
 export type CreateTaskInput = {
   userId: string;
@@ -247,10 +254,60 @@ export type CreateTaskInput = {
   connectionId?: unknown;
   modelId?: unknown;
   artifactIds?: unknown;
+  /** Opsional; kosong = agent "default". */
+  agentId?: unknown;
   idempotencyKey: string | null;
 };
 
 export type AdmissionResult = { task: TaskDto; run: RunDto; taskId: string; runId: string };
+
+/** Peran pemanggil; agent ber-audience "admin" hanya boleh dipakai admin. */
+async function isAdmin(tx: Pick<Db, "user">, userId: string): Promise<boolean> {
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
+  return user?.role === "admin";
+}
+
+/**
+ * Validasi agent di dalam transaksi admission (K3).
+ *
+ * Id asing -> 422 AGENT_UNKNOWN; agent khusus admin oleh non-admin -> 403
+ * AGENT_FORBIDDEN. Validasi dilakukan di dalam transaksi supaya admission yang
+ * ditolak tidak menyisakan task tanpa run.
+ */
+async function resolveAgent(
+  tx: Pick<Db, "user">,
+  userId: string,
+  value: unknown,
+): Promise<AgentDefinition> {
+  if (value !== undefined && value !== null && typeof value !== "string") {
+    throw new ApiError({ status: STATUS.BAD_REQUEST, code: "INVALID_INPUT", message: "agentId harus teks." });
+  }
+  const agentId = typeof value === "string" && value.trim() !== "" ? value.trim() : "default";
+  const definition = getAgent(agentId);
+  if (!definition) {
+    throw new ApiError({
+      status: STATUS.UNPROCESSABLE,
+      code: "AGENT_UNKNOWN",
+      message: "Agent tidak dikenal.",
+      details: { agentId },
+    });
+  }
+  if (definition.audience === "admin" && !(await isAdmin(tx, userId))) {
+    throw new ApiError({
+      status: STATUS.FORBIDDEN,
+      code: "AGENT_FORBIDDEN",
+      message: "Agent ini hanya untuk admin.",
+      details: { agentId: definition.id },
+    });
+  }
+  return definition;
+}
+
+/** Deadline dari definisi agent; nilai tidak masuk akal jatuh ke bawaan. */
+function deadlineFrom(agent: AgentDefinition): Date {
+  const ms = agent.limits.deadlineMs > 0 ? agent.limits.deadlineMs : RUN_DEADLINE_MS;
+  return new Date(Date.now() + ms);
+}
 
 /**
  * Menambah event run dengan alokasi `lastEventSeq` di dalam transaksi yang
@@ -286,6 +343,10 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Admiss
   const modelId = normalizeModelId(input.modelId);
   const connectionId = normalizeConnectionId(input.connectionId);
   const artifactIds = normalizeIdList(input.artifactIds);
+  // Agent ikut digest: permintaan dengan agent berbeda bukan permintaan yang
+  // sama, walau kunci idempotensinya sama.
+  const agentRef =
+    typeof input.agentId === "string" && input.agentId.trim() !== "" ? input.agentId.trim() : "default";
 
   const digest = idempotencyDigest({
     owner: input.userId,
@@ -293,7 +354,7 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Admiss
     // Channel `chatId` dipakai pembeda namespace digest; operation sudah beda,
     // jadi task-level memakai penanda tetap "-".
     chatId: "-",
-    payload: [title, text, connectionId, modelId, artifactIds],
+    payload: [title, text, connectionId, modelId, artifactIds, agentRef],
   });
 
   // short-cut: satu run aktif per pengguna ditegakkan lewat CAS Task.revision +
@@ -318,6 +379,10 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Admiss
         return saved;
       }
     }
+
+    // Agent divalidasi lebih dulu: penolakan agent tidak boleh menyentuh tabel
+    // lain, dan idempotency key yang sudah tersimpan tidak divalidasi ulang.
+    const agent = await resolveAgent(tx, input.userId, input.agentId);
 
     if (connectionId) {
       const owned = await tx.connection.findFirst({
@@ -382,7 +447,11 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Admiss
         inputMessageId,
         assistantMessageId,
         currentJobId: jobId,
-        deadlineAt: new Date(Date.now() + RUN_DEADLINE_MS),
+        // Agent dibekukan di baris run: definisi yang dipakai saat admission,
+        // bukan definisi terbaru saat worker menjalankan.
+        agentId: agent.id,
+        agentVersion: agent.version,
+        deadlineAt: deadlineFrom(agent),
       },
     });
 
@@ -393,7 +462,7 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Admiss
       data: { id: assistantMessageId, taskId, runId, role: "assistant", text: "" },
     });
 
-    await appendEvent(tx, runId, "run.queued", { taskId });
+    await appendEvent(tx, runId, "run.queued", { taskId, agentId: agent.id, agentVersion: agent.version });
 
     const task = await tx.task.findUniqueOrThrow({ where: { id: taskId }, select: TASK_FIELDS });
     const run = await tx.taskRun.findUniqueOrThrow({ where: { id: runId }, select: RUN_FIELDS });
@@ -484,11 +553,19 @@ export async function getTaskSnapshot(db: Db, userId: string, taskId: string): P
   };
 }
 
+/**
+ * Patch task. agentId sengaja TIDAK ada di sini: agent dibekukan per run saat
+ * admission, jadi mengganti agent sebuah task akan membuat riwayat run-nya
+ * berbohong. Body yang memuat agentId ditolak 422 AGENT_IMMUTABLE, bukan
+ * diabaikan diam-diam — pemanggil harus tahu perubahan itu tidak berlaku.
+ */
 export type UpdateTaskInput = {
   userId: string;
   taskId: string;
   title?: unknown;
   status?: unknown;
+  /** Hanya untuk ditolak; lihat komentar di atas. */
+  agentId?: unknown;
   /** Nilai header `If-Match`; `null` bila tidak dikirim. */
   ifMatch: string | null;
 };
@@ -513,6 +590,14 @@ export async function updateTask(db: Db, input: UpdateTaskInput): Promise<TaskDt
       code: "REVISION_CONFLICT",
       message: "Task sudah berubah; muat ulang snapshot.",
       details: { revision: task.revision },
+    });
+  }
+
+  if (input.agentId !== undefined) {
+    throw new ApiError({
+      status: STATUS.UNPROCESSABLE,
+      code: "AGENT_IMMUTABLE",
+      message: "agentId tidak dapat diubah; buat run baru lewat follow-up.",
     });
   }
 
@@ -570,6 +655,10 @@ export async function followUp(db: Db, input: CreateTaskInput & { taskId: string
       }
     }
 
+    // Agent follow-up boleh berbeda dari segment sebelumnya; validasinya sama
+    // dan tetap di dalam transaksi (K3).
+    const agent = await resolveAgent(tx, input.userId, input.agentId);
+
     // CAS: hanya satu admission yang boleh menaikkan revision task ini.
     const locked = await tx.task.updateMany({
       where: { id: task.id, revision: task.revision },
@@ -626,7 +715,9 @@ export async function followUp(db: Db, input: CreateTaskInput & { taskId: string
         inputMessageId,
         assistantMessageId,
         currentJobId: jobId,
-        deadlineAt: new Date(Date.now() + RUN_DEADLINE_MS),
+        agentId: agent.id,
+        agentVersion: agent.version,
+        deadlineAt: deadlineFrom(agent),
       },
     });
 
@@ -638,7 +729,7 @@ export async function followUp(db: Db, input: CreateTaskInput & { taskId: string
     });
 
     await tx.task.update({ where: { id: task.id }, data: { activeRunId: runId } });
-    await appendEvent(tx, runId, "run.queued", { taskId: task.id });
+    await appendEvent(tx, runId, "run.queued", { taskId: task.id, agentId: agent.id, agentVersion: agent.version });
 
     const run = await tx.taskRun.findUniqueOrThrow({ where: { id: runId }, select: RUN_FIELDS });
     return toRunDto(run);
