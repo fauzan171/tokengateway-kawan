@@ -135,6 +135,15 @@ export async function POST(request: Request): Promise<Response> {
     const displayName = typeof body["displayName"] === "string" ? body["displayName"] : "";
 
     let input: Parameters<typeof createArtifact>[1]["input"] | null;
+    if (format === "png") {
+      // FIX-16: PNG hanya lahir dari pembuatan gambar di server, tidak dari
+      // klien — byte base64 dari klien tidak diterima di sini.
+      throw new ApiError({
+        status: STATUS.BAD_REQUEST,
+        code: "FORMAT_NOT_READY",
+        message: "Format PNG dibuat lewat endpoint media, bukan dari klien.",
+      });
+    }
     if (format === "pdf" || format === "docx" || format === "xlsx") {
       // Dokumen terstruktur: `doc` wajib, konten teks tidak diterima.
       if ("content" in body || "rows" in body) {
