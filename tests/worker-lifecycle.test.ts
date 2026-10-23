@@ -37,4 +37,7 @@ it("worker idle tetap hidup setelah 30 detik dan dapat shutdown dengan SIGTERM",
   child.kill("SIGTERM");
   const [code, signal] = await exited;
   expect({ code, signal }).toEqual({ code: 0, signal: null });
-}, 40_000);
+  // Uji ini memang menunggu 30 detik diam + startup tsx. Batas 40 detik terlalu
+  // ketat saat suite berjalan paralel (105 berkas): kegagalannya soal jadwal
+  // mesin, bukan perilaku worker. Longgarkan tanpa mengubah assertion.
+}, 120_000);
