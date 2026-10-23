@@ -7,42 +7,20 @@
  *
  * Penyaringan audiens dilakukan di sini, bukan di klien: agent "admin" tidak
  * boleh sekadar disembunyikan dari tampilan.
+ *
+ * Pemetaan `toAgentEntry` sengaja tinggal di `lib/agents/public.ts`, bukan di
+ * berkas ini: Next.js menolak export selain handler route dari `route.ts`
+ * (build gagal "not a valid Route export field").
  */
 
 import { requestId } from "@/lib/api/errors";
 import { handleRouteError, jsonOk, requireContext } from "@/lib/api/route";
-import { listAgents, type AgentAudience, type AgentDefinition } from "@/lib/agents/registry";
+import { listAgents, type AgentAudience } from "@/lib/agents/registry";
+import { toAgentEntry } from "@/lib/agents/public";
 
 export const runtime = "nodejs";
 
 const ROUTE = "/api/kawan/v1/agents";
-
-/** Bentuk publik satu agent; sengaja tidak memuat systemPrompt/tools. */
-export type AgentEntry = {
-  id: string;
-  version: number;
-  label: string;
-  description: string;
-  defaultModelId: string;
-  limits: { maxSteps: number; maxTokensPerRun: number; deadlineMs: number };
-  audience: AgentAudience;
-};
-
-export function toAgentEntry(agent: AgentDefinition): AgentEntry {
-  return {
-    id: agent.id,
-    version: agent.version,
-    label: agent.label,
-    description: agent.description,
-    defaultModelId: agent.defaultModelId,
-    limits: {
-      maxSteps: agent.limits.maxSteps,
-      maxTokensPerRun: agent.limits.maxTokensPerRun,
-      deadlineMs: agent.limits.deadlineMs,
-    },
-    audience: agent.audience,
-  };
-}
 
 export async function GET(request: Request): Promise<Response> {
   const reqId = requestId(request);

@@ -33,7 +33,8 @@ vi.mock("@/lib/api/logger", () => ({
   createLogger: () => ({ info: () => {}, warn: () => {}, error: () => {} }),
 }));
 
-const { GET, toAgentEntry } = await import("@/app/api/kawan/v1/agents/route");
+const { GET } = await import("@/app/api/kawan/v1/agents/route");
+const { toAgentEntry } = await import("@/lib/agents/public");
 
 let temp: TempDb;
 let db: Db;
