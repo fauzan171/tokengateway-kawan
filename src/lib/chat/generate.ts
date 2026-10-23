@@ -44,6 +44,7 @@ import { retrieveChunks, type RetrievedChunk } from "@/lib/documents/retrieve";
 import { extractCitations } from "@/lib/documents/citations";
 import { buildSearchSystem, webSearchRequested } from "@/lib/search/prompt";
 import { webSearch, type SearchResult } from "@/lib/search/web";
+import { enrichSources, type EnrichedSource } from "@/lib/sources/read";
 import { assertHeld, LeaseLost, type FenceChecker } from "@/lib/jobs/fence";
 import { StopRequested, stopIfRequested } from "./stop";
 import { imageParts } from "./content";
@@ -945,6 +946,7 @@ export async function runGeneration(
   // Pencarian web (WP-NT-P7-02/P7-03, REQ-NT-52/53). Kegagalan mesin pencari
   // TIDAK boleh menggagalkan generasi: tangkap, lanjut tanpa sumber.
   let sources: SearchResult[] = [];
+  let enriched: EnrichedSource[] = [];
   let searchFailed = false;
   const lastUserRow = [...ancestry].reverse().find((row) => row.role === "user");
   if (query.trim() !== "" && webSearchRequested(lastUserRow?.contentJson)) {
@@ -953,13 +955,18 @@ export async function runGeneration(
         limit: 5,
         outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
       });
+      // FIX-10: baca halaman teratas supaya sitasi punya isi nyata; link mati
+      // ditandai, bukan diaku hidup.
+      enriched = await enrichSources(sources, {
+        limit: 2,
+        outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
+      });
     } catch {
       // Isi query tidak dicatat: hanya penanda bahwa pencarian gagal.
       searchFailed = true;
     }
   }
-  const searchSystem = buildSearchSystem(sources) ?? null;
-
+  const searchSystem = buildSearchSystem(enriched.length > 0 ? enriched : sources) ?? null;
   if (resolution.fallback) {
     await publishEvent(db, generationId, "note", {
       code: "MODEL_FALLBACK",
@@ -1182,10 +1189,24 @@ export async function runGeneration(
     kind: "citation",
     ...citation,
   }));
-  const sourceParts = sources.map((source) => ({
-    kind: "source",
+  const sourceParts = (
+    enriched.length > 0
+      ? enriched
+      : sources.map((source) => ({
+          ...source,
+          reach: "unchecked" as const,
+          contentHash: null,
+          text: null,
+        }))
+  ).map((source) => ({
+    kind: "source" as const,
     title: source.title,
     url: source.url,
+    // FIX-10: berita/harga wajib menyebut waktu pengambilan.
+    fetchedAt: source.fetchedAt,
+    reach: source.reach,
+    contentHash: source.contentHash,
+    ...("reason" in source && source.reason ? { reason: source.reason } : {}),
   }));
   const contentJson = JSON.stringify({
     parts: [

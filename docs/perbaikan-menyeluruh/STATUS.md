@@ -42,7 +42,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-07 | R0 | 01 | `verified_fixture` | commit `95a13fd` + lapisan ini; DNS pin via undici dispatcher (tes koneksi nyata), timeout `ABORT`, CSRF origin guard `src/middleware.ts`, rate limit login/reset, rotasi keyring terdokumentasi |
 | FIX-08 | R2 | 03,05,06,07 | `verified_live` | commit `ad4682f` (+schema `2d9e534`); tersaji di kawanku, `/_next/static` 200, heartbeat bersih |
 | FIX-09 | R2 | 08,04 | `verified_fixture` | commit `8a2a355`; parser + tool loop di `generate.ts` (`a5aa9a3`) |
-| FIX-10 | R2 | 09,07 | `planned` | — |
+| FIX-10 | R2 | 09,07 | `verified` | `web.read` (baca HTML/PDF via kebijakan egress FIX-07, tanpa cookie/script), provenance (`fetchedAt`+`contentHash`+`reach`), system prompt memuat teks halaman nyata + penanda tautan mati/terblokir, verifikasi DOI via Crossref (`mismatch` untuk DOI fiktif). 26 tes baru. Bukti: `reports/FIX-10.md` |
 | FIX-11 | R2 | 09,06 | `verified_fixture` | commits `ae1a657`,`d8c02c1`,`a5aa9a3`,`d711913`; tes E2E tool `generate_file` (fixture SSE) |
 | FIX-12 | R3 | 11,17 | `verified` | commits `7192e8e`,`94c40ce`; renderer PDF/DOCX/XLSX/PPTX + tool `generate_document`; `Artifact.version` + lineage tervalidasi, konverter md/txt/html/csv/json, ZIP hardening (slip/bomb/symlink/duplikat). Bukti: `reports/FIX-12.md` |
 | FIX-13 | R3 | 05,06,08 | `planned` | — |

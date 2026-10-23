@@ -103,7 +103,12 @@ describe("webSearch", () => {
 
     const results = await webSearch("apa itu");
     expect(results).toHaveLength(2);
-    expect(results[0]).toEqual({ title: "Satu", url: "https://a.test/1", snippet: "ringkas satu" });
+    expect(results[0]).toMatchObject({
+      title: "Satu",
+      url: "https://a.test/1",
+      snippet: "ringkas satu",
+    });
+    expect(results[0]?.fetchedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(results[1]?.snippet).toHaveLength(300);
 
     const calledUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
@@ -123,7 +128,9 @@ describe("webSearch", () => {
         ],
       }),
     );
-    expect(await webSearch("q")).toEqual([{ title: "Sah", url: "https://c.test/3", snippet: "c" }]);
+    expect(await webSearch("q")).toEqual([
+      expect.objectContaining({ title: "Sah", url: "https://c.test/3", snippet: "c" }),
+    ]);
   });
 
   it("5xx bisa diulang, 4xx tidak", async () => {

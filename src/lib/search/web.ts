@@ -28,6 +28,8 @@ export type SearchResult = {
   title: string;
   url: string;
   snippet: string;
+  /** Waktu hasil diambil (ISO-8601); berita/harga wajib menyebutnya. */
+  fetchedAt: string;
 };
 
 const DEFAULT_LIMIT = 5;
@@ -123,6 +125,7 @@ export async function webSearch(
   }
 
   const rows = Array.isArray(payload.results) ? payload.results : [];
+  const fetchedAt = new Date().toISOString();
   const results: SearchResult[] = [];
   for (const row of rows) {
     const href = typeof row.url === "string" ? row.url : "";
@@ -132,6 +135,7 @@ export async function webSearch(
       title: typeof row.title === "string" && row.title ? row.title : href,
       url: href,
       snippet: snippet.slice(0, SNIPPET_MAX),
+      fetchedAt,
     });
     if (results.length >= limit) break;
   }

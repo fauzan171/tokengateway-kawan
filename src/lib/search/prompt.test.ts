@@ -54,4 +54,52 @@ describe("buildSearchSystem", () => {
     expect(system?.includes("x".repeat(300))).toBe(true);
     expect(system?.includes("x".repeat(301))).toBe(false);
   });
+
+  it("FIX-10: menyertakan teks halaman nyata, waktu ambil, dan hash", () => {
+    const system = buildSearchSystem([
+      {
+        title: "Berita",
+        url: "https://d.test/4",
+        snippet: "ringkasan pencarian",
+        fetchedAt: "2026-10-23T08:00:00.000Z",
+        reach: "reachable",
+        contentHash: "abcdef0123456789",
+        text: "Paragraf penuh hasil baca halaman.",
+      },
+    ]);
+    expect(system).toContain("Paragraf penuh hasil baca halaman.");
+    expect(system).toContain("diambil 2026-10-23T08:00:00.000Z");
+    expect(system).toContain("hash abcdef012345");
+  });
+
+  it("FIX-10: menandai sumber mati/terblokir agar tidak dikutip", () => {
+    const system = buildSearchSystem([
+      {
+        title: "Mati",
+        url: "https://e.test/5",
+        snippet: "s",
+        fetchedAt: "2026-10-23T08:00:00.000Z",
+        reach: "dead",
+        contentHash: null,
+        text: null,
+        reason: "UNREACHABLE",
+      },
+      { title: "Blok", url: "https://f.test/6", snippet: "s", reach: "blocked", text: null },
+    ]);
+    expect(system).toContain("TAUTAN MATI");
+    expect(system).toContain("TERBLOKIR/PAYWALL");
+  });
+
+  it("FIX-10: memotong teks halaman panjang dan jatuh ke snippet bila teks null", () => {
+    const long = buildSearchSystem([
+      { title: "L", url: "https://g.test/7", snippet: "s", text: "y".repeat(5000) },
+    ]);
+    expect(long?.includes("y".repeat(2000))).toBe(true);
+    expect(long?.includes("y".repeat(2001))).toBe(false);
+
+    const noText = buildSearchSystem([
+      { title: "N", url: "https://h.test/8", snippet: "snippet cadangan", text: null },
+    ]);
+    expect(noText).toContain("snippet cadangan");
+  });
 });

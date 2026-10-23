@@ -7,9 +7,24 @@
  * dengan penanda dokumen `[1]` dari `context.ts`.
  */
 
-import type { SearchResult } from "./web";
-
 const SNIPPET_MAX = 300;
+/** Batas teks halaman yang masuk prompt per sumber; sisanya dipotong. */
+const TEXT_MAX = 2_000;
+
+/**
+ * Bentuk minimal yang dibutuhkan prompt: hasil pencarian polos maupun sumber
+ * yang sudah diperkaya (`EnrichedSource`) sama-sama memenuhinya secara struktural.
+ */
+export type PromptSource = {
+  title: string;
+  url: string;
+  snippet: string;
+  fetchedAt?: string;
+  reach?: string;
+  contentHash?: string | null;
+  text?: string | null;
+  reason?: string;
+};
 
 /** Apakah pesan user meminta pencarian web. Input rusak → `false`. */
 export function webSearchRequested(contentJson: string | null | undefined): boolean {
@@ -29,13 +44,30 @@ export function webSearchRequested(contentJson: string | null | undefined): bool
 }
 
 /** System prompt berisi hasil pencarian. `undefined` bila tidak ada hasil. */
-export function buildSearchSystem(results: readonly SearchResult[]): string | undefined {
+export function buildSearchSystem(results: readonly PromptSource[]): string | undefined {
   if (results.length === 0) return undefined;
 
   const lines = results.map((result, index) => {
     const snippet = result.snippet.slice(0, SNIPPET_MAX).trim();
     const head = `[S${index + 1}] ${result.title} — ${result.url}`;
-    return snippet === "" ? head : `${head}\n${snippet}`;
+
+    // Provenance: tanpa waktu ambil, isi berita/harga tidak boleh dipakai
+    // seolah masih berlaku. `dead`/`blocked` dinyatakan terang supaya model
+    // tidak mengutip halaman yang tidak terbaca.
+    const meta: string[] = [];
+    if (result.fetchedAt) meta.push(`diambil ${result.fetchedAt}`);
+    if (result.contentHash) meta.push(`hash ${result.contentHash.slice(0, 12)}`);
+    if (result.reach === "dead") meta.push("TAUTAN MATI — jangan dikutip");
+    else if (result.reach === "blocked") meta.push("TERBLOKIR/PAYWALL — jangan dikutip");
+    else if (result.reach === "unchecked") meta.push("belum dibaca");
+
+    const body = result.text?.trim()
+      ? `Isi halaman:\n${result.text.slice(0, TEXT_MAX).trim()}`
+      : snippet;
+
+    return [head, meta.length > 0 ? meta.join(" · ") : "", body]
+      .filter((line) => line !== "")
+      .join("\n");
   });
 
   return [
@@ -44,6 +76,7 @@ export function buildSearchSystem(results: readonly SearchResult[]): string | un
     ...lines,
     "",
     "Kutip penanda sumber, misalnya [S1], bila memakai isi salah satu sumber di atas.",
+    "Sebutkan waktu pengambilan untuk fakta yang bisa berubah (berita, harga, angka).",
     "Jangan mengarang URL atau sumber yang tidak ada di daftar ini.",
   ].join("\n");
 }
