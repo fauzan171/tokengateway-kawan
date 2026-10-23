@@ -19,6 +19,7 @@ import { getCachedModels } from "@/lib/connections/model-cache";
 import { readMediaConfig } from "@/lib/media/config";
 import { handleRouteError, jsonOk, requireContext } from "@/lib/api/route";
 import { readWebSearchConfig } from "@/lib/search/web";
+import { readSandboxConfig } from "@/lib/sandbox/e2b";
 
 export const runtime = "nodejs";
 
@@ -46,7 +47,9 @@ type CapabilityName =
   | "imageGen"
   | "stt"
   | "tts"
-  | "webSearch";
+  | "webSearch"
+  | "codeExecution"
+  | "browser";
 
 const ENTRY_NAMES: readonly CapabilityName[] = [
   "chat",
@@ -56,10 +59,12 @@ const ENTRY_NAMES: readonly CapabilityName[] = [
   "stt",
   "tts",
   "webSearch",
+  "codeExecution",
+  "browser",
 ];
 
 /** `tools` menjalankan aksi atas nama pengguna, jadi butuh persetujuan dulu. */
-const APPROVAL_REQUIRED: ReadonlySet<CapabilityName> = new Set<CapabilityName>(["tools"]);
+const APPROVAL_REQUIRED: ReadonlySet<CapabilityName> = new Set<CapabilityName>(["tools", "codeExecution", "browser"]);
 
 function entry(
   name: CapabilityName,
@@ -102,6 +107,27 @@ function mediaCapability(
   return entry(name, "unsupported", "GATEWAY_NOT_ANNOUNCED", checkedAt);
 }
 
+/**
+ * State sandbox (FIX-17). Tiga bukti, semuanya harus ada:
+ *   1. kunci provider (`E2B_API_KEY`),
+ *   2. template kode DAN template browser terpasang,
+ *   3. probe live (belum dijalankan di sini).
+ *
+ * Tanpa (1)/(2) → `unconfigured`. Dengan (1)+(2) tapi tanpa probe →
+ * `unknown`, BUKAN `available`: memiliki kunci bukan bukti isolasi bekerja.
+ * Tidak ada status yang bisa menjadi `available` dari env saja.
+ */
+function sandboxCapability(
+  name: "codeExecution" | "browser",
+  configured: boolean,
+  checkedAt: string,
+): CapabilityEntry {
+  if (!configured) {
+    return entry(name, "unconfigured", "SANDBOX_NOT_CONFIGURED", checkedAt);
+  }
+  return entry(name, "unknown", "SANDBOX_NOT_PROBED", checkedAt);
+}
+
 /** State kapabilitas model dari bukti gateway; `null` = belum pernah diprobe. */
 function modelCapability(
   name: CapabilityName,
@@ -141,6 +167,8 @@ export async function GET(request: Request): Promise<Response> {
 
     const media = readMediaConfig();
     const hasConnection = active !== null;
+    // Sandbox tidak butuh koneksi gateway: yang menentukan kunci + template.
+    const sandboxConfigured = readSandboxConfig() !== null;
 
     const capabilities: Record<CapabilityName, CapabilityEntry> = {
       chat: modelCapability("chat", cached ? cached.models.length > 0 : null, hasConnection, checkedAt),
@@ -154,6 +182,8 @@ export async function GET(request: Request): Promise<Response> {
       webSearch: readWebSearchConfig()
         ? entry("webSearch", "available", "SEARCH_CONFIGURED", checkedAt)
         : entry("webSearch", "unconfigured", "SEARCH_NOT_CONFIGURED", checkedAt),
+      codeExecution: sandboxCapability("codeExecution", sandboxConfigured, checkedAt),
+      browser: sandboxCapability("browser", sandboxConfigured, checkedAt),
     };
 
     // Boolean lama dipertahankan, diturunkan dari state — bukan ditebak ulang.
