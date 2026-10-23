@@ -128,3 +128,72 @@ describe("createArtifact", () => {
     await deleteArtifact(db, userId, artifact.id, storageDir);
   });
 });
+describe("FIX-12: lineage versi artefak", () => {
+  it("versi 1 tanpa parent, versi 2 merujuk parent dan menaikkan nomor", async () => {
+    const v1 = await createArtifact(
+      db,
+      { userId, displayName: "laporan", input: { format: "md", content: "# v1" } },
+      storageDir,
+    );
+    expect(v1.version).toBe(1);
+    expect(v1.parentArtifactId).toBeNull();
+
+    const v2 = await createArtifact(
+      db,
+      {
+        userId,
+        displayName: "laporan",
+        parentArtifactId: v1.id,
+        input: { format: "md", content: "# v2" },
+      },
+      storageDir,
+    );
+    expect(v2.version).toBe(2);
+    expect(v2.parentArtifactId).toBe(v1.id);
+
+    // Sumber tidak tertimpa: byte lama masih dapat diperiksa.
+    const original = await openArtifactBytes(db, userId, v1.id, storageDir);
+    expect(original.bytes.toString("utf8")).toBe("# v1");
+    const latest = await openArtifactBytes(db, userId, v2.id, storageDir);
+    expect(latest.bytes.toString("utf8")).toBe("# v2");
+
+    const v3 = await createArtifact(
+      db,
+      { userId, displayName: "laporan", parentArtifactId: v2.id, input: { format: "md", content: "# v3" } },
+      storageDir,
+    );
+    expect(v3.version).toBe(3);
+  });
+
+  it("parent milik pengguna lain ditolak 404", async () => {
+    const foreign = await createArtifact(
+      db,
+      { userId: otherUserId, displayName: "asing", input: { format: "txt", content: "x" } },
+      storageDir,
+    );
+    await expect(
+      createArtifact(
+        db,
+        { userId, displayName: "curang", parentArtifactId: foreign.id, input: { format: "txt", content: "y" } },
+        storageDir,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(await listArtifacts(db, userId)).toEqual([]);
+  });
+
+  it("parent yang sudah dihapus ditolak 404", async () => {
+    const gone = await createArtifact(
+      db,
+      { userId, displayName: "hilang", input: { format: "txt", content: "x" } },
+      storageDir,
+    );
+    await deleteArtifact(db, userId, gone.id, storageDir);
+    await expect(
+      createArtifact(
+        db,
+        { userId, displayName: "anak", parentArtifactId: gone.id, input: { format: "txt", content: "y" } },
+        storageDir,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});

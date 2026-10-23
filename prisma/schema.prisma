@@ -261,6 +261,8 @@ model Artifact {
   errorMessage String?
   /// Turunan versi: id artefak sumber saat ini dibuat ulang/dikonversi.
   parentArtifactId String?
+  /// Nomor versi dalam rantai lineage; akar = 1, anak = parent.version + 1.
+  version     Int      @default(1)
   /// JSON provenance: { schemaVersion, source, notes }
   provenance  String?
   downloadCount Int    @default(0)

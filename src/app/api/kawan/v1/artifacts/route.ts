@@ -1,14 +1,15 @@
 /**
  * Artefak pengguna (FIX-11): `GET` daftar, `POST` buat dari konten bertipe.
  *
- * Konten diterima sebagai schema `{format, displayName, content|rows}` — tidak
- * pernah path. PDF/DOCX/XLSX/PPTX ditolak di sini sampai FIX-12 memasang renderer.
+ * Konten diterima sebagai schema `{format, displayName, content|rows|doc|files}` —
+ * tidak pernah path. PPTX hanya lewat tool; ZIP lewat daftar `files` tervalidasi.
  */
 
 import { ApiError, STATUS, requestId } from "@/lib/api/errors";
 import { handleRouteError, jsonOk, readJson, requireContext } from "@/lib/api/route";
-import { createArtifact, listArtifacts } from "@/lib/artifacts/create";
+import { createArtifact, listArtifacts, openArtifactBytes } from "@/lib/artifacts/create";
 import { isArtifactFormat } from "@/lib/artifacts/format";
+import { convertArtifact, type ConvertedContent } from "@/lib/artifacts/convert";
 import { ArtifactError } from "@/lib/artifacts/render";
 import { parseDocSchema } from "@/lib/artifacts/document";
 
@@ -35,7 +36,49 @@ export async function POST(request: Request): Promise<Response> {
     const body = await readJson(request);
 
     const format = body["format"];
-    // pptx internal (hanya lewat tool), zip belum ada renderernya.
+    // FIX-12: konversi dari artefak yang sudah ada → versi baru, sumber utuh.
+    if (typeof body["convertFrom"] === "string") {
+      if (!isArtifactFormat(format)) {
+        throw new ApiError({
+          status: STATUS.BAD_REQUEST,
+          code: "INVALID_FORMAT",
+          message: "Format artefak tidak didukung.",
+        });
+      }
+      const source = await openArtifactBytes(db, userId, body["convertFrom"]);
+      const sourceFormat = source.artifact.format;
+      const text = source.bytes.toString("utf8");
+      let converted: ConvertedContent;
+      try {
+        converted = convertArtifact(
+          sourceFormat === "json"
+            ? { format: "json", content: JSON.parse(text) }
+            : sourceFormat === "csv"
+              ? { format: "csv", rows: text.split(/\r?\n/).map((line: string) => line.split(",")) }
+              : { format: sourceFormat as "md" | "txt" | "html", content: text },
+          format,
+        );
+      } catch (err) {
+        // Konten sumber korup atau pasangan format tidak didukung → 400, bukan 500.
+        if (err instanceof SyntaxError) throw new ArtifactError("SOURCE_UNREADABLE");
+        throw err;
+      }
+      const artifact = await createArtifact(db, {
+        userId,
+        parentArtifactId: source.artifact.id,
+        displayName:
+          typeof body["displayName"] === "string"
+            ? body["displayName"]
+            : source.artifact.displayName,
+        input:
+          converted.format === "json"
+            ? { format: "json", content: JSON.parse(converted.content) }
+            : { format: converted.format as "md" | "txt" | "html", content: converted.content },
+      });
+      return jsonOk({ artifact }, reqId, 201);
+    }
+
+    // pptx internal (hanya lewat tool), zip punya jalur sendiri di bawah.
     if (format === "pptx") {
       throw new ApiError({
         status: STATUS.BAD_REQUEST,
@@ -51,11 +94,42 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
     if (format === "zip") {
-      throw new ApiError({
-        status: STATUS.BAD_REQUEST,
-        code: "FORMAT_NOT_READY",
-        message: "Format ini belum tersedia.",
+      // FIX-12: ZIP dibuat dari daftar berkas teks; nama divalidasi di writeZip.
+      const files = body["files"];
+      if (!Array.isArray(files) || files.length === 0) {
+        throw new ApiError({
+          status: STATUS.BAD_REQUEST,
+          code: "INVALID_CONTENT",
+          message: "ZIP membutuhkan daftar `files`.",
+        });
+      }
+      const entries = files.map((entry) => {
+        const item = entry as Record<string, unknown>;
+        if (typeof item?.["name"] !== "string" || typeof item?.["content"] !== "string") {
+          throw new ApiError({
+            status: STATUS.BAD_REQUEST,
+            code: "INVALID_CONTENT",
+            message: "Setiap berkas butuh `name` dan `content`.",
+          });
+        }
+        return { name: item["name"], content: item["content"] };
       });
+      const artifact = await createArtifact(db, {
+        userId,
+        chatId: typeof body["chatId"] === "string" ? body["chatId"] : null,
+        messageId: typeof body["messageId"] === "string" ? body["messageId"] : null,
+        parentArtifactId: typeof body["parentArtifactId"] === "string" ? body["parentArtifactId"] : null,
+        displayName: typeof body["displayName"] === "string" ? body["displayName"] : "",
+        input: { format: "zip", files: entries },
+      });
+      if (artifact.status === "failed") {
+        throw new ApiError({
+          status: STATUS.INTERNAL,
+          code: "ARTIFACT_WRITE_FAILED",
+          message: "Berkas gagal disimpan.",
+        });
+      }
+      return jsonOk({ artifact }, reqId, 201);
     }
 
     const displayName = typeof body["displayName"] === "string" ? body["displayName"] : "";

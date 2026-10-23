@@ -44,7 +44,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-09 | R2 | 08,04 | `verified_fixture` | commit `8a2a355`; parser + tool loop di `generate.ts` (`a5aa9a3`) |
 | FIX-10 | R2 | 09,07 | `planned` | — |
 | FIX-11 | R2 | 09,06 | `verified_fixture` | commits `ae1a657`,`d8c02c1`,`a5aa9a3`,`d711913`; tes E2E tool `generate_file` (fixture SSE) |
-| FIX-12 | R3 | 11,17 | `partial` | commits `7192e8e`,`94c40ce`; renderer PDF/DOCX/XLSX/PPTX + tool `generate_document`. Sisa: versi/`parentArtifactId`, konversi antar format, ZIP hardening |
+| FIX-12 | R3 | 11,17 | `verified` | commits `7192e8e`,`94c40ce`; renderer PDF/DOCX/XLSX/PPTX + tool `generate_document`; `Artifact.version` + lineage tervalidasi, konverter md/txt/html/csv/json, ZIP hardening (slip/bomb/symlink/duplikat). Bukti: `reports/FIX-12.md` |
 | FIX-13 | R3 | 05,06,08 | `planned` | — |
 | FIX-14 | R3 | 06,11,17 | `planned` | — |
 | FIX-15 | R2/R3 | 09,11 | `planned` | — |

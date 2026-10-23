@@ -4,6 +4,7 @@
  */
 
 import { renderDocxBytes, renderPdfBytes, renderPptxBytes, renderXlsxBytes } from "./render-binary";
+import { writeZip, type ZipInputEntry } from "./zip";
 import type { DocSchema } from "./document";
 
 export class ArtifactError extends Error {
@@ -20,11 +21,12 @@ export type ArtifactInput =
   | { format: "json"; content: unknown }
   | { format: "csv"; rows: unknown[][] }
   | { format: "pdf" | "docx" | "xlsx"; doc: DocSchema }
-  | { format: "pptx"; doc: DocSchema };
+  | { format: "pptx"; doc: DocSchema }
+  | { format: "zip"; files: ZipInputEntry[] };
 
 /** Varian biner: format dokumen, bukan konten teks dari tool model. */
-export type BinaryArtifactInput = Extract<ArtifactInput, { doc: DocSchema }>;
-export type TextArtifactInput = Exclude<ArtifactInput, BinaryArtifactInput>;
+export type BinaryArtifactInput = Extract<ArtifactInput, { doc: DocSchema }> | Extract<ArtifactInput, { files: ZipInputEntry[] }>;
+export type TextArtifactInput = Extract<ArtifactInput, { content: unknown } | { rows: unknown[][] }>;
 
 /** Format biner tapi diberi varian teks → salah skema, bukan render sebagian. */
 function asDoc(input: ArtifactInput): DocSchema {
@@ -43,6 +45,8 @@ export async function renderArtifactBytesAsync(input: ArtifactInput): Promise<Bu
       return renderXlsxBytes(asDoc(input));
     case "pptx":
       return renderPptxBytes(asDoc(input));
+    case "zip":
+      return writeZip(input.files);
     default:
       return renderArtifactBytes(input as TextArtifactInput);
   }

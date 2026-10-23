@@ -28,6 +28,7 @@ export type PublicArtifact = {
   expiresAt: Date | null;
   downloadCount: number;
   parentArtifactId: string | null;
+  version: number;
 };
 
 type ArtifactRow = PublicArtifact & { storageKey: string; deletedAt: Date | null };
@@ -45,6 +46,7 @@ function toPublic(row: ArtifactRow): PublicArtifact {
     expiresAt: row.expiresAt,
     downloadCount: row.downloadCount,
     parentArtifactId: row.parentArtifactId,
+    version: row.version,
   };
 }
 
@@ -71,6 +73,18 @@ export async function createArtifact(
   const bytes = await renderArtifactBytesAsync(args.input);
   if (bytes.byteLength > MAX_ARTIFACT_BYTES) throw new ArtifactError("TOO_LARGE");
 
+  // FIX-12: lineage. Parent wajib milik user yang sama dan masih hidup; versi
+  // baru tidak pernah menimpa sumber, hanya merujuk ke belakang.
+  let version = 1;
+  if (args.parentArtifactId) {
+    const parent = await db.artifact.findFirst({
+      where: { id: args.parentArtifactId, userId: args.userId, deletedAt: null },
+      select: { id: true, version: true, status: true },
+    });
+    if (!parent || parent.status !== "ready") throw notFound();
+    version = parent.version + 1;
+  }
+
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const used = await db.artifact.count({
     where: { userId: args.userId, deletedAt: null, createdAt: { gte: since } },
@@ -95,6 +109,7 @@ export async function createArtifact(
       storageKey: "",
       status: "staged",
       parentArtifactId: args.parentArtifactId ?? null,
+      version,
       expiresAt: new Date(Date.now() + RETENTION_MS),
     },
   });
