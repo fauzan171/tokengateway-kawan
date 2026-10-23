@@ -42,6 +42,8 @@ model User {
   tasks     Task[]
   memories  MemoryItem[]
   connectors ConnectorCredential[]
+  schedules Schedule[]
+  notifications Notification[]
 
   @@index([status])
 }
@@ -699,6 +701,75 @@ model ConnectorCredential {
 
   @@index([userId, provider])
   @@index([userId, revokedAt])
+}
+
+/// Jadwal berulang atau sekali jalan (FIX-21).
+///
+/// `nextRunAt` disimpan dalam UTC; `localTime` + `timezone` (IANA) adalah
+/// sumber aturan, bukan offset tulisan tangan. Sweeper menghitung ulang, jadi
+/// restart proses tidak menggeser jadwal dan DST tidak menggandakan occurrence.
+model Schedule {
+  id             String    @id
+  userId         String
+  title          String
+  prompt         String
+  /// Waktu lokal "YYYY-MM-DDTHH:mm" di zona `timezone`.
+  localTime      String
+  timezone       String
+  /// null | daily | weekly
+  recurrence     String?
+  /// skip | run — bawaan skip untuk aksi berbiaya/eksternal.
+  misfirePolicy  String    @default("skip")
+  /// read | write — write butuh approval per occurrence.
+  effect         String    @default("read")
+  /// Int 0/1 (portabel SQLite+PostgreSQL), bukan Boolean — lihat chats.ts.
+  enabled        Int       @default(1)
+  nextRunAt      DateTime?
+  lastRunAt      DateTime?
+  policyRevision Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occurrences ScheduleOccurrence[]
+
+  @@index([enabled, nextRunAt])
+  @@index([userId, createdAt])
+}
+
+/// Satu kejadian jadwal. Unik per (schedule, waktu): dua scheduler tidak dapat
+/// membuat dua occurrence untuk waktu yang sama.
+model ScheduleOccurrence {
+  id           String    @id
+  scheduleId   String
+  scheduledFor DateTime
+  /// pending | dispatched | skipped | cancelled
+  status       String    @default("pending")
+  jobId        String?
+  createdAt    DateTime  @default(now())
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, scheduledFor])
+  @@index([status, createdAt])
+}
+
+/// Notifikasi dalam aplikasi (FIX-21). Outbox durable, bukan push.
+model Notification {
+  id        String    @id
+  userId    String
+  kind      String
+  title     String
+  body      String
+  /// Isi sensitif tidak ditampilkan di notifikasi sistem/lockscreen.
+  /// Int 0/1 (portabel SQLite+PostgreSQL).
+  sensitive Int       @default(0)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
 }
 
 /// Stream event durable sebuah run. `seq` unik per run; SSE menyusulnya.
