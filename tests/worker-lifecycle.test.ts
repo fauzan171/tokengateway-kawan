@@ -30,7 +30,9 @@ it("worker idle tetap hidup setelah 30 detik dan dapat shutdown dengan SIGTERM",
   let output = "";
   child.stdout?.on("data", (chunk) => { output += chunk.toString(); });
   child.stderr?.resume();
-  await vi.waitFor(() => expect(output).toContain('"result":"started"'), { timeout: 10_000 });
+  // Startup tsx bisa lambat saat suite berjalan paralel (109 berkas); 10 detik
+  // terlalu ketat dan menghasilkan kegagalan jadwal, bukan kegagalan worker.
+  await vi.waitFor(() => expect(output).toContain('"result":"started"'), { timeout: 60_000 });
   await Promise.race([delay(31_000), exited]);
   expect(output).toContain('"result":"started"');
   expect(child.exitCode).toBeNull();
