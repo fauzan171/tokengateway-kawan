@@ -643,6 +643,10 @@ model TaskRun {
   /// Kedalaman dibatasi 1; child tidak pernah mendapat budget lebih besar.
   parentRunId        String?
   depth              Int       @default(0)
+  /// K2: agent beku yang menjalankan run ini + versinya. Nilai default menjaga
+  /// run lama tetap terbaca; agent asing ditolak di lapisan atas, bukan di DB.
+  agentId            String    @default("default")
+  agentVersion       Int       @default(1)
   deadlineAt         DateTime
   waitingExpiresAt   DateTime?
   cancelRequestedAt  DateTime?
@@ -659,6 +663,7 @@ model TaskRun {
   @@index([taskId, createdAt, id])
   @@index([parentRunId, status])
   @@index([status, deadlineAt])
+  @@index([agentId])
 }
 
 /// Percakapan linear tugas. Riwayat Chat tidak dimigrasikan diam-diam.

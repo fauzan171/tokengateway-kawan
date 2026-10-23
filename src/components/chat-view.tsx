@@ -883,6 +883,13 @@ export function ChatView({
                 {notes.includes("file-failed") && !isEditing && (
                   <p className="mb-1 text-xs text-muted-foreground">{t("chat.fileFailed")}</p>
                 )}
+                {/* R5: dokumen yang dipotong/di-skip harus terlihat pengguna. */}
+                {notes.includes("doc-truncated") && !isEditing && (
+                  <p className="mb-1 text-xs text-muted-foreground">{t("chat.docTruncated")}</p>
+                )}
+                {notes.includes("doc-blocks-skipped") && !isEditing && (
+                  <p className="mb-1 text-xs text-muted-foreground">{t("chat.docBlocksSkipped")}</p>
+                )}
                 {artifacts.length > 0 && !isEditing && (
                   <ul className="mb-1 space-y-1">
                     {artifacts.map((a) => (

@@ -108,9 +108,14 @@ Rujukan utama: `reports/riset-standar-dokumen.md` §2 (T1–T7), §3.1 (batas), 
 | D6 | Tata letak PPTX: hitung tinggi, satu tabel per slide, 8 kolom | UBAH `render-binary.ts` | D1 | — | tidak | M | Perubahan visual pada dokumen lama. Mitigasi: assert XML `ppt/slides` 0 ≤ y ≤ 5,625 inci; batas PPTX lebih ketat dari tabel kanonik |
 
 Bukti penerimaan D (dari riset §8): round-trip `renderDocxBytes → detectFormat = docx`
-(idem xlsx/pptx); judul jahat tetap ter-render; konversi pdf→md = 400; 13 kolom =
-`TABLE_TOO_WIDE`; 501 blok = `INVALID_DOC_SCHEMA`; 500 blok × 20k char =
-`DOC_TOO_LARGE`; PPTX tidak meluber.
+(idem xlsx/pptx); judul jahat tetap ter-render; konversi pdf→md = 400; 13 kolom
+dipotong ke 12 dengan `truncated: true`; 501 blok = `INVALID_DOC_SCHEMA`;
+500 blok × 20k char = dipotong dengan `truncated: true`; PPTX tidak meluber.
+
+> Koreksi 2026-10-23 (setelah D1): kontrak yang **diterapkan** memotong + melaporkan
+> (`truncated`/`unknownBlocks`), bukan melempar `TABLE_TOO_WIDE`/`DOC_TOO_LARGE`.
+> Kode galat itu tidak pernah ada di `src/`; menyebutnya sebagai bukti penerimaan
+> adalah klaim yang salah dan sudah diganti di sini.
 
 ---
 

@@ -1133,11 +1133,17 @@ export async function runGeneration(
   // FIX-11: satu ronde tool. Hasil berkas dicatat sebagai part `artifact` supaya
   // UI bisa menampilkan kartu unduhan. Kegagalan tool TIDAK menggagalkan jawaban.
   const artifactParts: { kind: "artifact"; artifactId: string; displayName: string; format: string; sizeBytes: number }[] = [];
+  // FIX-19/R5: pemotongan dokumen harus TERLIHAT. Tanpa ini 490 dari 500 blok
+  // bisa hilang tanpa satu pun tanda di UI.
+  let docTruncated = false;
+  let docUnknownBlocks = 0;
   const toolCalls = assembleToolCalls(toolFragments);
   for (const call of toolCalls.slice(0, 3)) {
     if (call.name === GENERATE_DOCUMENT_TOOL_NAME) {
       try {
         const args = parseGenerateDocumentArgs(call.arguments);
+        if (args.truncated) docTruncated = true;
+        docUnknownBlocks += args.unknownBlocks;
         const artifact = await createArtifact(db, {
           userId: chat.userId,
           chatId: chat.id,
@@ -1214,6 +1220,11 @@ export async function runGeneration(
     // Jawaban kena batas token provider (AUD-10): tampilkan, jangan diam.
     ...(finishReason === "length" ? [{ kind: "note", code: "truncated" }] : []),
     ...(!artifactParts.length && toolFragments.size > 0 ? [{ kind: "note", code: "file-failed" }] : []),
+    // R5: dokumen yang dipotong dilaporkan, bukan dipotong diam-diam.
+    ...(docTruncated ? [{ kind: "note", code: "doc-truncated" }] : []),
+    ...(docUnknownBlocks > 0
+      ? [{ kind: "note", code: "doc-blocks-skipped", data: { count: docUnknownBlocks } }]
+      : []),
     ...(ragDegraded ? [{ kind: "note", code: "rag-degraded" }] : []),
   ];
   // Sitasi hanya dari penanda yang benar-benar ditulis model (SDD-6.2).

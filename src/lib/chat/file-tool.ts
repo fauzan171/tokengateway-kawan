@@ -187,11 +187,19 @@ export const GENERATE_DOCUMENT_TOOL: {
   },
 };
 
-/** Validasi argumen `generate_document`; lempar ArtifactError INVALID_TOOL_ARGS. */
+/**
+ * Validasi argumen `generate_document`; lempar ArtifactError INVALID_TOOL_ARGS.
+ *
+ * `truncated`/`unknownBlocks` WAJIB diteruskan ke pemanggil: dokumen yang
+ * dipotong 490 dari 500 blok tanpa catatan adalah kehilangan data yang tidak
+ * terlihat (temuan review R5).
+ */
 export function parseGenerateDocumentArgs(args: unknown): {
   format: "pdf" | "docx" | "xlsx";
   displayName: string;
   doc: DocSchema;
+  truncated: boolean;
+  unknownBlocks: number;
 } {
   if (typeof args !== "object" || args === null || Array.isArray(args)) {
     throw new ArtifactError("INVALID_TOOL_ARGS", "Argumen tool harus objek.");
@@ -205,8 +213,13 @@ export function parseGenerateDocumentArgs(args: unknown): {
   }
   // Pelanggaran skema doc dari tool model tetap INVALID_TOOL_ARGS (bukan INVALID_DOC_SCHEMA).
   let doc: DocSchema;
+  let truncated = false;
+  let unknownBlocks = 0;
   try {
-    doc = parseDocSchema(record.doc);
+    const parsed = parseDocSchema(record.doc);
+    doc = { title: parsed.title, blocks: parsed.blocks };
+    truncated = parsed.truncated;
+    unknownBlocks = parsed.unknownBlocks;
   } catch (err) {
     if (err instanceof ArtifactError && err.code === "INVALID_DOC_SCHEMA") {
       throw new ArtifactError("INVALID_TOOL_ARGS", err.message);
@@ -217,6 +230,8 @@ export function parseGenerateDocumentArgs(args: unknown): {
     format: record.format,
     displayName: record.displayName,
     doc,
+    truncated,
+    unknownBlocks,
   };
 }
 

@@ -20,7 +20,7 @@ const SAMPLE: DocSchema = {
 
 describe("parseDocSchema", () => {
   it("lima tipe blok sah lolos apa adanya", () => {
-    expect(parseDocSchema(SAMPLE)).toEqual(SAMPLE);
+    expect(parseDocSchema(SAMPLE)).toMatchObject(SAMPLE);
   });
 
   it("blok tak dikenal dibuang, blok lain tetap ada", () => {
@@ -29,6 +29,7 @@ describe("parseDocSchema", () => {
       blocks: [{ type: "video", src: "x.mp4" }, { type: "paragraph", text: "hai" }],
     });
     expect(doc.blocks).toEqual([{ type: "paragraph", text: "hai" }]);
+    expect(doc.unknownBlocks).toBe(1);
   });
 
   it("baris table yang panjangnya tidak cocok dibuang, headers utuh", () => {
@@ -58,6 +59,57 @@ describe("parseDocSchema", () => {
     });
     expect(doc.blocks[0]).toMatchObject({ level: 1 });
     expect((doc.blocks[1] as { text: string }).text.length).toBe(20_000);
+  });
+});
+
+describe("batas kanonik DocSchema", () => {
+  it("hasil memuat schemaVersion 1 dan default truncated/unknownBlocks", () => {
+    const doc = parseDocSchema(SAMPLE);
+    expect(doc.schemaVersion).toBe(1);
+    expect(doc.truncated).toBe(false);
+    expect(doc.unknownBlocks).toBe(0);
+    expect(doc.title).toBe(SAMPLE.title);
+  });
+
+  it("blok tak dikenal dihitung di unknownBlocks", () => {
+    const doc = parseDocSchema({
+      title: "t",
+      blocks: [{ type: "video" }, { type: "gambar" }, null, { type: "paragraph", text: "ok" }],
+    });
+    expect(doc.unknownBlocks).toBe(3);
+    expect(doc.blocks.length).toBe(1);
+  });
+
+  it("bullets dipotong 100 dan dilaporkan", () => {
+    const items = Array.from({ length: 150 }, (_, i) => `i${i}`);
+    const doc = parseDocSchema({ title: "t", blocks: [{ type: "bullets", items }] });
+    expect(doc.blocks[0]).toMatchObject({ items: items.slice(0, 100) });
+    expect(doc.truncated).toBe(true);
+  });
+
+  it("teks per blok dipotong 20.000 tanpa melempar", () => {
+    const doc = parseDocSchema({ title: "t", blocks: [{ type: "paragraph", text: "a".repeat(20_001) }] });
+    expect((doc.blocks[0] as { text: string }).text.length).toBe(20_000);
+    expect(doc.truncated).toBe(true);
+  });
+
+  it("tabel dipotong 12 kolom dan 2.000 baris, sel 500 char", () => {
+    const headers = Array.from({ length: 20 }, (_, i) => `h${i}`);
+    const rows = Array.from({ length: 2_500 }, () => headers.map(() => "x".repeat(600)));
+    const doc = parseDocSchema({ title: "t", blocks: [{ type: "table", headers, rows }] });
+    const table = doc.blocks[0] as { headers: string[]; rows: string[][] };
+    expect(table.headers.length).toBe(12);
+    expect(table.rows.length).toBe(2_000);
+    expect(table.rows[0][0].length).toBe(500);
+    expect(doc.truncated).toBe(true);
+  });
+
+  it("total dokumen dibatasi 200.000 char dan dilaporkan", () => {
+    const blocks = Array.from({ length: 15 }, () => ({ type: "paragraph", text: "a".repeat(20_000) }));
+    const doc = parseDocSchema({ title: "t", blocks });
+    const total = doc.blocks.reduce((n, b) => n + ("text" in b ? b.text.length : 0), 0);
+    expect(total).toBeLessThanOrEqual(200_000);
+    expect(doc.truncated).toBe(true);
   });
 });
 

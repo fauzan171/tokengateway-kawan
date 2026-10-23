@@ -94,6 +94,36 @@ describe("parseGenerateDocumentArgs", () => {
     ).toThrowError(expect.objectContaining({ code: "INVALID_TOOL_ARGS" }));
   });
 
+  it("dokumen yang dipotong melaporkan truncated=true (R5)", () => {
+    // 500 blok × 20.000 char melewati anggaran total 200.000 char.
+    const blocks = Array.from({ length: 500 }, () => ({ type: "paragraph", text: "x".repeat(20_000) }));
+    const args = parseGenerateDocumentArgs({
+      format: "pdf",
+      displayName: "panjang.pdf",
+      doc: { title: "Panjang", blocks },
+    });
+    expect(args.truncated).toBe(true);
+    expect(args.doc.blocks.length).toBeLessThan(500);
+  });
+
+  it("blok tak dikenal dihitung di unknownBlocks, bukan dibuang diam-diam", () => {
+    const args = parseGenerateDocumentArgs({
+      format: "pdf",
+      displayName: "x.pdf",
+      doc: {
+        title: "X",
+        blocks: [
+          { type: "paragraph", text: "sah" },
+          { type: "mermaid", text: "graph TD" },
+          { type: "chart" },
+        ],
+      },
+    });
+    expect(args.unknownBlocks).toBe(2);
+    expect(args.doc.blocks).toHaveLength(1);
+    expect(args.truncated).toBe(false);
+  });
+
   it("CHAT_TOOLS: dua tool dengan nama unik", () => {
     expect(CHAT_TOOLS).toHaveLength(2);
     const names = CHAT_TOOLS.map((t) => t.function.name);
