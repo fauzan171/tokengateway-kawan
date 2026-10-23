@@ -46,7 +46,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-11 | R2 | 09,06 | `verified_fixture` | commits `ae1a657`,`d8c02c1`,`a5aa9a3`,`d711913`; tes E2E tool `generate_file` (fixture SSE) |
 | FIX-12 | R3 | 11,17 | `verified` | commits `7192e8e`,`94c40ce`; renderer PDF/DOCX/XLSX/PPTX + tool `generate_document`; `Artifact.version` + lineage tervalidasi, konverter md/txt/html/csv/json, ZIP hardening (slip/bomb/symlink/duplikat). Bukti: `reports/FIX-12.md` |
 | FIX-13 | R3 | 05,06,08 | `verified` | `MemoryItem` (scope, category, status, consent, `version`+`parentId`, provenance, `expiresAt`) + `MemoryDependency` untuk pencabutan berantai; store `create/list/correct/revoke/confirmProposal/buildMemoryContext` (hanya `active`, anggaran 4.000 char, mode `ephemeral`); API `GET/POST /memory`, `PATCH/POST/DELETE /memory/{id}`; konteks memori disuntik ke generasi. 24 tes baru. Bukti: `reports/FIX-13.md` |
-| FIX-14 | R3 | 06,11,17 | `planned` | — |
+| FIX-14 | R3 | 06,11,17 | `verified` | Format ditentukan magic bytes (`magic.ts`), bukan label klien; OOXML via entri ZIP; DOCX/PPTX diurai `saxes`, XLSX via `exceljs` dengan `SheetCell` (formula disimpan tanpa dieksekusi); metadata dipisah tegas (nama klien / waktu server / tanggal tertanam) dan EXIF+GPS selalu dibuang; OCR + `probeVision` melaporkan `ENGINE_MISSING` alih-alih hasil kosong. 26 tes baru. Bukti: `reports/FIX-14.md` |
 | FIX-15 | R2/R3 | 09,11 | `planned` | — |
 | FIX-16 | R3 | 04,11,17 | `planned` | — |
 | FIX-17 | R4 | 07,09,11 | `planned` | — |

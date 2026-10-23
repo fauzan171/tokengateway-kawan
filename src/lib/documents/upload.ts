@@ -12,9 +12,17 @@ import type { Config } from "@/lib/config/env";
 import type { Db } from "@/lib/db";
 import { enqueue } from "@/lib/jobs/queue";
 import { deleteDocument, saveDocument } from "./storage";
+import { detectFormat, matchesClaimedMime } from "./magic";
 
-/** Tipe yang diterima (SDD-6.1 butir 1). */
-export const ALLOWED_MIME = ["application/pdf", "text/plain", "text/markdown"] as const;
+/** Tipe yang diterima (SDD-6.1 butir 1, diperluas FIX-14). */
+export const ALLOWED_MIME = [
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+] as const;
 
 const FILENAME_MAX = 200;
 const FILENAME_FALLBACK = "dokumen";
@@ -119,6 +127,17 @@ export async function uploadDocument(
 ): Promise<PublicDocument> {
   const mime = checkedMime(input.mime);
   assertSize(input.data, config.maxUploadBytes);
+  // FIX-14: isi berkas harus cocok dengan jenis yang diklaim. Ditolak di sini
+  // supaya pengguna tahu sekarang, bukan setelah job ekstraksi gagal.
+  const detected = detectFormat(input.data);
+  if (!matchesClaimedMime(mime, detected)) {
+    throw new ApiError({
+      status: STATUS.UNSUPPORTED_MEDIA_TYPE,
+      code: "MIME_MISMATCH",
+      message: `Isi berkas tidak cocok dengan jenis yang dikirim (${mime}).`,
+      details: { detected },
+    });
+  }
 
   const filename = sanitizeFilename(input.filename);
   const storageKey = await saveDocument(input.data);

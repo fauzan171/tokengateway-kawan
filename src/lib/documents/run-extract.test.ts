@@ -92,7 +92,9 @@ describe("runExtract", () => {
   });
 
   it("PDF rusak: failed dengan errorCode, tidak melempar", async () => {
-    const id = await seedDocument("application/pdf", Buffer.from("ini bukan pdf sama sekali"));
+    // FIX-14: magic bytes menentukan format, jadi fixture harus benar-benar
+    // berawalan `%PDF-` — bukan teks yang diklaim PDF.
+    const id = await seedDocument("application/pdf", Buffer.from("%PDF-1.7\nrusak tanpa xref"));
 
     await expect(runExtract(db, id)).resolves.toBeUndefined();
 
