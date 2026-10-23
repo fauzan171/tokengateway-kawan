@@ -1,0 +1,16 @@
+{"op":"add","operands":["0.1","0.2"],"expected":"0.3"}
+{"op":"add","operands":["123456789.123456789","0.000000001"],"expected":"123456789.12345679"}
+{"op":"sub","operands":["1000","0.001"],"expected":"999.999"}
+{"op":"mul","operands":["19.99","3"],"expected":"59.97"}
+{"op":"div","operands":["10","4"],"expected":"2.5"}
+{"op":"div","operands":["0.3","0.1"],"expected":"3"}
+{"op":"div","operands":["1","3"],"expected":"0.33333333333333333333"}
+{"op":"mod","operands":["10","3"],"expected":"1"}
+{"op":"pow","operands":["2","10"],"expected":"1024"}
+{"op":"sqrt","operands":["2"],"expected":"1.4142135623730950488"}
+{"op":"abs","operands":["-0.5"],"expected":"0.5"}
+{"op":"compare","operands":["3","5"],"expected":"-1"}
+{"op":"compare","operands":["5","5"],"expected":"0"}
+{"op":"round","operands":["2.345"],"precision":2,"rounding":"half-up","expected":"2.35"}
+{"op":"round","operands":["1.005"],"precision":2,"rounding":"half-up","expected":"1.01"}
+{"op":"round","operands":["2.5"],"precision":0,"rounding":"half-even","expected":"2"}
