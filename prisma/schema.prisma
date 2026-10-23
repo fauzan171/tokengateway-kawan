@@ -41,6 +41,7 @@ model User {
   setting   UserSetting?
   tasks     Task[]
   memories  MemoryItem[]
+  connectors ConnectorCredential[]
 
   @@index([status])
 }
@@ -669,6 +670,35 @@ model TaskMessage {
 
   @@unique([runId, role])
   @@index([taskId, createdAt, id])
+}
+
+/// Kredensial konektor pihak ketiga (FIX-20).
+///
+/// Token selalu tersimpan sebagai envelope AES-GCM dengan AAD
+/// `{rowId, userId, purpose:"connector.token"}`, jadi ciphertext satu baris
+/// tidak dapat dipakai di baris lain. Token TIDAK PERNAH keluar dari modul
+/// `lib/connectors` menuju model, sandbox, log, ekspor, atau snapshot.
+model ConnectorCredential {
+  id             String    @id
+  userId         String
+  /// google-drive | notion
+  provider       String
+  /// Nama tampilan yang dipilih pengguna ("Drive kerja").
+  label          String
+  /// Scope OAuth yang benar-benar diberikan, dipisah spasi.
+  scopes         String    @default("")
+  tokenEncrypted String
+  /// Refresh token terpisah; dikosongkan bila provider tidak menerbitkannya.
+  refreshEncrypted String?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider])
+  @@index([userId, revokedAt])
 }
 
 /// Stream event durable sebuah run. `seq` unik per run; SSE menyusulnya.

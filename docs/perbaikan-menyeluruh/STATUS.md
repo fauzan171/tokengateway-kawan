@@ -52,7 +52,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-17 | R4 | 07,09,11 | `verified_fixture` | Kontrak sandbox + limit SDD-AG-5, adapter E2B (guest tanpa env, stop tak pasti = `confirmed:false`), klasifikasi aksi browser konservatif (GET berpola ubah = write), `approvalDigest`, capability `codeExecution`/`browser` berhenti di `unknown` tanpa probe. 19 tes. Gate live `blocked_external`. Bukti: `reports/FIX-17.md` |
 | FIX-18 | semua | 04 | `verified_fixture` | Satu pesan sistem dengan urutan otoritas tetap (`prompt-builder.ts`), data web/dokumen/memori dibungkus penanda yang tidak bisa ditutup isinya, penilai kualitas deterministik (`quality-eval.ts`) + dataset 17 kasus JSONL. 29 tes baru. Bukti: `reports/FIX-18.md` |
 | FIX-19 | R3/R4 | 09,08 | `verified_fixture` | 8 tool aplikasi lewat service (`src/lib/tools/app.ts`), owner dari konteks, aksi destruktif hanya `needs_approval`, revisi kadaluarsa ditolak. Plus 3 regresi dokumen dari riset: entri direktori ZIP, sanitasi nama sheet XLSX, tolak sumber biner di konversi. 24 tes baru. Bukti: `reports/FIX-19.md` |
-| FIX-20 | R4 | 07,08,09 | `planned` | — |
+| FIX-20 | R4 | 07,08,09 | `verified_fixture` | Approval satu-pakai (`approvals.ts`) dengan digest aksi+payload+revisi, tolak pemakaian kedua/kedaluwarsa/owner lain; konektor token terenkripsi per baris + allowlist endpoint + revoke; model `ConnectorCredential` + migrasi dua provider. 12 tes. OAuth live `blocked_external`. Bukti: `reports/FIX-20.md` |
 | FIX-21 | R4 | 08,20,24 | `planned` | — |
 | FIX-22 | setelah single agent | 09,18,24 | `planned` | — |
 | FIX-23 | semua | 01,02 | `planned` | — |
