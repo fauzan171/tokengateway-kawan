@@ -56,7 +56,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | FIX-21 | R4 | 08,20,24 | `verified_fixture` | Zona IANA via Intl (DST digeser, jam lokal dipertahankan), occurrence unik per (jadwal, waktu), misfire `skip` bawaan, notifikasi sensitif diredaksi; model `Schedule`/`ScheduleOccurrence`/`Notification` + migrasi dua provider. 21 tes. Bukti: `reports/FIX-21.md` |
 | FIX-22 | setelah single agent | 09,18,24 | `verified_fixture` | Review model kedua terbatas (`multi-model.ts`): budget child ≤50% parent, kedalaman 1, tool subset parent, peninjau dipilih pengguna, agregasi menyebut sumber + disclaimer; `TaskRun.parentRunId`/`depth` + migrasi. 11 tes. Manfaat belum diukur. Bukti: `reports/FIX-22.md` |
 | FIX-23 | semua | 01,02 | `verified_fixture` | Ekspor lengkap 10 jenis data dengan allowlist+redaksi (token/kunci/hash tidak ikut), manifest ber-hash, validasi impor menolak kolom terlarang, tombstone dua tahap idempoten dengan langkah pembersihan, ledger id-opaque, retensi + pernyataan privasi. 16 tes. Bukti: `reports/FIX-23.md` |
-| FIX-24 | R0–R5 | 01 | `planned` | — |
+| FIX-24 | R0–R5 | 01 | `verified_fixture` | Liveness tanpa DB, readiness memeriksa DB+migrasi+denyut worker (worker mati terlihat tanpa job), endpoint publik minimum tanpa detail internal, metrik operasional dengan usage reported/unknown terpisah, CLI `npm run cleanup` nyata (dry-run + jalan). 10 tes. Bukti: `reports/FIX-24.md` |
 
 ## Gate terakhir (diverifikasi Hermes, bukan klaim [CC])
 

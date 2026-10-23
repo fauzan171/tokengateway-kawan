@@ -14,6 +14,7 @@
     "check:docs": "python3 tasks/nontechnical-v1/tools/check_docs.py",
     "check:licenses": "node scripts/check-licenses.mjs",
     "worker": "tsx --env-file-if-exists=.env src/worker.ts",
+    "cleanup": "tsx --env-file-if-exists=.env scripts/cleanup.ts",
     "deploy": "next build && pm2 restart kawan kawan-worker --update-env"
   },
   "dependencies": {
