@@ -12,6 +12,9 @@ import type { ArtifactFormat } from "./format";
 const TEXT_FORMATS = ["md", "txt", "html"] as const;
 type TextFormat = (typeof TEXT_FORMATS)[number];
 
+/** Format sumber yang punya representasi teks jujur (lihat convertArtifact). */
+const TEXT_SOURCE_FORMATS = ["md", "txt", "html", "json", "csv"] as const;
+
 export type ConversionSource =
   | { format: "md" | "txt" | "html"; content: string }
   | { format: "json"; content: unknown }
@@ -90,6 +93,16 @@ export type ConvertedContent = { format: ArtifactFormat; content: string };
  * pasangan lain ditolak eksplisit, bukan dikembalikan sebagai byte mentah.
  */
 export function convertArtifact(source: ConversionSource, target: ArtifactFormat): ConvertedContent {
+  // Sumber wajib salah satu format teks yang dikenal. Tanpa pemeriksaan ini,
+  // sumber PDF/DOCX (byte biner) bisa "dikonversi" menjadi .md berisi byte PDF:
+  // berkas yang terbuka tetapi isinya sampah. Sumber biner butuh pembaca
+  // formatnya sendiri (FIX-14), bukan konversi teks.
+  if (!(TEXT_SOURCE_FORMATS as readonly string[]).includes(source.format)) {
+    throw new ArtifactError(
+      "CONVERSION_UNSUPPORTED",
+      `Konversi dari ${String(source.format)} belum didukung; unduh berkas aslinya.`,
+    );
+  }
   if (source.format === "json") {
     if (target !== "json") {
       // JSON hanya punya representasi teks yang jujur sebagai JSON itu sendiri.

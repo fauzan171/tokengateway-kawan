@@ -29,10 +29,15 @@ export function assertSafeEntryName(name: string): string {
     throw new ArtifactError("ZIP_UNSAFE_PATH");
   }
   if (/[\u0000-\u001f\\]/.test(name)) throw new ArtifactError("ZIP_UNSAFE_PATH");
-  if (name.startsWith("/") || /^[a-zA-Z]:/.test(name) || name.endsWith("/")) {
+  if (name.startsWith("/") || /^[a-zA-Z]:/.test(name)) {
     throw new ArtifactError("ZIP_UNSAFE_PATH");
   }
-  const parts = name.split("/");
+  // Entri direktori (nama berakhiran "/") tidak membawa isi dan bukan berkas;
+  // menolaknya membuat DOCX/XLSX/PPTX hasil render sendiri tidak bisa dibaca
+  // balik. Validasi komponen TETAP dijalankan pada nama tanpa garis miring
+  // akhir, supaya "../" dan "a//" tidak lolos lewat pintu ini.
+  const isDirectory = name.endsWith("/");
+  const parts = (isDirectory ? name.slice(0, -1) : name).split("/");
   if (parts.length > ZIP_LIMITS.maxDepth) throw new ArtifactError("ZIP_TOO_DEEP");
   if (parts.some((part) => part === "" || part === "." || part === "..")) {
     throw new ArtifactError("ZIP_UNSAFE_PATH");

@@ -96,10 +96,24 @@ export async function renderDocxBytes(doc: DocSchema): Promise<Buffer> {
   return Packer.toBuffer(new Document({ sections: [{ children }] })) as unknown as Promise<Buffer>;
 }
 
-/** XLSX: worksheet bernama `title` (dipotong 31 — Excel menolak lebih), table jadi grid. */
+/**
+ * Nama sheet yang sah untuk Excel. Excel menolak `* ? : \\ / [ ]` dan batas 31
+ * karakter; judul wajar seperti "Laporan/2026: Q1" dulu menggagalkan seluruh
+ * render. Karakter terlarang diganti "-", nama kosong jatuh ke "Sheet1".
+ */
+export function safeSheetName(title: string): string {
+  const cleaned = title
+    .replace(/[*?:\\/[\]]/g, "-")
+    .replace(/[\u0000-\u001f]/g, "")
+    .trim()
+    .slice(0, 31);
+  return cleaned || "Sheet1";
+}
+
+/** XLSX: worksheet bernama `title` (disanitasi, maks 31), table jadi grid. */
 export async function renderXlsxBytes(doc: DocSchema): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(doc.title.slice(0, 31));
+  const sheet = workbook.addWorksheet(safeSheetName(doc.title));
   for (const block of doc.blocks) {
     switch (block.type) {
       case "table": {
