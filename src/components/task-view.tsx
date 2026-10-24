@@ -13,9 +13,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 
 type TaskRow = { id: string; title: string; status: string; activeRunId: string | null; updatedAt: string };
-type RunRow = { id: string; status: string; segment: number; errorCode: string | null };
+// K7: agentId beku di run untuk label agent aktif.
+type RunRow = { id: string; status: string; segment: number; errorCode: string | null; agentId?: string };
 type MessageRow = { id: string; role: string; text: string };
 type Snapshot = { task: TaskRow; run: RunRow | null; messages: MessageRow[] };
+/** Metadata agent publik (K5 /agents) — UI hanya membaca, server tetap memvalidasi. */
+type AgentRow = { id: string; label: string; description: string; defaultModelId: string | null; audience: string };
 
 /** Status yang berarti worker sudah tidak menulis lagi untuk run ini. */
 const TERMINAL = new Set(["completed", "failed", "cancelled", "indeterminate"]);
@@ -23,6 +26,8 @@ const TERMINAL = new Set(["completed", "failed", "cancelled", "indeterminate"]);
 export function TaskView({ taskId }: { taskId?: string }) {
   const t = useT();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [agentId, setAgentId] = useState("");
   const [active, setActive] = useState<string | null>(taskId ?? null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState("");
@@ -44,6 +49,25 @@ export function TaskView({ taskId }: { taskId?: string }) {
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  // K7: katalog agent sekali saja — gagal memuat tidak menghalangi task biasa;
+  // pemilih hanya kosong dan pilihan jatuh ke default di server.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/kawan/v1/agents");
+        if (!response.ok) return;
+        const payload = (await response.json()) as { agents: AgentRow[] };
+        if (!cancelled && Array.isArray(payload.agents)) setAgents(payload.agents);
+      } catch {
+        // Daftar agent gagal dimuat: pemilih kosong, server tetap memvalidasi.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadSnapshot = useCallback(async (id: string) => {
     try {
@@ -124,7 +148,12 @@ export function TaskView({ taskId }: { taskId?: string }) {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ input: draft, ...(resumable ? {} : { title: draft.slice(0, 80) }) }),
+          // K7: agent hanya ikut saat membuat task baru; run lanjutan memakai
+          // agent beku task itu (server yang menolak id tidak sah).
+          body: JSON.stringify({
+            input: draft,
+            ...(resumable ? {} : { title: draft.slice(0, 80), ...(agentId ? { agentId } : {}) }),
+          }),
         },
       );
       if (!response.ok) throw new Error("gagal");
@@ -138,7 +167,7 @@ export function TaskView({ taskId }: { taskId?: string }) {
     } catch {
       setError(t("tasks.sendFailed"));
     }
-  }, [active, draft, snapshot?.run, loadSnapshot, loadList, t]);
+  }, [active, draft, agentId, snapshot?.run, loadSnapshot, loadList, t]);
 
   const cancel = useCallback(async () => {
     const run = snapshot?.run;
@@ -209,6 +238,30 @@ export function TaskView({ taskId }: { taskId?: string }) {
           ) : null}
         </div>
 
+        {snapshot?.run?.agentId ? (
+          <p className="text-xs text-muted-foreground" data-testid="task-agent-label">
+            {t("tasks.agentActive")}
+            {agents.find((agent) => agent.id === snapshot.run?.agentId)?.label ?? snapshot.run.agentId}
+          </p>
+        ) : null}
+        {agents.length > 0 ? (
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            {t("tasks.agentPicker")}
+            <select
+              value={agentId}
+              onChange={(event) => setAgentId(event.target.value)}
+              className="rounded-md border bg-background px-3 py-2 text-sm font-normal"
+              aria-label={t("tasks.agentPicker")}
+            >
+              <option value="">{t("tasks.agentDefault")}</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div className="flex flex-col gap-2">
           <label htmlFor="task-input" className="text-sm font-medium">
             {t("tasks.inputLabel")}

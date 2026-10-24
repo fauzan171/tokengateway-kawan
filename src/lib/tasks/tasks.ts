@@ -57,6 +57,9 @@ export type RunDto = {
   status: RunStatus;
   revision: number;
   modelId: string;
+  /** K7: agent beku yang menjalankan run (default "default"). */
+  agentId: string;
+  agentVersion: number;
   stepCount: number;
   lastEventSeq: number;
   deadlineAt: string;
@@ -82,6 +85,8 @@ type RunRow = {
   status: string;
   revision: number;
   modelId: string;
+  agentId: string;
+  agentVersion: number;
   stepCount: number;
   lastEventSeq: number;
   deadlineAt: Date;
@@ -114,6 +119,8 @@ export function toRunDto(row: RunRow): RunDto {
     status: row.status as RunStatus,
     revision: row.revision,
     modelId: row.modelId,
+    agentId: row.agentId,
+    agentVersion: row.agentVersion,
     stepCount: row.stepCount,
     lastEventSeq: row.lastEventSeq,
     deadlineAt: row.deadlineAt.toISOString(),
@@ -140,6 +147,9 @@ const RUN_FIELDS = {
   status: true,
   revision: true,
   modelId: true,
+  // K7: label agent aktif di detail task — UI membaca ini, bukan menebak.
+  agentId: true,
+  agentVersion: true,
   stepCount: true,
   lastEventSeq: true,
   deadlineAt: true,

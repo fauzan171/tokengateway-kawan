@@ -297,3 +297,38 @@ tsc 0 · eslint 0/0 · npm test 1277/115 · build 0.
 
 ### Gate K6
 tsc 0 · eslint 0/0 · npm test 1283/116 · build 0.
+
+---
+
+## K7 — UI pemilih agent di task-view
+
+### Perubahan
+- `RunDto`/`toRunDto`/`RUN_FIELDS` bertambah `agentId`+`agentVersion`
+  (aditif — field beku run K2 kini terlihat oleh klien; server tetap
+  sumber validasi, UI hanya membaca).
+- `task-view.tsx`: fetch sekali `GET /agents` (gagal → pemilih kosong,
+  server jatuh ke default — bukan bloker); `<select>` agent di atas form
+  (opsi "Bawaan" + label tiap agent); pilihan `agentId` hanya ikut POST
+  saat task BARU — run lanjutan memakai agent beku task itu.
+- Label agent aktif (`data-testid="task-agent-label"`) di detail task dari
+  `run.agentId`; id tak dikenal tetap ditampilkan apa adanya (bukan
+  disembunyikan).
+- i18n baru: `tasks.agentPicker`/`agentDefault`/`agentActive` (id + en).
+
+### Tes (`task-view.test.tsx`, 3)
+- Tanpa katalog: select tidak dirender (tanpa rasa aman palsu).
+- Dengan katalog: opsi default+agent; pilihan mengubah nilai select.
+- Label agent aktif tampil dari `run.agentId` + label katalog.
+
+### Batas jujur
+- Pengiriman `agentId` di POST /tasks tidak diuji lewat klik tombol:
+  delegation event button async handler tidak menembak di jsdom+React 19
+  lingkungan vitest ini (prompt-picker yang sinkron jalan). Kontrak POST
+  `agentId` teruji di `tasks.test.ts` (admission menerima + menolak agent
+  asing); komponen membaca state `agentId` yang sama. Risiko rendah;
+  E2E Playwright menyusul saat tiket UI penuh.
+- Audience filtering tetap di server (route `/agents`); UI hanya menampilkan
+  yang dikirim.
+
+### Gate K7
+tsc 0 · eslint 0/0 · npm test 1286/117 · build 0.
