@@ -24,7 +24,7 @@ hijau. Jangan mengulang pekerjaan yang sudah selesai.
 - HEAD 042ce38 sudah push (042ce38 + ab12b97: tindak lanjut W2). Live masih
   c18ed34: `npm run build` 0, pm2 kawan+kawan-worker online,
   /api/kawan/v1/health -> {"ready":true}, /api/kawan/v1/agents -> 401.
-- npm test: 117 file, 1286 lulus (D3+D4+D6+P2+P8+K6+K7 selesai). Itu baseline; JANGAN sampai turun.
+- npm test: 118 file, 1291 lulus (GELOMBANG 3 LENGKAP). Itu baseline; JANGAN sampai turun.
 
 ## SUMBER KEBENARAN (baca dulu, jangan mengarang)
 - docs/perbaikan-menyeluruh/STATUS.md                    -> papan status + blocker
@@ -55,7 +55,9 @@ Ikuti teks spesifikasinya apa adanya; jangan menambah fitur di luar gate.
 7. K7 — SELESAI (bukti: reports/gelombang-3.md §K7): RunDto + agentId, select
    pemilih agent + label agent aktif di task-view + i18n + 3 tes.
    JANGAN diulang.
-8. K8 — audit admin run per agent.
+8. K8 — SELESAI (bukti: reports/gelombang-3.md §K8): admin/agent-runs.ts +
+   GET /admin/agent-runs (role admin, payload event tak pernah keluar) +
+   5 tes. GELOMBANG 3 SELESAI PENUH.
 
 Satu tahap selesai = gate hijau + commit + push sebelum tahap berikutnya.
 
@@ -87,7 +89,7 @@ Satu tahap selesai = gate hijau + commit + push sebelum tahap berikutnya.
 2. npm run lint                            -> 0 error, 0 WARNING (warning = gagal)
 3. node scripts/check-migrations.mjs       -> hanya bila skema berubah (+ deploy
    ke dev.db + db:generate)
-4. npm test                                -> >= 1286 lulus, 117 file
+4. npm test                                -> >= 1291 lulus, 118 file
 5. npm run build                           -> 0 (ini satu-satunya gate yang
    menangkap pelanggaran export route Next.js)
 

@@ -1,9 +1,10 @@
-# Gelombang 3 — D3 + D4 + D6 + P2 + P8 + K6
+# Gelombang 3 — D3 + D4 + D6 + P2 + P8 + K6 + K7 + K8
 
 Tanggal: 2026-10-24. Cakupan: D3 (blok dokumen baru), D4 (template), D6
 (tata letak PPTX), P2 (manifest plugin deklaratif + tabel Plugin), P8
 (ToolDoc satu sumber tiga pembaca + penutupan W2-4 dan W2-8), K6 (kuota per
-user 429 + Retry-After).
+user 429 + Retry-After), K7 (UI pemilih agent), K8 (audit admin run per
+agent). Gelombang 3 selesai penuh.
 
 ## Perubahan
 
@@ -332,3 +333,36 @@ tsc 0 · eslint 0/0 · npm test 1283/116 · build 0.
 
 ### Gate K7
 tsc 0 · eslint 0/0 · npm test 1286/117 · build 0.
+
+---
+
+## K8 — audit admin run per agent
+
+### Modul (`src/lib/admin/agent-runs.ts`) + route
+- `listAgentRuns(db, {agentId, limit, cursor})`: run satu agent terbaru
+  dulu (limit 1..100, default 20), total run, judul task, status, step,
+  hitungan event per run (satu `groupBy` untuk seluruh halaman), errorCode,
+  waktu mulai/selesai.
+- `listAgentSummaries(db)`: ringkasan per (agentId, agentVersion) — total
+  run + run terakhir, diurutkan terbanyak.
+- Route `GET /api/kawan/v1/admin/agent-runs` (role admin, pola FORBIDDEN
+  sama dengan route admin lain): tanpa `?agentId` → ringkasan; dengan →
+  halaman run.
+- TANPA tabel audit baru (rencana §K8): sumber = TaskRun + TaskEvent yang
+  sudah ada; migrasi tidak diperlukan.
+
+### Privasi
+- Payload `TaskEvent` TIDAK PERNAH dikembalikan — hanya `_count`; tes
+  menanam teks "PROMPT RAHASIA" di payload dan meng-assert ia tidak muncul
+  di JSON hasil.
+- Logger route tetap requestId/route/latency/result tanpa isi prompt.
+
+### Tes (`agent-runs.test.ts`, 5)
+- Kelompok per agent benar (run agent lain tidak bocor); eventCount cocok.
+- agentId kosong → default; judul task ikut; payload tak keluar.
+- limit diklem 100; urutan terbaru dulu.
+- Ringkasan per (agent, versi) urut total; lastRunAt terisi.
+- Belum ada run → ringkasan kosong.
+
+### Gate K8
+tsc 0 · eslint 0/0 · npm test 1291/118 · build 0.
