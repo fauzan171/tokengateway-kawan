@@ -205,6 +205,9 @@ export function ChatView({
   }, [initialChatId]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeGenId, setActiveGenId] = useState<string | null>(null);
+  // Progres yang terlihat (bukan animasi): fase nyata dari server, mis.
+  // "Mencari di web", "Membaca 2 halaman sumber", "Menjalankan 1 tool".
+  const [phases, setPhases] = useState<{ phase: string; label: string }[]>([]);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState(false);
@@ -401,6 +404,8 @@ export function ChatView({
     assistantMessageId: string
   ) {
     setIsStreaming(true);
+    // Fase dari generasi sebelumnya tidak boleh menempel ke jawaban baru.
+    setPhases([]);
     setActiveGenId(generationId);
     setErrorState(null);
 
@@ -469,6 +474,13 @@ export function ChatView({
                       };
                     })
                   );
+                }
+              } catch {}
+            } else if (eventType === "phase" && dataStr) {
+              try {
+                const payload = JSON.parse(dataStr) as { phase?: string; label?: string };
+                if (typeof payload.phase === "string" && typeof payload.label === "string") {
+                  setPhases((prev) => [...prev, { phase: payload.phase!, label: payload.label! }]);
                 }
               } catch {}
             } else if (eventType === "done") {
@@ -968,9 +980,11 @@ export function ChatView({
                         <p className="whitespace-pre-wrap break-words">{text}</p>
                       )
                     ) : images.length > 0 ? null : m.status === "streaming" ? (
+                      // Progres nyata: label fase terakhir dari server. Bila belum
+                      // ada fase (mis. tepat setelah kirim), jatuh ke "berpikir".
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
                         <span className="size-2 rounded-full bg-primary animate-pulse" />
-                        {t("chat.thinking")}
+                        {phases.length > 0 ? phases[phases.length - 1]!.label : t("chat.thinking")}
                       </span>
                     ) : (
                       <span className="text-muted-foreground italic">{t("chat.noReply")}</span>

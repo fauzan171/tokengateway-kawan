@@ -172,7 +172,10 @@ describe("runGeneration", () => {
     const kinds = (
       await db.generationEvent.findMany({ where: { generationId }, orderBy: { seq: "asc" } })
     ).map((event) => event.kind);
-    expect(kinds).toEqual(["error"]);
+    // Fase "generating" sudah terkirim sebelum gateway menjawab 401 — itu
+    // informasi yang benar bagi UI. Yang penting: tidak ada part teks dan
+    // tidak ada usage yang dicatat.
+    expect(kinds).toEqual(["phase", "error"]);
     expect(await db.usageRecord.count({ where: { userId } })).toBe(0);
   });
 
@@ -244,6 +247,22 @@ describe("runGeneration", () => {
       where: { generationId, kind: "done" },
     });
     expect(JSON.parse(done.payloadJson)).toEqual({ status: "stopped" });
+  });
+
+  it("mengirim event fase yang bisa ditampilkan UI, bukan animasi", async () => {
+    const { generationId } = await seedGeneration("usage-present");
+    await run(generationId);
+
+    const phases = await db.generationEvent.findMany({
+      where: { generationId, kind: "phase" },
+      orderBy: { seq: "asc" },
+    });
+    // Minimal satu fase nyata sebelum jawaban ditulis.
+    expect(phases.length).toBeGreaterThan(0);
+    const generating = phases
+      .map((event) => JSON.parse(event.payloadJson) as { phase: string; label: string })
+      .find((payload) => payload.phase === "generating");
+    expect(generating?.label).toBe("Menulis jawaban");
   });
 
   it("400 upstream → INVALID_UPSTREAM_REQUEST, status tercatat tanpa rahasia (AUD-02)", async () => {
@@ -368,13 +387,13 @@ describe("runGeneration", () => {
     expect(assistant.status).toBe("complete");
     const parsed = JSON.parse(assistant.contentJson) as { parts: { kind: string; text?: string }[] };
     expect(parsed.parts.map((p) => p.text ?? "").join("")).toBe("Jawaban tanpa DONE.");
-    // Bukan error, jadi tidak boleh ada catatan truncated.
-    // FIX-06: satu-satunya note yang boleh muncul di chat tanpa dokumen adalah
-    // rag-degraded (retrieval memang kosong) — bukan truncated/web-search-unavailable.
+    // Bukan error, jadi tidak boleh ada catatan truncated/rag-degraded.
+    // Chat tanpa dokumen TIDAK menghasilkan note: tidak ada yang rusak, jadi
+    // tidak ada yang perlu dilaporkan. Dulu ada "rag-degraded" palsu di sini.
     const notes = parsed.parts.filter(
       (p): p is { kind: "note"; code: string } => p.kind === "note" && "code" in p,
     );
-    expect(notes.every((n) => n.code === "rag-degraded")).toBe(true);
+    expect(notes).toEqual([]);
 
     const usage = await db.usageRecord.findFirstOrThrow({ where: { userId } });
     expect(usage.totalTokens).toBe(18);

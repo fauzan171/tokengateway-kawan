@@ -917,9 +917,18 @@ export async function runGeneration(
   let keywordOnly = false;
   // Di luar `try` supaya sitasi bisa dipetakan setelah streaming selesai.
   let usedChunks: RetrievedChunk[] = [];
-  // FIX-06: retrieval tidak menghasilkan apa pun / gagal — dilaporkan, bukan diam.
+  // FIX-06: retrieval GAGAL — dilaporkan, bukan diam.
+  //
+  // Bukan sama dengan "chat ini tidak punya dokumen". Dulu `chunks.length === 0`
+  // dianggap degradasi, sehingga SETIAP chat tanpa lampiran menampilkan
+  // "sebagian rujukan tidak tersedia" — peringatan palsu yang membuat pengguna
+  // mengira ada yang rusak. Sekarang diperiksa dulu apakah memang ada dokumen
+  // yang bisa diambil.
   let ragDegraded = false;
-  if (query.trim() !== "") {
+  const attachedDocuments = await db.chatDocument.count({
+    where: { chatId: chat.id, chat: { userId: chat.userId } },
+  });
+  if (query.trim() !== "" && attachedDocuments > 0) {
     // FIX-06: query retrieval = pesan terakhir + judul chat, bukan pesan saja.
     const retrievalQuery = chat.title ? `${query}\n${chat.title}` : query;
     const embedding = readEmbeddingConfig();
@@ -934,8 +943,9 @@ export async function runGeneration(
       usedChunks = chunks;
       contextSystem = buildContext(chunks).system;
       keywordOnly = !embedding && chunks.length > 0;
-      // FIX-06: degradasi tidak diam-diam (audit T09).
-      if (chunks.length === 0) ragDegraded = true;
+      // Dokumen ada tetapi tidak ada potongan yang cocok: itu hasil pencarian
+      // kosong yang sah, bukan degradasi.
+      if (chunks.length === 0) ragDegraded = false;
     } catch {
       // Provider embedding mati: ulangi tanpa vektor supaya dokumen tetap
       // terpakai lewat kata kunci, dan tandai mode degradasi di UI.
@@ -949,7 +959,7 @@ export async function runGeneration(
         usedChunks = chunks;
         contextSystem = buildContext(chunks).system;
         keywordOnly = chunks.length > 0;
-        if (chunks.length === 0) ragDegraded = true;
+        if (chunks.length === 0) ragDegraded = false;
       } catch {
         // Dokumen rusak: jawab tanpa rujukan, tapi tandai degradasi.
         ragDegraded = true;
@@ -964,6 +974,9 @@ export async function runGeneration(
   let searchFailed = false;
   const lastUserRow = [...ancestry].reverse().find((row) => row.role === "user");
   if (query.trim() !== "" && webSearchRequested(lastUserRow?.contentJson)) {
+    // Progres yang terlihat: pengguna tahu apa yang sedang dikerjakan, bukan
+    // hanya "sedang berpikir". Fase ini benar-benar terjadi — bukan animasi.
+    await publishEvent(db, generationId, "phase", { phase: "searching", label: "Mencari di web" });
     try {
       sources = await webSearch(query, {
         limit: 5,
@@ -971,13 +984,27 @@ export async function runGeneration(
       });
       // FIX-10: baca halaman teratas supaya sitasi punya isi nyata; link mati
       // ditandai, bukan diaku hidup.
+      await publishEvent(db, generationId, "phase", {
+        phase: "reading",
+        label: `Membaca ${Math.min(sources.length, 2)} halaman sumber`,
+        data: { sources: sources.length },
+      });
       enriched = await enrichSources(sources, {
         limit: 2,
         outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
       });
+      await publishEvent(db, generationId, "phase", {
+        phase: "search-done",
+        label: `${sources.length} sumber ditemukan, ${enriched.length} halaman terbaca`,
+        data: { sources: sources.length, read: enriched.length },
+      });
     } catch {
       // Isi query tidak dicatat: hanya penanda bahwa pencarian gagal.
       searchFailed = true;
+      await publishEvent(db, generationId, "phase", {
+        phase: "search-failed",
+        label: "Pencarian web gagal; menjawab tanpa sumber",
+      });
     }
   }
   const searchSystem = buildSearchSystem(enriched.length > 0 ? enriched : sources) ?? null;
@@ -1031,6 +1058,16 @@ export async function runGeneration(
     await stopGeneration(db, generationId, generation.assistantMessageId, text, new Date());
     return;
   }
+
+  // Fase generasi: pengguna melihat bahwa model benar-benar dipanggil.
+  // Ditulis lewat fence yang sama dengan part: worker yang sudah kehilangan
+  // lease berhenti diam-diam (perilaku FIX-02), bukan melempar ke pemanggil.
+  if (fence && !(await fence.held())) return;
+  await publishEvent(db, generationId, "phase", {
+    phase: "generating",
+    label: "Menulis jawaban",
+    data: { model: resolution.model },
+  });
 
   let usage: StreamUsage | null;
   let finishReason: string | null;
@@ -1140,6 +1177,14 @@ export async function runGeneration(
   let docTruncated = false;
   let docUnknownBlocks = 0;
   const toolCalls = assembleToolCalls(toolFragments);
+  if (toolCalls.length > 0) {
+    // Tool call nyata: sebutkan nama tool yang dijalankan, bukan animasi.
+    await publishEvent(db, generationId, "phase", {
+      phase: "tools",
+      label: `Menjalankan ${toolCalls.length} tool`,
+      data: { tools: toolCalls.slice(0, 3).map((call) => call.name) },
+    });
+  }
   for (const call of toolCalls.slice(0, 3)) {
     if (call.name === GENERATE_DOCUMENT_TOOL_NAME) {
       try {
