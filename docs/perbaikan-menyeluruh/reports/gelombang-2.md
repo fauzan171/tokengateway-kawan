@@ -25,7 +25,7 @@ Status: **verified** (QA lulus; review diselesaikan kapten karena reviewer gagal
 npx tsc --noEmit -p tsconfig.json   → 0 error
 npx eslint <berkas berubah>         → 0 error, 0 warning
 node scripts/check-migrations.mjs   → OK (2 provider)
-npm test                            → 1224 passed (109 file)
+npm test                            → 1229 passed (109 file) setelah tindak lanjut W2
 ```
 
 ## Temuan yang diterima apa adanya

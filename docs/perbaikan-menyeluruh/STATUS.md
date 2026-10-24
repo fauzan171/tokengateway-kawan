@@ -68,7 +68,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | `node scripts/check-migrations.mjs` | OK (2 provider, init dibekukan, urutan sama) |
 | `python3 tasks/agent-v1/check_docs.py` | LULUS, 0 pelanggaran |
 | `python3 tasks/nontechnical-v1/tools/check_docs.py` | LULUS |
-| `npm test` | **109 file, 1226 test lulus**, exit 0 (gelombang 2 + fix chat `c18ed34`) |
+| `npm test` | **109 file, 1229 test lulus**, exit 0 (`ab12b97`: gelombang 2 + fix chat + tindak lanjut W2) |
 | `npx eslint` 8 berkas berubah | exit 0 |
 | `npm run build` | **exit 0** — gagal sekali karena cache `.next` korup (`WasmHash._updateWithBuffer`), hijau setelah `rm -rf .next` |
 | Deploy live (`c18ed34`) | `npm run build` 0, `pm2 restart kawan kawan-worker`, health `{"ready":true}`, `/api/kawan/v1/agents` 401 |
