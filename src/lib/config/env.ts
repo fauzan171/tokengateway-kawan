@@ -61,6 +61,15 @@ export type Config = {
    */
   modelCacheTtlSeconds: number;
   /**
+   * Gateway bawaan yang disediakan operator (mis. 9Router di VPS ini).
+   *
+   * Diisi `DEFAULT_GATEWAY_URL` + `DEFAULT_GATEWAY_KEY`. Bila kosong, tombol
+   * "Pakai langganan" tidak ditampilkan dan formulir hanya menerima isian
+   * manual. Key disimpan di server dan TIDAK pernah dikirim ke browser;
+   * koneksi yang dibuat lewat jalur ini memakai key itu saat mengobrol.
+   */
+  defaultGateway?: { baseUrl: string; apiKey: string } | null;
+  /**
    * Host yang diizinkan operator sebagai tujuan keluar, di luar aturan SSRF
    * bawaan (SDD-5.3).
    *
@@ -76,6 +85,8 @@ export type Config = {
    * jaringan lokal dapat menyalakannya secara sadar.
    */
   allowInsecureHttp: boolean;
+  /** Batas ukuran berkas dokumen yang boleh diunggah, dalam byte (REQ-NT-60). */
+  maxUploadBytes: number;
 };
 
 type Env = Record<string, string | undefined>;
@@ -91,6 +102,9 @@ export const DEFAULT_PASSWORD_RESET_TTL_SECONDS = 60 * 60;
 
 /** Bawaan masa berlaku cache daftar model: 10 menit (REQ-NT-20). */
 export const DEFAULT_MODEL_CACHE_TTL_SECONDS = 10 * 60;
+
+/** Bawaan batas unggah dokumen: 10 MB (REQ-NT-60). */
+export const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** ID kunci bawaan saat operator belum mengatur rotasi (SDD-5.2). */
 export const DEFAULT_ENCRYPTION_KEY_ID = "v1";
@@ -111,6 +125,24 @@ function parseAllowlist(raw: string | undefined): string[] {
     .split(LIST_SEPARATOR)
     .map((item) => item.trim().toLowerCase())
     .filter((item) => item !== "");
+}
+
+/**
+ * Gateway bawaan operator. Keduanya wajib terisi bersama: URL tanpa key akan
+ * gagal di provider, key tanpa URL tidak punya tujuan.
+ */
+function parseDefaultGateway(
+  env: Env,
+  problems: string[],
+): { baseUrl: string; apiKey: string } | null {
+  const baseUrl = (env["DEFAULT_GATEWAY_URL"] ?? "").trim();
+  const apiKey = (env["DEFAULT_GATEWAY_KEY"] ?? "").trim();
+  if (baseUrl === "" && apiKey === "") return null;
+  if (baseUrl === "" || apiKey === "") {
+    problems.push("DEFAULT_GATEWAY_URL dan DEFAULT_GATEWAY_KEY harus diisi bersama.");
+    return null;
+  }
+  return { baseUrl, apiKey };
 }
 
 /** Penanda boolean dari env. Hanya `"true"`/`"1"` yang menyalakan; nilai lain
@@ -237,6 +269,13 @@ export function loadConfig(env: Env = process.env): Config {
     problems,
   );
 
+  const maxUploadBytes = checkPositiveInt(
+    env["MAX_UPLOAD_BYTES"],
+    DEFAULT_MAX_UPLOAD_BYTES,
+    "MAX_UPLOAD_BYTES",
+    problems,
+  );
+
   const encryptionKeyId = (env["ENCRYPTION_KEY_ID"] ?? "").trim() || DEFAULT_ENCRYPTION_KEY_ID;
 
   // Salah satu variabel email terisi (tidak hanya spasi) = operator sudah
@@ -258,5 +297,7 @@ export function loadConfig(env: Env = process.env): Config {
     modelCacheTtlSeconds,
     outboundAllowlist: parseAllowlist(env["OUTBOUND_ALLOWLIST"]),
     allowInsecureHttp: checkBoolean(env["ALLOW_INSECURE_HTTP"]),
+    defaultGateway: parseDefaultGateway(env, problems),
+    maxUploadBytes,
   };
 }

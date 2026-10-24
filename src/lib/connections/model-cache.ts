@@ -40,6 +40,38 @@ export type PutCachedModelsInput = {
   now: Date;
 };
 
+export type ModelResolution =
+  | { ok: true; model: string; fallback: boolean }
+  | { ok: false; message: string };
+
+/**
+ * Memilih model untuk satu generasi (audit A01).
+ *
+ * Pilihan pengguna (`Chat.modelRef`) menang tanpa syarat; model bawaan hanya
+ * dipakai bila chat belum pernah memilih, dan `fallback: true` memberitahu
+ * pemanggil supaya melaporkannya — bukan mengganti model diam-diam.
+ *
+ * Bila daftar model ter-cache tersedia dan tidak memuat model pilihan, hasilnya
+ * `ok: false` supaya pemanggil melaporkan `MODEL_UNAVAILABLE`. `available ===
+ * null` berarti belum pernah diprobe: itu bukan bukti model tidak ada.
+ */
+export function resolveModel(input: {
+  modelRef: string | null;
+  available: readonly GatewayModel[] | null;
+  defaultModel: string;
+}): ModelResolution {
+  if (input.modelRef === null || input.modelRef === "") {
+    return { ok: true, model: input.defaultModel, fallback: true };
+  }
+  if (input.available !== null && !input.available.some((model) => model.id === input.modelRef)) {
+    return {
+      ok: false,
+      message: `Model "${input.modelRef}" tidak tersedia di koneksi aktif. Pilih model lain.`,
+    };
+  }
+  return { ok: true, model: input.modelRef, fallback: false };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

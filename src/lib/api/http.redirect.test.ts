@@ -6,10 +6,10 @@ let fixture: ProviderFixture;
 beforeAll(async () => { fixture = await startProviderFixture(); });
 afterAll(async () => { await fixture.close(); });
 
-it("menolak redirect discovery tanpa menghubungi target redirect", async () => {
+it("menolak redirect lintas host tanpa menghubungi target redirect", async () => {
   await expect(fetchJson(`${fixture.baseUrl}/models`, {
     headers: { "x-kawan-scenario": "redirect", authorization: "Bearer canary-redirect" },
     outbound: { allowInsecureHttp: true, allowlist: [new URL(fixture.baseUrl).host] },
-  })).rejects.toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
+  })).rejects.toMatchObject({ code: "BAD_URL" });
   expect(fixture.requests.map((request) => request.path)).toEqual(["/models"]);
 });

@@ -16,14 +16,14 @@ import { useId, useState, type FormEvent } from "react";
 import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
-
-const NETWORK_MESSAGE = "Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.";
+import { useT } from "@/lib/i18n/context";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 const FIELDS = [
-  { name: "currentPassword", label: "Kata sandi saat ini", autoComplete: "current-password" },
-  { name: "newPassword", label: "Kata sandi baru", autoComplete: "new-password" },
-  { name: "confirmPassword", label: "Ulangi kata sandi baru", autoComplete: "new-password" },
-] as const;
+  { name: "currentPassword", label: "password.current", autoComplete: "current-password" },
+  { name: "newPassword", label: "password.new", autoComplete: "new-password" },
+  { name: "confirmPassword", label: "password.confirmNew", autoComplete: "new-password" },
+] as const satisfies readonly { name: string; label: MessageKey; autoComplete: string }[];
 
 type FieldName = (typeof FIELDS)[number]["name"];
 
@@ -34,6 +34,7 @@ const EMPTY: Record<FieldName, string> = {
 };
 
 export function ChangePasswordForm() {
+  const t = useT();
   const fieldId = useId();
   const [values, setValues] = useState<Record<FieldName, string>>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
@@ -54,8 +55,8 @@ export function ChangePasswordForm() {
     setSuccess(null);
 
     if (values.newPassword !== values.confirmPassword) {
-      setErrors({ confirmPassword: "Kata sandi tidak cocok." });
-      setFormError("Periksa kembali isian yang ditandai.");
+      setErrors({ confirmPassword: t("password.mismatch") });
+      setFormError(t("common.checkFieldsAgain"));
       return;
     }
 
@@ -72,7 +73,7 @@ export function ChangePasswordForm() {
 
       if (!response.ok) {
         if (payload?.fields) setErrors(payload.fields as Partial<Record<FieldName, string>>);
-        setFormError(payload?.error ?? "Kata sandi tidak dapat diubah.");
+        setFormError(payload?.error ?? t("password.changeFailed"));
         setPending(false);
         return;
       }
@@ -80,13 +81,13 @@ export function ChangePasswordForm() {
       const revoked = payload?.revokedSessions ?? 0;
       setSuccess(
         revoked > 0
-          ? `Kata sandi berhasil diubah. ${revoked} perangkat lain dikeluarkan.`
-          : "Kata sandi berhasil diubah. Tidak ada perangkat lain yang sedang masuk.",
+          ? t("password.changedWithRevoked", { count: revoked })
+          : t("password.changedNoRevoked"),
       );
       setValues(EMPTY);
       setPending(false);
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
       setPending(false);
     }
   }
@@ -102,7 +103,7 @@ export function ChangePasswordForm() {
         return (
           <div key={field.name}>
             <label htmlFor={inputId} className="block text-sm font-medium">
-              {field.label}
+              {t(field.label)}
             </label>
             <input
               id={inputId}
@@ -153,10 +154,10 @@ export function ChangePasswordForm() {
         {pending ? (
           <>
             <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
-            Menyimpan…
+            {t("common.saving")}
           </>
         ) : (
-          "Simpan kata sandi baru"
+          t("password.save")
         )}
       </Button>
     </form>

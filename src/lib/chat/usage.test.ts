@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import type { Db } from "@/lib/db";
-import { recordUsage, summarizeUsage, usageForChat } from "./usage";
+import { recordUsage, summarizeUsage, usageByDay, usageByModel, usageCsv, usageForChat } from "./usage";
 
 let temp: TempDb;
 let db: Db;
@@ -201,5 +201,112 @@ describe("usageForChat", () => {
 
   it("chat tidak ada → []", async () => {
     expect(await usageForChat(db, "tidak-ada", userId)).toEqual([]);
+  });
+});
+
+describe("usageByDay", () => {
+  async function seed(model: string, at: string, usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null) {
+    const row = await recordUsage(db, { userId, model, usage });
+    await db.usageRecord.update({ where: { id: row.id }, data: { createdAt: new Date(at) } });
+  }
+
+  it("dua baris di hari sama → satu baris, token dijumlah", async () => {
+    await seed("a", "2026-01-02T08:00:00Z", { promptTokens: 1, completionTokens: 2, totalTokens: 3 });
+    await seed("b", "2026-01-02T20:00:00Z", { promptTokens: 4, completionTokens: 5, totalTokens: 9 });
+
+    const { reported, rows } = await usageByDay(db, {
+      userId,
+      from: new Date("2026-01-01T00:00:00Z"),
+      to: new Date("2026-01-31T00:00:00Z"),
+    });
+
+    expect(reported).toBe(true);
+    expect(rows).toEqual([
+      { day: "2026-01-02", promptTokens: 5, completionTokens: 7, totalTokens: 12, unreported: 0 },
+    ]);
+  });
+
+  it("baris reported=0 masuk unreported, bukan token", async () => {
+    await seed("a", "2026-01-02T08:00:00Z", { promptTokens: 1, completionTokens: 1, totalTokens: 2 });
+    await seed("a", "2026-01-02T09:00:00Z", null);
+
+    const { rows } = await usageByDay(db, {
+      userId,
+      from: new Date("2026-01-01T00:00:00Z"),
+      to: new Date("2026-01-31T00:00:00Z"),
+    });
+
+    expect(rows[0]).toMatchObject({ totalTokens: 2, unreported: 1 });
+  });
+
+  it("semua baris reported=0 → reported=false", async () => {
+    await seed("a", "2026-01-02T08:00:00Z", null);
+    await seed("b", "2026-01-03T08:00:00Z", null);
+
+    const result = await usageByDay(db, {
+      userId,
+      from: new Date("2026-01-01T00:00:00Z"),
+      to: new Date("2026-01-31T00:00:00Z"),
+    });
+
+    expect(result.reported).toBe(false);
+    expect(result.rows.every((row) => row.totalTokens === 0)).toBe(true);
+  });
+
+  it("tabel kosong → reported=true, rows=[]", async () => {
+    const result = await usageByDay(db, {
+      userId,
+      from: new Date("2026-01-01T00:00:00Z"),
+      to: new Date("2026-01-31T00:00:00Z"),
+    });
+    expect(result).toEqual({ reported: true, rows: [] });
+  });
+});
+
+describe("usageByModel", () => {
+  it("mengelompokkan per model dan mengurutkan total menurun", async () => {
+    await recordUsage(db, { userId, model: "kecil", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
+    await recordUsage(db, { userId, model: "besar", usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 } });
+    await recordUsage(db, { userId, model: "besar", usage: null });
+
+    const { reported, rows } = await usageByModel(db, {
+      userId,
+      from: new Date(0),
+      to: new Date("2100-01-01T00:00:00Z"),
+    });
+
+    expect(reported).toBe(true);
+    expect(rows.map((row) => row.model)).toEqual(["besar", "kecil"]);
+    expect(rows[0]).toEqual({ model: "besar", promptTokens: 5, completionTokens: 5, totalTokens: 10, unreported: 1 });
+  });
+});
+
+describe("usageCsv", () => {
+  const base = {
+    id: "u1",
+    chatId: null,
+    reported: true,
+    createdAt: "2026-01-02T08:00:00.000Z",
+  };
+
+  it("header persis, BOM di awal, akhir baris CRLF", () => {
+    const csv = usageCsv([]);
+    expect(csv).toBe(
+      "﻿created_at,model,prompt_tokens,completion_tokens,total_tokens,reported\r\n",
+    );
+  });
+
+  it("nilai null → sel kosong, bukan 0", () => {
+    const csv = usageCsv([
+      { ...base, model: "m", promptTokens: null, completionTokens: null, totalTokens: null, reported: false },
+    ]);
+    expect(csv.split("\r\n")[1]).toBe("2026-01-02T08:00:00.000Z,m,,,,false");
+  });
+
+  it("model dengan koma dan quote dikutip, quote di-escape", () => {
+    const csv = usageCsv([
+      { ...base, model: 'a,b"c', promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+    ]);
+    expect(csv.split("\r\n")[1]).toBe('2026-01-02T08:00:00.000Z,"a,b""c",1,2,3,true');
   });
 });

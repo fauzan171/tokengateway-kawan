@@ -14,7 +14,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Db } from "@/lib/db";
-import { isIdempotentKind, type JobKind } from "./kinds";
+import { isKnownKind, isIdempotentKind, type JobKind } from "./kinds";
 
 /** Lease default. Heartbeat memperpanjangnya sebelum habis. */
 export const LEASE_MS = 60_000;
@@ -49,6 +49,12 @@ export type EnqueueInput = {
 };
 
 export async function enqueue(db: Db, input: EnqueueInput): Promise<string> {
+  // Kind di luar kontrak `JOB_KINDS` adalah salah ketik pemanggil: tolak di
+  // sini, jangan biarkan mengendap `queued` tanpa pernah diklaim (FIX-24/T14).
+  // Kind yang dikenal tetapi belum ber-handler ditolak saat worker start.
+  if (!isKnownKind(input.kind)) {
+    throw new Error(`Kind job "${input.kind}" tidak dikenal.`);
+  }
   const id = input.id ?? randomUUID();
   await db.job.create({
     data: {
@@ -125,17 +131,28 @@ export async function claim(db: Db, options: ClaimOptions): Promise<Claim | null
 }
 
 /** Menandai job mulai dikerjakan. Tidak wajib; `leased` sudah cukup untuk
- *  menyatakan kepemilikan. */
-export async function markRunning(db: Db, claim: Claim): Promise<boolean> {
+ *  menyatakan kepemilikan. Lease yang sudah kedaluwarsa tidak dihidupkan. */
+export async function markRunning(db: Db, claim: Claim, now = new Date()): Promise<boolean> {
   const { count } = await db.job.updateMany({
-    where: { id: claim.id, leaseToken: claim.leaseToken, state: "leased" },
+    where: {
+      id: claim.id,
+      leaseToken: claim.leaseToken,
+      state: "leased",
+      leaseExpiresAt: { gt: now },
+    },
     data: { state: "running" },
   });
   return count === 1;
 }
 
-/** Memperpanjang lease. `false` berarti lease sudah hilang (kedaluwarsa atau
- *  diambil alih), dan worker harus berhenti. */
+/**
+ * Memperpanjang lease. `false` berarti lease sudah hilang (kedaluwarsa atau
+ * diambil alih), dan worker harus berhenti.
+ *
+ * `leaseExpiresAt: { gt: now }` adalah bagian penting: heartbeat yang datang
+ * terlambat tidak boleh menghidupkan kembali lease mati, karena job itu sudah
+ * boleh diklaim worker lain (FIX-02).
+ */
 export async function heartbeat(
   db: Db,
   claim: Claim,
@@ -143,15 +160,26 @@ export async function heartbeat(
   now = new Date(),
 ): Promise<boolean> {
   const { count } = await db.job.updateMany({
-    where: { id: claim.id, leaseToken: claim.leaseToken, state: { in: ["leased", "running"] } },
+    where: {
+      id: claim.id,
+      leaseToken: claim.leaseToken,
+      state: { in: ["leased", "running"] },
+      leaseExpiresAt: { gt: now },
+    },
     data: { heartbeatAt: now, leaseExpiresAt: new Date(now.getTime() + leaseMs) },
   });
   return count === 1;
 }
 
+/** Lease yang sudah kedaluwarsa tidak boleh menutup job sebagai sukses. */
 export async function complete(db: Db, claim: Claim, now = new Date()): Promise<boolean> {
   const { count } = await db.job.updateMany({
-    where: { id: claim.id, leaseToken: claim.leaseToken, state: { in: ["leased", "running"] } },
+    where: {
+      id: claim.id,
+      leaseToken: claim.leaseToken,
+      state: { in: ["leased", "running"] },
+      leaseExpiresAt: { gt: now },
+    },
     data: { state: "succeeded", finishedAt: now, leaseOwner: null, leaseToken: null, leaseExpiresAt: null },
   });
   return count === 1;

@@ -12,11 +12,18 @@ menjalankan prompt atau plan lama. [SDD agen lengkap](tasks/agent-v1/README.md) 
 [prompt Hermes → Claude Code](tasks/agent-v1/HERMES-PROMPT.md) menjadi panduan kelanjutan. Kemampuan agen belum diimplementasikan; belum ada
 klaim kesetaraan 100% dengan Manus.
 
+Perluasan perbaikan A–J: [audit dan rencana menyeluruh](docs/perbaikan-menyeluruh/README.md)
+memuat 24 paket kerja, pilihan teknologi, dependency dan kriteria penerimaan.
+Untuk eksekusi seluruh perluasan ini, gunakan [prompt Hermes terbaru](docs/perbaikan-menyeluruh/04-prompt-hermes.md)
+dan [brief Claude Code dengan sub-agent](docs/perbaikan-menyeluruh/05-brief-claude-code.md);
+prompt agent-v1 di atas hanya mencakup scope core lama.
+
 Status kode: fondasi/auth dan backend koneksi/chat tersedia. Backend menyediakan
 streaming SSE, edit, regenerate, continue, pesan sistem dan judul; UI chat masih
-parsial dan belum menghubungkan seluruh kemampuan tersebut. Riwayat di UI, render
-markdown, lampiran, RAG, task agent, browser, sandbox dan artefak belum tersedia.
-NT-P3 belum lulus sebagai pengalaman end-to-end lengkap.
+parsial dan belum menghubungkan seluruh kemampuan tersebut. Implementasi riwayat UI,
+Markdown, lampiran, retrieval dokumen, pencarian web kondisional dan ekspor tersedia;
+task agent, browser, sandbox dan artefak buatan asisten belum tersedia. Keberadaan
+implementasi bukan bukti seluruh alur end-to-end lulus; lihat audit terbaru di atas.
 
 Paket [`tasks/nontechnical-v1/`](tasks/nontechnical-v1/README.md) adalah baseline
 chat yang direvisi oleh scope aktif. Paket full-parity Open WebUI lainnya bersifat
@@ -80,6 +87,9 @@ valid — itu perilaku yang diinginkan (SDD-1.5), bukan bug.
 | `npm test` | Unit test (Vitest) |
 | `npm run test:e2e` | End-to-end (Playwright) |
 | `node scripts/check-migrations.mjs` | Pastikan migrasi SQLite dan PostgreSQL identik |
+| `npm run check:docs` | Konsistensi dokumen requirement ↔ work package |
+| `npm run check:licenses` | Lisensi dependensi (nol GPL/AGPL) |
+| `./scripts/backup.sh` / `./scripts/restore.sh` | Backup & restore — lihat `docs/operator.md` |
 
 ## Struktur singkat
 

@@ -271,6 +271,7 @@ export async function updateConnection(
       keyId?: string;
       status?: string;
       isActive?: number;
+      revision?: { increment: number };
     } = {};
     if (name !== undefined) data.name = name;
     if (baseUrl !== undefined) data.baseUrl = baseUrl;
@@ -294,6 +295,13 @@ export async function updateConnection(
       data.isActive = 1;
     } else if (patch.isActive === false) {
       data.isActive = 0;
+    }
+
+    // FIX-05: setiap perubahan konfigurasi menaikkan revisi. Generasi yang
+    // dipin ke revisi lama akan menolak jalan, bukan diam-diam memakai
+    // kredensial/base URL baru.
+    if (baseUrl !== undefined || apiKey !== undefined) {
+      data.revision = { increment: 1 };
     }
 
     return tx.connection.update({ where: { id }, data, select: PUBLIC_FIELDS });

@@ -21,12 +21,22 @@ export type StreamUsage = {
   totalTokens: number | null;
 };
 
+/** Satu potongan tool call dari delta. Field bisa datang di delta berbeda. */
+export type ToolCallDelta = {
+  index: number;
+  id?: string;
+  name?: string;
+  /** Potongan `arguments` — MENYAMBUNG antar delta, bukan JSON utuh. */
+  argumentsDelta?: string;
+};
+
 export type Delta = {
-  kind: "text" | "usage" | "done";
+  kind: "text" | "usage" | "done" | "tool_call";
   text?: string;
   usage?: StreamUsage;
   /** Alasan berhenti dari gateway, bila dikirim. Terisi pada delta `done`. */
   finishReason?: string | null;
+  toolCall?: ToolCallDelta;
 };
 
 export type StreamParser = {
@@ -56,6 +66,42 @@ function readText(payload: Record<string, unknown>): string | null {
   if (!isRecord(delta)) return null;
   const content = delta["content"];
   return typeof content === "string" ? content : null;
+}
+
+/**
+ * Potongan `tool_calls` dari `choices[0].delta.tool_calls`. Satu delta bisa
+ * memuat beberapa entri sekaligus, dan entri tanpa `index` angka dibuang —
+ * tanpa index, potongan tidak bisa disatukan oleh pemanggil.
+ */
+function readToolCalls(payload: Record<string, unknown>): ToolCallDelta[] {
+  const choices = payload["choices"];
+  if (!Array.isArray(choices) || choices.length === 0) return [];
+  const first = choices[0];
+  if (!isRecord(first)) return [];
+  const delta = first["delta"];
+  if (!isRecord(delta)) return [];
+  const raw = delta["tool_calls"];
+  if (!Array.isArray(raw)) return [];
+
+  const out: ToolCallDelta[] = [];
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue;
+    const index = entry["index"];
+    if (typeof index !== "number" || !Number.isInteger(index)) continue;
+
+    const call: ToolCallDelta = { index };
+    if (typeof entry["id"] === "string" && entry["id"] !== "") call.id = entry["id"];
+
+    const fn = entry["function"];
+    if (isRecord(fn)) {
+      if (typeof fn["name"] === "string" && fn["name"] !== "") call.name = fn["name"];
+      // `arguments` datang terpotong; string kosong tetap dikirim supaya
+      // pemanggil tahu delta ini milik call tersebut.
+      if (typeof fn["arguments"] === "string") call.argumentsDelta = fn["arguments"];
+    }
+    out.push(call);
+  }
+  return out;
 }
 
 /** Usage dari `payload.usage`, atau `null` bila gateway tidak melaporkannya. */
@@ -115,6 +161,10 @@ export function createStreamParser(): StreamParser {
 
       const text = readText(payload);
       if (text !== null && text !== "") out.push({ kind: "text", text });
+
+      for (const toolCall of readToolCalls(payload)) {
+        out.push({ kind: "tool_call", toolCall });
+      }
 
       const usage = readUsage(payload);
       if (usage) out.push({ kind: "usage", usage });

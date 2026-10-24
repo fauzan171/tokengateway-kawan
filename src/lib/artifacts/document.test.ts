@@ -1,0 +1,154 @@
+/**
+ * Uji FIX-12 (bagian 1/2): parseDocSchema + renderer biner via magic bytes.
+ */
+
+import { describe, expect, it } from "vitest";
+import { parseDocSchema, type DocSchema } from "./document";
+import { renderDocxBytes, renderPdfBytes, renderPptxBytes, renderXlsxBytes } from "./render-binary";
+import { renderArtifactBytesAsync } from "./render";
+
+const SAMPLE: DocSchema = {
+  title: "Laporan Bulanan",
+  blocks: [
+    { type: "heading", text: "Ringkasan", level: 1 },
+    { type: "paragraph", text: "Penjualan naik 12%." },
+    { type: "bullets", items: ["Satu", "Dua"] },
+    { type: "table", headers: ["Bulan", "Nilai"], rows: [["Jan", "10"], ["Feb", "12"]] },
+    { type: "code", text: "SELECT 1;" },
+  ],
+};
+
+describe("parseDocSchema", () => {
+  it("lima tipe blok sah lolos apa adanya", () => {
+    expect(parseDocSchema(SAMPLE)).toMatchObject(SAMPLE);
+  });
+
+  it("blok tak dikenal dibuang, blok lain tetap ada", () => {
+    const doc = parseDocSchema({
+      title: "Laporan",
+      blocks: [{ type: "video", src: "x.mp4" }, { type: "paragraph", text: "hai" }],
+    });
+    expect(doc.blocks).toEqual([{ type: "paragraph", text: "hai" }]);
+    expect(doc.unknownBlocks).toBe(1);
+  });
+
+  it("baris table yang panjangnya tidak cocok dibuang, headers utuh", () => {
+    const doc = parseDocSchema({
+      title: "L",
+      blocks: [{ type: "table", headers: ["a", "b"], rows: [["1", "2"], ["3"]] }],
+    });
+    expect(doc.blocks[0]).toMatchObject({ headers: ["a", "b"], rows: [["1", "2"]] });
+  });
+
+  it("title kosong dan blocks bukan array ditolak", () => {
+    expect(() => parseDocSchema({ title: "", blocks: [] })).toThrowError(/INVALID_DOC_SCHEMA/);
+    expect(() => parseDocSchema({ title: "x", blocks: "bukan" })).toThrowError(/INVALID_DOC_SCHEMA/);
+    expect(() => parseDocSchema("string")).toThrowError(/INVALID_DOC_SCHEMA/);
+  });
+
+  it("501 blok DIPOTONG ke 500 dan dilaporkan, bukan ditolak", () => {
+    // Ditolak berarti dokumen 600 paragraf hilang seluruhnya; yang benar adalah
+    // menyimpan 500 pertama dan memberi tahu bahwa sisanya dipotong.
+    const blocks = Array.from({ length: 501 }, () => ({ type: "paragraph", text: "x" }));
+    const parsed = parseDocSchema({ title: "t", blocks });
+    expect(parsed.blocks).toHaveLength(500);
+    expect(parsed.truncated).toBe(true);
+    expect(parseDocSchema({ title: "t", blocks: blocks.slice(0, 500) }).blocks.length).toBe(500);
+  });
+
+  it("level selain 1/2/3 dianggap 1, teks dipotong 20.000", () => {
+    const doc = parseDocSchema({
+      title: "t",
+      blocks: [{ type: "heading", text: "h", level: 9 }, { type: "paragraph", text: "a".repeat(20_001) }],
+    });
+    expect(doc.blocks[0]).toMatchObject({ level: 1 });
+    expect((doc.blocks[1] as { text: string }).text.length).toBe(20_000);
+  });
+});
+
+describe("batas kanonik DocSchema", () => {
+  it("hasil memuat schemaVersion 1 dan default truncated/unknownBlocks", () => {
+    const doc = parseDocSchema(SAMPLE);
+    expect(doc.schemaVersion).toBe(1);
+    expect(doc.truncated).toBe(false);
+    expect(doc.unknownBlocks).toBe(0);
+    expect(doc.title).toBe(SAMPLE.title);
+  });
+
+  it("blok tak dikenal dihitung di unknownBlocks", () => {
+    const doc = parseDocSchema({
+      title: "t",
+      blocks: [{ type: "video" }, { type: "gambar" }, null, { type: "paragraph", text: "ok" }],
+    });
+    expect(doc.unknownBlocks).toBe(3);
+    expect(doc.blocks.length).toBe(1);
+  });
+
+  it("bullets dipotong 100 dan dilaporkan", () => {
+    const items = Array.from({ length: 150 }, (_, i) => `i${i}`);
+    const doc = parseDocSchema({ title: "t", blocks: [{ type: "bullets", items }] });
+    expect(doc.blocks[0]).toMatchObject({ items: items.slice(0, 100) });
+    expect(doc.truncated).toBe(true);
+  });
+
+  it("teks per blok dipotong 20.000 tanpa melempar", () => {
+    const doc = parseDocSchema({ title: "t", blocks: [{ type: "paragraph", text: "a".repeat(20_001) }] });
+    expect((doc.blocks[0] as { text: string }).text.length).toBe(20_000);
+    expect(doc.truncated).toBe(true);
+  });
+
+  it("tabel dipotong 12 kolom dan 2.000 baris, sel 500 char", () => {
+    const headers = Array.from({ length: 20 }, (_, i) => `h${i}`);
+    const rows = Array.from({ length: 2_500 }, () => headers.map(() => "x".repeat(600)));
+    const doc = parseDocSchema({ title: "t", blocks: [{ type: "table", headers, rows }] });
+    const table = doc.blocks[0] as { headers: string[]; rows: string[][] };
+    expect(table.headers.length).toBe(12);
+    expect(table.rows.length).toBe(2_000);
+    expect(table.rows[0][0].length).toBe(500);
+    expect(doc.truncated).toBe(true);
+  });
+
+  it("total dokumen dibatasi 200.000 char dan dilaporkan", () => {
+    const blocks = Array.from({ length: 15 }, () => ({ type: "paragraph", text: "a".repeat(20_000) }));
+    const doc = parseDocSchema({ title: "t", blocks });
+    const total = doc.blocks.reduce((n, b) => n + ("text" in b ? b.text.length : 0), 0);
+    expect(total).toBeLessThanOrEqual(200_000);
+    expect(doc.truncated).toBe(true);
+  });
+});
+
+describe("renderer biner (magic bytes)", () => {
+  it("pdf diawali %PDF-", async () => {
+    const bytes = await renderPdfBytes(SAMPLE);
+    expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    expect(bytes.length).toBeGreaterThan(1000);
+  });
+
+  it("docx diawali PK dan memuat word/document.xml", async () => {
+    const bytes = await renderDocxBytes(SAMPLE);
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("PK\x03\x04");
+    expect(bytes.length).toBeGreaterThan(1000);
+    expect(bytes.toString("latin1")).toContain("word/document.xml");
+  });
+
+  it("xlsx diawali PK dan memuat nama internal xl/", async () => {
+    const bytes = await renderXlsxBytes(SAMPLE);
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("PK\x03\x04");
+    expect(bytes.length).toBeGreaterThan(1000);
+    expect(bytes.toString("latin1")).toContain("xl/");
+  });
+
+  it("pptx diawali PK dan memuat ppt/", async () => {
+    const bytes = await renderPptxBytes(SAMPLE);
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("PK\x03\x04");
+    expect(bytes.length).toBeGreaterThan(1000);
+    expect(bytes.toString("latin1")).toContain("ppt/");
+  });
+
+  it("renderArtifactBytesAsync: format biner terisi, varian teks untuk biner ditolak", async () => {
+    await expect(renderArtifactBytesAsync({ format: "pdf", doc: SAMPLE })).resolves.toBeInstanceOf(Buffer);
+    await expect(
+      renderArtifactBytesAsync({ format: "pdf", content: "teks" } as never),
+    ).rejects.toThrowError(/INVALID_DOC_SCHEMA/);
+  });
+});

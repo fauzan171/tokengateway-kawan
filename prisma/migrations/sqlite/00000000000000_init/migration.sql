@@ -128,21 +128,51 @@ CREATE TABLE "ModelCache" (
 
 CREATE UNIQUE INDEX "ModelCache_connectionId_key" ON "ModelCache"("connectionId");
 
+CREATE TABLE "Folder" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "Folder_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "Folder_userId_idx" ON "Folder"("userId");
+
 CREATE TABLE "Chat" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "modelRef" TEXT,
     "currentMessageId" TEXT,
+    "folderId" TEXT,
     "pinned" INTEGER NOT NULL DEFAULT 0,
     "archived" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL,
     CONSTRAINT "Chat_userId_fkey" FOREIGN KEY ("userId")
-        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Chat_folderId_fkey" FOREIGN KEY ("folderId")
+        REFERENCES "Folder" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 CREATE INDEX "Chat_userId_updatedAt_idx" ON "Chat"("userId", "updatedAt");
+CREATE INDEX "Chat_userId_folderId_idx" ON "Chat"("userId", "folderId");
+
+CREATE TABLE "ShareLink" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "chatId" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "snapshotJson" TEXT NOT NULL,
+    "expiresAt" TEXT,
+    "revokedAt" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "ShareLink_chatId_fkey" FOREIGN KEY ("chatId")
+        REFERENCES "Chat" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "ShareLink_token_key" ON "ShareLink"("token");
+CREATE INDEX "ShareLink_chatId_idx" ON "ShareLink"("chatId");
 
 CREATE TABLE "ChatMessage" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -232,3 +262,68 @@ CREATE TABLE "IdempotencyKey" (
 
 CREATE UNIQUE INDEX "IdempotencyKey_userId_key_key" ON "IdempotencyKey"("userId", "key");
 CREATE INDEX "IdempotencyKey_createdAt_idx" ON "IdempotencyKey"("createdAt");
+
+CREATE TABLE "Document" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "filename" TEXT NOT NULL,
+    "mime" TEXT NOT NULL,
+    "sizeBytes" INTEGER NOT NULL,
+    "storageKey" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'queued',
+    "errorCode" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "Document_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "Document_userId_createdAt_idx" ON "Document"("userId", "createdAt");
+CREATE INDEX "Document_status_idx" ON "Document"("status");
+
+CREATE TABLE "DocumentChunk" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "documentId" TEXT NOT NULL,
+    "ordinal" INTEGER NOT NULL,
+    "text" TEXT NOT NULL,
+    "page" INTEGER,
+    "section" TEXT,
+    "embedding" TEXT,
+    "createdAt" TEXT NOT NULL,
+    CONSTRAINT "DocumentChunk_documentId_fkey" FOREIGN KEY ("documentId")
+        REFERENCES "Document" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "DocumentChunk_documentId_ordinal_key" ON "DocumentChunk"("documentId", "ordinal");
+CREATE INDEX "DocumentChunk_documentId_idx" ON "DocumentChunk"("documentId");
+
+CREATE TABLE "Prompt" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT,
+    "title" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "variablesJson" TEXT,
+    "enabled" INTEGER NOT NULL DEFAULT 1,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL,
+    CONSTRAINT "Prompt_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "Prompt_userId_idx" ON "Prompt"("userId");
+CREATE INDEX "Prompt_enabled_idx" ON "Prompt"("enabled");
+
+CREATE TABLE "UserSetting" (
+    "userId" TEXT NOT NULL PRIMARY KEY,
+    "theme" TEXT NOT NULL DEFAULT 'system',
+    "locale" TEXT NOT NULL DEFAULT 'id',
+    "fontScale" INTEGER NOT NULL DEFAULT 100,
+    "sendOnEnter" INTEGER NOT NULL DEFAULT 1,
+    "updatedAt" TIMESTAMP NOT NULL,
+    CONSTRAINT "UserSetting_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE "AppConfig" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "registrationOpen" INTEGER NOT NULL DEFAULT 1,
+    "updatedAt" TIMESTAMP NOT NULL
+);

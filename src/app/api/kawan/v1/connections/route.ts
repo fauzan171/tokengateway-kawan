@@ -95,11 +95,22 @@ export async function POST(request: Request): Promise<Response> {
     const config = loadConfig();
     const db = await getDb(config.databaseUrl);
 
+    // Jalur "pakai langganan": URL dan key datang dari konfigurasi server,
+    // bukan dari browser. Key tidak pernah dikirim ke klien (lihat GET).
+    const useDefault = body["useDefault"] === true;
+    if (useDefault && !config.defaultGateway) {
+      throw new ApiError({
+        status: STATUS.UNPROCESSABLE,
+        code: "NO_DEFAULT_GATEWAY",
+        message: "Server ini belum menyediakan gateway bawaan.",
+      });
+    }
+
     const connection = await createConnection(db, config, {
       userId,
-      name: String(body["name"] ?? ""),
-      baseUrl: String(body["baseUrl"] ?? ""),
-      apiKey: String(body["apiKey"] ?? ""),
+      name: useDefault ? String(body["name"] ?? "Langganan") : String(body["name"] ?? ""),
+      baseUrl: useDefault ? config.defaultGateway!.baseUrl : String(body["baseUrl"] ?? ""),
+      apiKey: useDefault ? config.defaultGateway!.apiKey : String(body["apiKey"] ?? ""),
       skipTest: body["skipTest"] === true,
     });
 

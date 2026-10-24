@@ -33,6 +33,17 @@ model User {
   passwordResetTokens PasswordResetToken[]
   connections Connection[]
   chats     Chat[]
+  folders   Folder[]
+  documents Document[]
+  chatDocs  ChatDocument[]
+  artifacts Artifact[]
+  prompts   Prompt[]
+  setting   UserSetting?
+  tasks     Task[]
+  memories  MemoryItem[]
+  connectors ConnectorCredential[]
+  schedules Schedule[]
+  notifications Notification[]
 
   @@index([status])
 }
@@ -130,6 +141,9 @@ model Connection {
   keyId           String
   isActive        Int      @default(0) // 0 | 1
   status          String   @default("draft") // draft | active | error
+  /// FIX-05: dinaikkan setiap kali konfigurasi koneksi berubah. Generasi yang
+  /// dipin ke revisi lama tidak boleh diam-diam memakai kredensial baru.
+  revision        Int      @default(1)
   lastTestAt      DateTime?
   lastTestStatus  String?
   createdAt       DateTime @default(now())
@@ -158,6 +172,128 @@ model ModelCache {
 }
 
 
+/// Dokumen milik pengguna untuk tanya-jawab berbasis berkas (REQ-NT-54, SDD-6.1).
+///
+/// `filename` adalah nama asli yang sudah disanitasi, hanya untuk tampilan.
+/// Berkasnya sendiri disimpan di luar webroot dengan nama acak; `storageKey`
+/// adalah path relatif terhadap akar penyimpanan, bukan path absolut dan bukan
+/// nama dari pengguna. Status: queued | processing | ready | failed.
+model Document {
+  id         String   @id
+  userId     String
+  filename   String
+  mime       String
+  sizeBytes  Int
+  storageKey String
+  status     String   @default("queued")
+  errorCode  String?
+  createdAt  DateTime @default(now())
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks     DocumentChunk[]
+  chatDocs   ChatDocument[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// Manifest dokumen yang dilampirkan ke satu chat (FIX-06).
+///
+/// Retrieval hanya memakai dokumen di manifest chat itu, bukan semua dokumen
+/// pengguna. `documentId` restrict: dokumen yang masih direferensikan chat
+/// tidak ikut terhapus tanpa sengaja — penghapusan dokumen lewat
+/// `removeDocument` yang membersihkan manifest lebih dulu.
+model ChatDocument {
+  id         String   @id
+  chatId     String
+  documentId String
+  ownerId    String
+  addedAt    DateTime @default(now())
+
+  chat     Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, documentId])
+  @@index([chatId])
+}
+
+/// Potongan teks satu dokumen (REQ-NT-55, SDD-6.1).
+///
+/// `page` dan `section` menyimpan metadata sumber untuk sitasi (REQ-NT-57).
+/// `embedding` disimpan sebagai teks base64, bukan `Bytes`: migrasi harus
+/// identik di SQLite dan PostgreSQL, dan `BLOB`/`BYTEA` ditolak
+/// `scripts/check-migrations.mjs`. Vektor ditulis oleh job `document.embed`.
+model DocumentChunk {
+  id         String   @id
+  documentId String
+  ordinal    Int
+  text       String
+  page       Int?
+  section    String?
+  embedding  String?
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, ordinal])
+  @@index([documentId])
+}
+
+/// Berkas yang dibuat asisten atau pengguna (FIX-11, SDD Artifact).
+///
+/// Byte berkas ada di storage adapter existing (`lib/documents/storage.ts`);
+/// baris ini hanya metadata + rujukan `storageKey`. `format` menentukan cara
+/// byte dibuat, `mime` menentukan header unduhan — keduanya disimpan supaya
+/// berkas lama tetap dapat diunduh walau daftar format berubah.
+model Artifact {
+  id          String   @id
+  userId      String
+  chatId      String?
+  messageId   String?
+  /// md | txt | json | csv | xlsx | docx | pdf | html | zip
+  format      String
+  /// Nama tampilan yang sudah dibersihkan; TIDAK pernah dipakai sebagai path.
+  displayName String
+  mime        String
+  sizeBytes   Int
+  sha256      String
+  storageKey  String
+  /// staged | ready | failed
+  status      String   @default("staged")
+  errorCode   String?
+  errorMessage String?
+  /// Turunan versi: id artefak sumber saat ini dibuat ulang/dikonversi.
+  parentArtifactId String?
+  /// Nomor versi dalam rantai lineage; akar = 1, anak = parent.version + 1.
+  version     Int      @default(1)
+  /// JSON provenance: { schemaVersion, source, notes }
+  provenance  String?
+  downloadCount Int    @default(0)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  deletedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([chatId])
+  @@index([status])
+}
+
+/// Folder satu tingkat untuk mengelompokkan chat (REQ-NT-35, SDD-2.2).
+model Folder {
+  id        String   @id
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chats Chat[]
+
+  @@index([userId])
+}
+
 /// Percakapan (REQ-NT-22, SDD-2.2). KONTRAK DIBEKUKAN di awal NT-P3.
 ///
 /// `currentMessageId` menunjuk leaf aktif pohon pesan; harus menunjuk pesan yang ada
@@ -167,17 +303,42 @@ model Chat {
   id               String   @id
   userId           String
   title            String
+  /// "manual" setelah pengguna mengganti judul; "auto" sesudah derivasi.
+  /// Judul otomatis tidak boleh menimpa judul manual (FIX-04).
+  titleSource      String   @default("auto")
+  titleRevision    Int      @default(0)
   modelRef         String?
   currentMessageId String?
+  folderId         String?
   pinned           Int      @default(0) // 0 | 1
   archived         Int      @default(0) // 0 | 1
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages ChatMessage[]
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder     Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  messages   ChatMessage[]
+  shareLinks ShareLink[]
+  chatDocs   ChatDocument[]
+  memories   MemoryItem[]
 
   @@index([userId, updatedAt])
+  @@index([userId, folderId])
+}
+
+/// Tautan berbagi snapshot beku publik (REQ-NT-36/37/38, SDD-2.2).
+model ShareLink {
+  id           String    @id
+  chatId       String
+  token        String    @unique
+  snapshotJson String
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
 }
 
 /// Satu pesan dalam pohon (REQ-NT-25, SDD-2.2).
@@ -228,6 +389,13 @@ model Generation {
   userMessageId     String
   assistantMessageId String    @unique
   jobId             String?
+  /// FIX-05: koneksi dan model dipin saat admission. NULL = baris lama sebelum
+  /// pinning ada; worker jatuh ke koneksi aktif seperti sebelumnya.
+  connectionId      String?
+  modelId           String?
+  /// FIX-05: revisi konfigurasi koneksi saat admission. Worker menolak jalan
+  /// bila `Connection.revision` sudah bergeser.
+  connectionRevision Int?
   status            String    @default("queued")
   cancelRequestedAt DateTime?
   errorCode         String?
@@ -256,6 +424,23 @@ model GenerationEvent {
   generation Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
 
   @@unique([generationId, seq])
+}
+
+/// Prompt tersimpan (REQ-NT-62/63/64). `userId` null = prompt bawaan admin.
+model Prompt {
+  id            String   @id
+  userId        String?
+  title         String
+  body          String
+  variablesJson String?
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([enabled])
 }
 
 /// Catatan pemakaian token (REQ-NT-71, SDD-2.2).
@@ -301,4 +486,364 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// Memori eksplisit milik pengguna (FIX-13).
+///
+/// Bukan riwayat chat, bukan ringkasan otomatis: hanya butir yang disimpan
+/// karena pengguna memintanya (`consent: "explicit"`) atau usulan yang menunggu
+/// tinjauan (`consent: "proposed"`). Versi lama tidak dihapus saat dikoreksi —
+/// `status: "superseded"` + `parentId` menyimpan rantai koreksi.
+model MemoryItem {
+  id             String    @id
+  userId         String
+  /// "global" (lintas chat) atau "chat" (hanya `chatId` itu).
+  scope          String    @default("global")
+  chatId         String?
+  /// "preference" | "fact" | "instruction"
+  category       String
+  text           String
+  /// "active" | "proposed" | "revoked" | "superseded"
+  status         String    @default("active")
+  /// "explicit" | "proposed"
+  consent        String    @default("explicit")
+  version        Int       @default(1)
+  parentId       String?
+  /// Dari mana butir ini berasal: "message" | "document" | "manual".
+  sourceKind     String?
+  sourceRef      String?
+  /// Revisi sumber saat butir disimpan; sumber berubah → provenance tidak lagi
+  /// membuktikan butir yang sama.
+  sourceRevision Int?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat       Chat?            @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  parent     MemoryItem?      @relation("MemoryVersion", fields: [parentId], references: [id])
+  revisions  MemoryItem[]     @relation("MemoryVersion")
+  derived    MemoryDependency[] @relation("MemoryDependencyOwner")
+  dependsOn  MemoryDependency[] @relation("MemoryDependencyTarget")
+
+  @@index([userId, status])
+  @@index([userId, chatId])
+  @@index([parentId])
+}
+
+/// Ringkasan/cache turunan dari satu atau beberapa memori (FIX-13).
+/// Mencabut `targetId` menggugurkan semua baris yang bergantung padanya.
+model MemoryDependency {
+  id        String   @id
+  memoryId  String
+  targetId  String
+  /// "summary" | "cache" | "vector"
+  kind      String   @default("summary")
+  createdAt DateTime @default(now())
+
+  memory MemoryItem @relation("MemoryDependencyOwner", fields: [memoryId], references: [id], onDelete: Cascade)
+  target MemoryItem @relation("MemoryDependencyTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([memoryId, targetId])
+  @@index([targetId])
+}
+
+/// Preferensi tampilan dan kirim (REQ-NT-70). Satu baris per pengguna.
+model UserSetting {
+  userId       String   @id
+  theme        String   @default("system") // system | light | dark
+  locale       String   @default("id")     // id | en
+  fontScale    Int      @default(100)      // 90..130
+  sendOnEnter  Int      @default(1)        // 1 = Enter kirim, 0 = Shift+Enter kirim
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Denyut proses worker (FIX-24, SDD-8.5).
+///
+/// Sebelumnya status worker disimpulkan dari `Job.heartbeatAt`; worker yang
+/// sehat tetapi antrean kosong karena itu tampak mati. Baris ini ditulis
+/// worker idle setiap beberapa detik, jadi kesegarannya membuktikan proses
+/// hidup — bukan keberadaan job.
+model WorkerHeartbeat {
+  workerId     String   @id
+  version      String
+  capabilities String   @default("[]")
+  startedAt    DateTime @default(now())
+  lastSeenAt   DateTime
+
+  @@index([lastSeenAt])
+}
+
+/// Konfigurasi runtime yang dapat diubah admin (REQ-NT-76). Satu baris, id = "app".
+/// Baris tidak ada = pendaftaran terbuka; jangan menyisipkan baris saat membaca.
+model AppConfig {
+  id               String   @id
+  registrationOpen Int      @default(1) // 0 | 1
+  updatedAt        DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Task persisten (FIX-08, SDD-AG-2).
+//
+// Kepemilikan selalu lewat `Task.userId`; child row tidak dipercaya hanya karena
+// punya id. `deletedAt` adalah tombstone: daftar/detail menyembunyikannya, tetapi
+// cancel/terminalisasi masih boleh menulis metadata penghentian.
+// ---------------------------------------------------------------------------
+
+/// Tujuan pengguna yang dikerjakan agen, terpisah dari pohon Chat.
+///
+/// `activeRunId` adalah pointer tervalidasi ke run segment terbaru, bukan FK:
+/// run lama tetap boleh ada setelah terminalization.
+model Task {
+  id          String    @id
+  userId      String
+  title       String
+  /// active | archived
+  status      String    @default("active")
+  activeRunId String?
+  revision    Int       @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs     TaskRun[]
+  messages TaskMessage[]
+
+  @@index([userId, status, updatedAt, id])
+}
+
+/// Satu segmen eksekusi sebuah task.
+///
+/// `segment` bertambah saat run menunggu input/approval lalu dilanjutkan lewat
+/// job baru; run lama tidak berwenang menulis lagi (currentJobId menunjuk yang
+/// terbaru). `lastEventSeq` dialokasikan server di dalam transaksi yang menulis
+/// event, bukan dari `max(seq)+1` di luar transaksi.
+model TaskRun {
+  id                 String    @id
+  taskId             String
+  segment            Int       @default(1)
+  /// queued | running | waiting_input | waiting_approval | completed | failed |
+  /// cancelled | indeterminate
+  status             String    @default("queued")
+  revision           Int       @default(1)
+  connectionId       String?
+  modelId            String    @default("")
+  /// Pointer tervalidasi ke TaskMessage; unik supaya satu pesan tidak dipakai
+  /// dua run. Bukan FK agar pesan tidak ikut terhapus saat run dipangkas.
+  inputMessageId     String?   @unique
+  assistantMessageId String?   @unique
+  currentJobId       String?   @unique
+  lastEventSeq       Int       @default(0)
+  stepCount          Int       @default(0)
+  /// FIX-22: run induk bila run ini adalah peninjau model kedua. Null = akar.
+  /// Kedalaman dibatasi 1; child tidak pernah mendapat budget lebih besar.
+  parentRunId        String?
+  depth              Int       @default(0)
+  /// K2: agent beku yang menjalankan run ini + versinya. Nilai default menjaga
+  /// run lama tetap terbaca; agent asing ditolak di lapisan atas, bukan di DB.
+  agentId            String    @default("default")
+  agentVersion       Int       @default(1)
+  deadlineAt         DateTime
+  waitingExpiresAt   DateTime?
+  cancelRequestedAt  DateTime?
+  errorCode          String?
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  events   TaskEvent[]
+  messages TaskMessage[]
+  interactions TaskInteraction[]
+
+  @@index([taskId, createdAt, id])
+  @@index([parentRunId, status])
+  @@index([status, deadlineAt])
+  @@index([agentId])
+}
+
+/// Percakapan linear tugas. Riwayat Chat tidak dimigrasikan diam-diam.
+model TaskMessage {
+  id         String   @id
+  taskId     String
+  runId      String?
+  /// user | assistant
+  role       String
+  text       String
+  requestKey String?
+  createdAt  DateTime @default(now())
+
+  task Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  run  TaskRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@unique([runId, role])
+  @@index([taskId, createdAt, id])
+}
+
+
+/// Plugin deklaratif (P2, riset-plugin §4): manifest JSON berversi, bukan kode.
+///
+/// Install = simpan manifest + sha256 (kanonik: kunci terurut) + reviewer;
+/// enabled selalu 0 saat install — menyalakan wajib review manusia.
+/// Update = baris baru dengan (pluginId, version) berbeda, bukan mutasi.
+/// Instruksi eksekusi TIDAK PERNAH disimpan di sini: tool harus sudah
+/// terdaftar di registry (manifest.ts menolak nama asing).
+model Plugin {
+  id           String   @id
+  /// id manifest kebab-case; satu id boleh punya banyak versi.
+  pluginId     String
+  version      String
+  /// 0/1; selalu 0 saat install, diaktifkan admin setelah review.
+  enabled      Int      @default(0)
+  /// Manifest JSON mentah yang sudah lolos parsePluginManifest.
+  manifestJson String
+  /// SHA-256 hex dari canonicalManifestJson.
+  sha256       String
+  /// Idempotensi admin yang menginstal (reviewer).
+  installedBy  String
+  installedAt  DateTime @default(now())
+
+  @@unique([pluginId, version])
+  @@index([pluginId, enabled])
+}
+
+/// Kredensial konektor pihak ketiga (FIX-20).
+///
+/// Token selalu tersimpan sebagai envelope AES-GCM dengan AAD
+/// `{rowId, userId, purpose:"connector.token"}`, jadi ciphertext satu baris
+/// tidak dapat dipakai di baris lain. Token TIDAK PERNAH keluar dari modul
+/// `lib/connectors` menuju model, sandbox, log, ekspor, atau snapshot.
+model ConnectorCredential {
+  id             String    @id
+  userId         String
+  /// google-drive | notion
+  provider       String
+  /// Nama tampilan yang dipilih pengguna ("Drive kerja").
+  label          String
+  /// Scope OAuth yang benar-benar diberikan, dipisah spasi.
+  scopes         String    @default("")
+  tokenEncrypted String
+  /// Refresh token terpisah; dikosongkan bila provider tidak menerbitkannya.
+  refreshEncrypted String?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider])
+  @@index([userId, revokedAt])
+}
+
+/// Jadwal berulang atau sekali jalan (FIX-21).
+///
+/// `nextRunAt` disimpan dalam UTC; `localTime` + `timezone` (IANA) adalah
+/// sumber aturan, bukan offset tulisan tangan. Sweeper menghitung ulang, jadi
+/// restart proses tidak menggeser jadwal dan DST tidak menggandakan occurrence.
+model Schedule {
+  id             String    @id
+  userId         String
+  title          String
+  prompt         String
+  /// Waktu lokal "YYYY-MM-DDTHH:mm" di zona `timezone`.
+  localTime      String
+  timezone       String
+  /// null | daily | weekly
+  recurrence     String?
+  /// skip | run — bawaan skip untuk aksi berbiaya/eksternal.
+  misfirePolicy  String    @default("skip")
+  /// read | write — write butuh approval per occurrence.
+  effect         String    @default("read")
+  /// Int 0/1 (portabel SQLite+PostgreSQL), bukan Boolean — lihat chats.ts.
+  enabled        Int       @default(1)
+  nextRunAt      DateTime?
+  lastRunAt      DateTime?
+  policyRevision Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occurrences ScheduleOccurrence[]
+
+  @@index([enabled, nextRunAt])
+  @@index([userId, createdAt])
+}
+
+/// Satu kejadian jadwal. Unik per (schedule, waktu): dua scheduler tidak dapat
+/// membuat dua occurrence untuk waktu yang sama.
+model ScheduleOccurrence {
+  id           String    @id
+  scheduleId   String
+  scheduledFor DateTime
+  /// pending | dispatched | skipped | cancelled
+  status       String    @default("pending")
+  jobId        String?
+  createdAt    DateTime  @default(now())
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, scheduledFor])
+  @@index([status, createdAt])
+}
+
+/// Notifikasi dalam aplikasi (FIX-21). Outbox durable, bukan push.
+model Notification {
+  id        String    @id
+  userId    String
+  kind      String
+  title     String
+  body      String
+  /// Isi sensitif tidak ditampilkan di notifikasi sistem/lockscreen.
+  /// Int 0/1 (portabel SQLite+PostgreSQL).
+  sensitive Int       @default(0)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+/// Stream event durable sebuah run. `seq` unik per run; SSE menyusulnya.
+model TaskEvent {
+  id          String   @id
+  runId       String
+  seq         Int
+  kind        String
+  payloadJson String
+  createdAt   DateTime @default(now())
+
+  run TaskRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, createdAt])
+}
+
+/// Permintaan input/persetujuan yang menunggu jawaban pengguna.
+///
+/// Konsumsi memakai CAS `status=pending` + expiresAt + revision, jadi jawaban
+/// yang basi (expired/terjawab) ditolak 409, bukan diterapkan dua kali.
+model TaskInteraction {
+  id          String    @id
+  runId       String
+  /// input | approval | handover
+  kind        String
+  /// pending | accepted | rejected | expired | cancelled
+  status      String    @default("pending")
+  revision    Int       @default(1)
+  promptJson  String
+  expiresAt   DateTime
+  answerJson  String?
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  run TaskRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+  @@index([expiresAt, status])
 }

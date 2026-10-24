@@ -1,15 +1,31 @@
 /**
- * Logger terstruktur JSON dengan redaksi terpusat (SDD-8.5).
+ * Logger terstruktur JSON dengan redaksi terpusat (SDD-8.5, SDD-9.3).
  *
  * `redact` menyaring rekursif nilai apa pun sebelum ditulis; ia juga
  * dipakai ulang di tempat lain (ekspor, snapshot berbagi) sehingga
  * kanari rahasia (SDD-9.3) tidak lolos lewat jalur selain log.
+ *
+ * Dua lapis, karena nama kunci saja tidak cukup: `{ note: "sk-live-..." }`
+ * lolos bila yang diperiksa hanya namanya. Lapis kedua memeriksa bentuk nilai.
  */
 
 export const REDACTED = "[REDACTED]";
 
 /** Kunci yang mengandung salah satu potongan ini diganti `[REDACTED]`. */
 const SENSITIVE = ["key", "secret", "password", "token", "authorization"];
+
+/**
+ * Bentuk nilai yang dianggap rahasia walau nama kuncinya jinak.
+ *
+ * Sengaja sempit: redaksi berlebihan membuang isi log yang sah (teks prompt,
+ * potongan jawaban), jadi hanya token acak panjang yang ditangkap.
+ */
+const SECRET_VALUE = [
+  /\bsk-[A-Za-z0-9_-]{16,}/, // kunci provider bergaya [OI]
+  /\btk-gw-[A-Za-z0-9]{16,}/, // kunci gateway TokenGateway
+  /\bBearer\s+[A-Za-z0-9._-]{16,}/i, // header Authorization yang terbawa sebagai string
+  /\b[A-Za-z0-9_-]{40,}\b/, // token/hash acak panjang
+];
 
 const MAX_DEPTH = 8;
 
@@ -18,10 +34,21 @@ function isSensitive(name: string): boolean {
   return SENSITIVE.some((part) => lower.includes(part));
 }
 
+function redactString(text: string): string {
+  return SECRET_VALUE.some((pattern) => pattern.test(text)) ? REDACTED : text;
+}
+
 export function redact(value: unknown, depth = 0): unknown {
   if (depth >= MAX_DEPTH) return REDACTED;
+  if (typeof value === "string") return redactString(value);
   if (Array.isArray(value)) return value.map((item) => redact(item, depth + 1));
-  if (value instanceof Error) return { name: value.name, message: value.message };
+  // `message` ikut melewati aturan string: galat transport sering memuat URL
+  // berisi kunci.
+  if (value instanceof Error) return { name: value.name, message: redactString(value.message) };
+  // Tanpa cabang ini `Date` jadi `{}` — waktu log hilang, bukan disamarkan.
+  if (value instanceof Date) return value.toISOString();
+  // Isi biner tidak pernah ditulis; keberadaannya saja yang berguna.
+  if (value instanceof Uint8Array) return REDACTED;
   if (value === null || typeof value !== "object") return value;
 
   const out: Record<string, unknown> = {};

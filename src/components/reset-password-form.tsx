@@ -15,16 +15,16 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleCheck, LoaderCircle, MessageCircle } from "lucide-react";
+import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/context";
 import type { ValidationResult } from "@/lib/auth/validation";
 
-const NETWORK_MESSAGE = "Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.";
-
 const FIELDS = [
-  { name: "newPassword", label: "Kata sandi baru", autoComplete: "new-password" },
-  { name: "confirmPassword", label: "Ulangi kata sandi baru", autoComplete: "new-password" },
+  { name: "newPassword", label: "password.new", autoComplete: "new-password" },
+  { name: "confirmPassword", label: "password.confirmNew", autoComplete: "new-password" },
 ] as const;
 
 type FieldName = (typeof FIELDS)[number]["name"];
@@ -41,6 +41,7 @@ export type ResetPasswordFormProps = {
 };
 
 export function ResetPasswordForm({ token, onValidate }: ResetPasswordFormProps) {
+  const t = useT();
   const fieldId = useId();
   const [values, setValues] = useState<Record<FieldName, string>>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
@@ -72,12 +73,12 @@ export function ResetPasswordForm({ token, onValidate }: ResetPasswordFormProps)
     try {
       validation = await onValidate(values);
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
       return;
     }
     if (!validation.success) {
       setErrors(validation.errors as Partial<Record<FieldName, string>>);
-      setFormError("Periksa kembali isian yang ditandai.");
+      setFormError(t("common.checkFieldsAgain"));
       setFocusTarget("newPassword");
       return;
     }
@@ -98,7 +99,7 @@ export function ResetPasswordForm({ token, onValidate }: ResetPasswordFormProps)
           setErrors(payload.fields as Partial<Record<FieldName, string>>);
           setFocusTarget("newPassword");
         }
-        setFormError(payload?.error ?? "Kata sandi tidak dapat direset. Minta tautan baru.");
+        setFormError(payload?.error ?? t("reset.failed"));
         setPending(false);
         return;
       }
@@ -107,7 +108,7 @@ export function ResetPasswordForm({ token, onValidate }: ResetPasswordFormProps)
       setValues(EMPTY);
       setPending(false);
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
       setPending(false);
     }
   }
@@ -123,7 +124,7 @@ export function ResetPasswordForm({ token, onValidate }: ResetPasswordFormProps)
         return (
           <div key={field.name}>
             <label htmlFor={inputId} className="block text-sm font-medium">
-              {field.label}
+              {t(field.label)}
             </label>
             <input
               id={inputId}
@@ -179,9 +180,9 @@ export function ResetPasswordForm({ token, onValidate }: ResetPasswordFormProps)
         >
           <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
           <span>
-            Kata sandi berhasil direset. Semua perangkat yang sebelumnya masuk sudah dikeluarkan.{" "}
+            {t("reset.success")}{" "}
             <Link href="/masuk" className="font-medium text-foreground underline underline-offset-4">
-              Masuk sekarang
+              {t("reset.signInNow")}
             </Link>
             .
           </span>
@@ -192,10 +193,10 @@ export function ResetPasswordForm({ token, onValidate }: ResetPasswordFormProps)
         {pending ? (
           <>
             <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
-            Menyimpan…
+            {t("common.saving")}
           </>
         ) : (
-          "Simpan kata sandi baru"
+          t("password.save")
         )}
       </Button>
     </form>
@@ -208,9 +209,7 @@ export function ResetPasswordShell({ children }: { children: React.ReactNode }) 
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm">
         <div className="mb-7 flex items-center gap-3 text-xl font-semibold">
-          <span className="rounded-xl bg-foreground p-2 text-background">
-            <MessageCircle aria-hidden className="size-5" />
-          </span>
+          <BrandMark className="size-9" />
           Kawan
         </div>
         {children}
@@ -220,7 +219,7 @@ export function ResetPasswordShell({ children }: { children: React.ReactNode }) 
         href="https://tokengateway.ai.id"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+        className="inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-4 hover:underline"
       >
         by tokengateway.ai.id
       </a>

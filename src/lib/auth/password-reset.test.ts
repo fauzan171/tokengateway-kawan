@@ -45,7 +45,7 @@ afterAll(async () => {
 /** Pengguna mentah dengan kredential ber-hash nyata. */
 async function makeUser(email?: string, password = LAMA): Promise<string> {
   const id = randomUUID();
-  await db.user.create({ data: { id, email: email ?? `${id}@contoh.test` } });
+  await db.user.create({ data: { id, email: email ?? `${id}@contoh.test`, status: "active" } });
   await db.credential.create({ data: { userId: id, passwordHash: await hashPassword(password) } });
   return id;
 }
@@ -264,7 +264,7 @@ describe("consumeResetToken — penolakan yang tidak melempar", () => {
 
   it("baris rusak (pengguna tanpa credential) ditolak tanpa melempar", async () => {
     const id = randomUUID();
-    await db.user.create({ data: { id, email: `${id}@contoh.test` } });
+    await db.user.create({ data: { id, email: `${id}@contoh.test`, status: "active" } });
     // Sengaja tanpa Credential.
     const now = new Date("2026-10-16T10:00:00.000Z");
     const { token } = await createResetToken(db, { userId: id, now });

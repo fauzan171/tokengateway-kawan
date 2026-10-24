@@ -18,6 +18,8 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Worktree agen lain: bukan kode repo ini, jangan ikut di-lint.
+      ".claude/**",
     ],
   },
 ];

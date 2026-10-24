@@ -14,12 +14,12 @@
 
 import { useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleCheck, LoaderCircle, MessageCircle } from "lucide-react";
+import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/context";
 import type { ValidationResult } from "@/lib/auth/validation";
-
-const NETWORK_MESSAGE = "Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.";
 
 export type ForgotPasswordFormProps = {
   /** Server Action dari halaman pemanggil; menjalankan validator bersama. */
@@ -29,6 +29,7 @@ export type ForgotPasswordFormProps = {
 };
 
 export function ForgotPasswordForm({ onValidate, emailConfigured }: ForgotPasswordFormProps) {
+  const t = useT();
   const fieldId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [email, setEmail] = useState("");
@@ -54,14 +55,14 @@ export function ForgotPasswordForm({ onValidate, emailConfigured }: ForgotPasswo
     try {
       validation = await onValidate({ email });
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
       setPending(false);
       return;
     }
 
     if (!validation.success) {
-      setFieldError(validation.errors.email ?? "Email tidak valid.");
-      setFormError("Periksa kembali isian yang ditandai.");
+      setFieldError(validation.errors.email ?? t("forgot.invalidEmail"));
+      setFormError(t("common.checkFieldsAgain"));
       setPending(false);
       inputRef.current?.focus();
       return;
@@ -75,14 +76,14 @@ export function ForgotPasswordForm({ onValidate, emailConfigured }: ForgotPasswo
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        setFormError(payload?.error ?? "Permintaan tidak dapat diproses. Coba lagi.");
+        setFormError(payload?.error ?? t("forgot.requestFailed"));
         setPending(false);
         return;
       }
       setSent(true);
       setPending(false);
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
       setPending(false);
     }
   }
@@ -91,27 +92,22 @@ export function ForgotPasswordForm({ onValidate, emailConfigured }: ForgotPasswo
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm">
         <div className="mb-7 flex items-center gap-3 text-xl font-semibold">
-          <span className="rounded-xl bg-foreground p-2 text-background">
-            <MessageCircle aria-hidden className="size-5" />
-          </span>
+          <BrandMark className="size-9" />
           Kawan
         </div>
 
-        <h1 className="text-2xl font-semibold tracking-tight">Lupa kata sandi</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("forgot.title")}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Masukkan email akunmu. Kami akan membuat tautan reset kata sandi sekali pakai yang
-          berlaku terbatas.
+          {t("forgot.subtitle")}
         </p>
 
         <form noValidate onSubmit={handleSubmit} className="mt-6 space-y-5">
           <div>
             <label htmlFor={inputId} className="block text-sm font-medium">
-              Email
+              {t("auth.email")}
             </label>
             <p id={hintId} className="mt-1 text-xs text-muted-foreground">
-              {emailConfigured
-                ? "Gunakan email yang kamu pakai untuk masuk."
-                : "Email belum dikonfigurasi di server ini; tautan reset akan muncul di log admin."}
+              {emailConfigured ? t("forgot.emailHintConfigured") : t("forgot.emailHintNotConfigured")}
             </p>
             <input
               id={inputId}
@@ -166,9 +162,7 @@ export function ForgotPasswordForm({ onValidate, emailConfigured }: ForgotPasswo
             >
               <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
               <span>
-                {emailConfigured
-                  ? "Permintaan diterima. Bila email itu terdaftar, tautan reset sudah dibuat. Pengiriman email belum tersedia di versi ini, jadi hubungi admin bila tautan belum kamu terima."
-                  : "Permintaan diterima. Bila email itu terdaftar, tautan reset sudah dibuat dan muncul di log admin — hubungi admin untuk mendapatkan tautannya. Email belum dikonfigurasi di server ini, jadi tidak ada email yang dikirim."}
+                {emailConfigured ? t("forgot.sentConfigured") : t("forgot.sentNotConfigured")}
               </span>
             </div>
           ) : null}
@@ -177,18 +171,18 @@ export function ForgotPasswordForm({ onValidate, emailConfigured }: ForgotPasswo
             {pending ? (
               <>
                 <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
-                Memproses…
+                {t("common.processing")}
               </>
             ) : (
-              "Kirim tautan reset"
+              t("forgot.submit")
             )}
           </Button>
         </form>
 
         <p className="mt-6 text-sm text-muted-foreground">
-          Ingat kata sandimu?{" "}
+          {t("forgot.remember")}{" "}
           <Link href="/masuk" className="font-medium text-foreground underline underline-offset-4">
-            Kembali ke halaman masuk
+            {t("forgot.backToLogin")}
           </Link>
         </p>
       </div>
@@ -197,7 +191,7 @@ export function ForgotPasswordForm({ onValidate, emailConfigured }: ForgotPasswo
         href="https://tokengateway.ai.id"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+        className="inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-4 hover:underline"
       >
         by tokengateway.ai.id
       </a>

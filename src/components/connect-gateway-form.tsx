@@ -23,9 +23,12 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CircleAlert, CircleCheck, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, LoaderCircle, ShieldCheck } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { useT, type Translate } from "@/lib/i18n/context";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 /** Situs pendaftaran gateway; satu sumber untuk kedua tautan keluar (REQ-NT-05/06). */
 const GATEWAY_SITE = "https://tokengateway.ai.id";
@@ -33,43 +36,40 @@ const GATEWAY_SITE = "https://tokengateway.ai.id";
 /** Placeholder Base URL — persis seperti REQ-NT-01. */
 const BASE_URL_PLACEHOLDER = "https://api.tokengateway.ai.id/v1";
 
-const NETWORK_MESSAGE = "Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.";
-const TEST_GENERIC_FAILURE = "Uji koneksi tidak dapat dijalankan.";
-const SAVE_GENERIC_FAILURE = "Koneksi tidak dapat disimpan. Coba lagi sebentar lagi.";
 
 type FieldName = "name" | "baseUrl" | "apiKey";
 
 type FieldSpec = {
   name: FieldName;
-  label: string;
+  label: MessageKey;
   type: "text" | "url" | "password";
   autoComplete: string;
   placeholder?: string;
-  hint?: string;
+  hint?: MessageKey;
 };
 
 const FIELDS: FieldSpec[] = [
   {
     name: "name",
-    label: "Nama koneksi",
+    label: "gateway.nameLabel",
     type: "text",
     autoComplete: "off",
-    hint: "Sebutan untuk membedakan koneksi ini, mis. “Gateway utama”.",
+    hint: "gateway.nameHint",
   },
   {
     name: "baseUrl",
-    label: "Base URL",
+    label: "gateway.baseUrlLabel",
     type: "url",
     autoComplete: "url",
     placeholder: BASE_URL_PLACEHOLDER,
-    hint: "Alamat dasar gateway, tanpa akhiran seperti /chat/completions.",
+    hint: "gateway.baseUrlHint",
   },
   {
     name: "apiKey",
-    label: "API Key",
+    label: "gateway.apiKeyLabel",
     type: "password",
     autoComplete: "off",
-    hint: "Disimpan terenkripsi. Setelah tersimpan, hanya sebagian yang ditampilkan lagi.",
+    hint: "gateway.apiKeyHint",
   },
 ];
 
@@ -89,10 +89,10 @@ function firstMissing(values: Record<FieldName, string>): FieldName | undefined 
 
 /** Pesan ramah untuk field wajib yang masih kosong; aturan sebenarnya tetap
  *  milik server, ini hanya umpan balik cepat. */
-function missingMessage(name: FieldName): string {
-  if (name === "name") return "Nama koneksi wajib diisi.";
-  if (name === "baseUrl") return "Base URL wajib diisi.";
-  return "API key wajib diisi.";
+function missingMessage(t: Translate, name: FieldName): string {
+  if (name === "name") return t("gateway.missingName");
+  if (name === "baseUrl") return t("gateway.missingBaseUrl");
+  return t("gateway.missingApiKey");
 }
 
 /** Field mana yang salah berdasarkan `code` galat server (kosakata SDD-3.2). */
@@ -102,7 +102,8 @@ function fieldForCode(code: string | undefined): FieldName {
   return "baseUrl"; // BAD_URL | BAD_SCHEME | BAD_HOST
 }
 
-export function ConnectGatewayForm() {
+export function ConnectGatewayForm({ defaultBaseUrl }: { defaultBaseUrl: string | null }) {
+  const t = useT();
   const router = useRouter();
   const fieldId = useId();
   const [values, setValues] = useState<Record<FieldName, string>>({ name: "", baseUrl: "", apiKey: "" });
@@ -147,8 +148,8 @@ export function ConnectGatewayForm() {
 
     const missing = firstMissing(values);
     if (missing) {
-      setErrors({ [missing]: missingMessage(missing) });
-      setFormError("Lengkapi isian yang ditandai sebelum menguji.");
+      setErrors({ [missing]: missingMessage(t, missing) });
+      setFormError(t("gateway.fillBeforeTest"));
       setFocusTarget(missing);
       return;
     }
@@ -164,10 +165,10 @@ export function ConnectGatewayForm() {
       // Hanya input salah bentuk/value yang 4xx (WP-NT-P2-06). Kegagalan uji
       // sendiri selalu 200 dengan `{ ok: false }`.
       if (!response.ok) {
-        const { code, message } = await readError(response, TEST_GENERIC_FAILURE);
+        const { code, message } = await readError(response, t("gateway.testFailed"));
         const field = fieldForCode(code);
         setErrors({ [field]: message });
-        setFormError("Periksa isian yang ditandai.");
+        setFormError(t("common.checkFields"));
         setTest({ status: "idle" });
         setFocusTarget(field);
         return;
@@ -181,13 +182,40 @@ export function ConnectGatewayForm() {
       if (payload && payload.ok === true) {
         setTest({ status: "ok", modelCount: payload.modelCount, sampleModels: payload.sampleModels ?? [] });
       } else {
-        setTest({ status: "fail", message: payload?.message ?? TEST_GENERIC_FAILURE });
+        setTest({ status: "fail", message: payload?.message ?? t("gateway.testFailed") });
       }
     } catch {
       setTest({ status: "idle" });
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleUseDefault() {
+    if (busy) return;
+    setFormError(null);
+    setErrors({});
+    setSaving(true);
+    try {
+      const response = await fetch("/api/kawan/v1/connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useDefault: true, name: t("gateway.defaultName"), skipTest: false }),
+      });
+
+      if (!response.ok) {
+        const { message } = await readError(response, t("gateway.saveFailed"));
+        setFormError(message);
+        return;
+      }
+
+      router.replace("/");
+      router.refresh();
+    } catch {
+      setFormError(t("common.network"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -199,8 +227,8 @@ export function ConnectGatewayForm() {
 
     const missing = firstMissing(values);
     if (missing) {
-      setErrors({ [missing]: missingMessage(missing) });
-      setFormError("Lengkapi isian yang ditandai sebelum menyimpan.");
+      setErrors({ [missing]: missingMessage(t, missing) });
+      setFormError(t("gateway.fillBeforeSave"));
       setFocusTarget(missing);
       return;
     }
@@ -219,10 +247,10 @@ export function ConnectGatewayForm() {
       });
 
       if (!response.ok) {
-        const { code, message } = await readError(response, SAVE_GENERIC_FAILURE);
+        const { code, message } = await readError(response, t("gateway.saveFailed"));
         const field = fieldForCode(code);
         setErrors({ [field]: message });
-        setFormError("Periksa isian yang ditandai.");
+        setFormError(t("common.checkFields"));
         setFocusTarget(field);
         return;
       }
@@ -233,7 +261,7 @@ export function ConnectGatewayForm() {
       router.replace("/");
       router.refresh();
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
     } finally {
       setSaving(false);
     }
@@ -243,17 +271,45 @@ export function ConnectGatewayForm() {
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm">
         <div className="mb-7 flex items-center gap-3 text-xl font-semibold">
-          <span className="rounded-xl bg-foreground p-2 text-background">
-            <KeyRound aria-hidden className="size-5" />
-          </span>
+          <BrandMark className="size-9" />
           Kawan
         </div>
 
-        <h1 className="text-2xl font-semibold tracking-tight">Hubungkan Gateway</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("gateway.title")}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Masukkan alamat gateway dan API key-mu. Kawan memakai gateway ini untuk
-          mengirim permintaan ke model yang kamu pilih.
+          {t("gateway.subtitle")}
         </p>
+
+        {/* Jalur cepat: gateway bawaan operator. Tanpa isian apa pun. */}
+        <section aria-labelledby={`${fieldId}-default`} className="mt-6 rounded-lg border p-4">
+          <h2 id={`${fieldId}-default`} className="text-sm font-medium">
+            {t("gateway.defaultTitle")}
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {defaultBaseUrl
+              ? t("gateway.defaultHint")
+              : t("gateway.defaultUnavailable")}
+          </p>
+          {defaultBaseUrl ? (
+            <p className="mt-1 break-all text-xs text-muted-foreground">{defaultBaseUrl}</p>
+          ) : null}
+          <Button
+            type="button"
+            onClick={handleUseDefault}
+            disabled={busy || defaultBaseUrl === null}
+            aria-busy={saving}
+            className="mt-3 h-11 w-full"
+          >
+            {saving ? (
+              <>
+                <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
+                {t("common.saving")}
+              </>
+            ) : (
+              t("gateway.defaultCta")
+            )}
+          </Button>
+        </section>
 
         <form noValidate onSubmit={handleSubmit} className="mt-6 space-y-5">
           {FIELDS.map((field) => {
@@ -268,11 +324,11 @@ export function ConnectGatewayForm() {
             return (
               <div key={field.name}>
                 <label htmlFor={inputId} className="block text-sm font-medium">
-                  {field.label}
+                  {t(field.label)}
                 </label>
                 {field.hint ? (
                   <p id={hintId} className="mt-1 text-xs text-muted-foreground">
-                    {field.hint}
+                    {t(field.hint)}
                   </p>
                 ) : null}
                 <input
@@ -300,14 +356,14 @@ export function ConnectGatewayForm() {
                 />
                 {field.name === "baseUrl" ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Pakai gateway tokengateway.ai.id?{" "}
+                    {t("gateway.signUpPrompt")}{" "}
                     <a
                       href={GATEWAY_SITE}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-medium text-foreground underline underline-offset-4"
                     >
-                      Daftar di sini
+                      {t("gateway.signUpLink")}
                     </a>
                   </p>
                 ) : null}
@@ -327,14 +383,18 @@ export function ConnectGatewayForm() {
               <p className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm leading-6">
                 <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  Koneksi berhasil. {test.modelCount} model tersedia.
-                  {test.sampleModels.length > 0 ? ` Contoh: ${test.sampleModels.join(", ")}.` : ""}
+                  {test.sampleModels.length > 0
+                    ? t("gateway.testSuccessSamples", {
+                        count: test.modelCount,
+                        samples: test.sampleModels.join(", "),
+                      })
+                    : t("gateway.testSuccess", { count: test.modelCount })}
                 </span>
               </p>
             ) : test.status === "fail" ? (
               <p className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm leading-6 text-destructive">
                 <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
-                <span>Uji koneksi gagal. {test.message}</span>
+                <span>{t("gateway.testFailedPrefix", { message: test.message })}</span>
               </p>
             ) : null}
           </div>
@@ -350,10 +410,10 @@ export function ConnectGatewayForm() {
             {testing ? (
               <>
                 <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
-                Menguji…
+                {t("gateway.testing")}
               </>
             ) : (
-              "Test koneksi"
+              t("gateway.test")
             )}
           </Button>
 
@@ -370,11 +430,12 @@ export function ConnectGatewayForm() {
                 aria-describedby={`${fieldId}-skip-hint`}
                 className="size-5 shrink-0 rounded border-input accent-primary outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
               />
-              <span className="text-sm font-medium">Simpan tanpa uji</span>
+              <span className="text-sm font-medium">{t("gateway.skipTest")}</span>
             </label>
             <p id={`${fieldId}-skip-hint`} className="mt-1 text-xs leading-5 text-muted-foreground">
-              Koneksi disimpan sebagai <strong>draft</strong> dan belum bisa dipakai chat
-              sampai kamu menguji koneksinya.
+              {t("gateway.skipTestHintBefore")}
+              <strong>{t("gateway.skipTestHintDraft")}</strong>
+              {t("gateway.skipTestHintAfter")}
             </p>
           </div>
 
@@ -393,10 +454,10 @@ export function ConnectGatewayForm() {
             {saving ? (
               <>
                 <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
-                Menyimpan…
+                {t("common.saving")}
               </>
             ) : (
-              "Simpan"
+              t("common.save")
             )}
           </Button>
         </form>
@@ -405,13 +466,14 @@ export function ConnectGatewayForm() {
         <section aria-labelledby={`${fieldId}-keamanan`} className="mt-6 rounded-lg border bg-muted/40 p-4">
           <h2 id={`${fieldId}-keamanan`} className="flex items-center gap-2 text-sm font-medium">
             <ShieldCheck aria-hidden className="size-4 shrink-0" />
-            Bagaimana API key-mu diperlakukan
+            {t("gateway.securityTitle")}
           </h2>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            API key disimpan <strong>terenkripsi di server Kawan</strong> dan dipakai
-            untuk <strong>meneruskan permintaanmu ke gateway</strong> saat kamu mengobrol.
-            Artinya permintaan itu melewati server Kawan, bukan dikirim langsung dari
-            perangkatmu. Key tidak pernah dikembalikan utuh ke browser setelah tersimpan.
+            {t("gateway.securityBefore")}
+            <strong>{t("gateway.securityEncrypted")}</strong>
+            {t("gateway.securityMiddle")}
+            <strong>{t("gateway.securityForward")}</strong>
+            {t("gateway.securityAfter")}
           </p>
         </section>
 
@@ -419,7 +481,7 @@ export function ConnectGatewayForm() {
         {test.status === "fail" || test.status === "idle" ? (
           <section aria-labelledby={`${fieldId}-cta`} className="mt-4 rounded-lg border p-4">
             <h2 id={`${fieldId}-cta`} className="text-sm font-medium">
-              Belum punya API key? Dapatkan di tokengateway.ai.id
+              {t("gateway.noKeyTitle")}
             </h2>
             <a
               href={GATEWAY_SITE}
@@ -427,7 +489,7 @@ export function ConnectGatewayForm() {
               rel="noopener noreferrer"
               className="mt-3 inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
             >
-              Buka tokengateway.ai.id
+              {t("gateway.openSite")}
             </a>
           </section>
         ) : null}
@@ -437,7 +499,7 @@ export function ConnectGatewayForm() {
         href={GATEWAY_SITE}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+        className="inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-4 hover:underline"
       >
         by tokengateway.ai.id
       </a>

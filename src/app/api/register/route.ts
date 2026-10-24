@@ -11,11 +11,31 @@ import { NextResponse } from "next/server";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
 import { createUser } from "@/lib/auth/users";
+import { readAppConfig } from "@/lib/admin/config";
 import { validateRegister } from "@/lib/auth/validation";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request): Promise<Response> {
+  // Pendaftaran publik bisa ditutup admin (REQ-NT-76). Diperiksa sebelum
+  // validasi input supaya tidak ada petunjuk lain yang ikut keluar.
+  try {
+    const config = loadConfig();
+    const db = await getDb(config.databaseUrl);
+    const appConfig = await readAppConfig(db);
+    if (!appConfig.registrationOpen) {
+      return NextResponse.json(
+        { error: "Pendaftaran publik ditutup. Hubungi administrator.", code: "REGISTRATION_CLOSED" },
+        { status: 403 },
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === "ConfigError") {
+      return NextResponse.json({ error: "Konfigurasi server tidak valid." }, { status: 500 });
+    }
+    throw err;
+  }
+
   let body: unknown;
   try {
     body = await request.json();
