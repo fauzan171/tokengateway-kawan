@@ -1,8 +1,9 @@
-# Gelombang 3 — D3 + D4 + D6 + P2 + P8
+# Gelombang 3 — D3 + D4 + D6 + P2 + P8 + K6
 
 Tanggal: 2026-10-24. Cakupan: D3 (blok dokumen baru), D4 (template), D6
 (tata letak PPTX), P2 (manifest plugin deklaratif + tabel Plugin), P8
-(ToolDoc satu sumber tiga pembaca + penutupan W2-4 dan W2-8).
+(ToolDoc satu sumber tiga pembaca + penutupan W2-4 dan W2-8), K6 (kuota per
+user 429 + Retry-After).
 
 ## Perubahan
 
@@ -265,4 +266,34 @@ migrate deploy sqlite OK · db:generate OK · npm test 1268/113 · build 0.
   siap lewat TOOL_CATALOG.
 
 ### Gate P8
-tsc 0 · eslint 0/0 · npm test 1277/114 · build 0.
+tsc 0 · eslint 0/0 · npm test 1277/115 · build 0.
+
+---
+
+## K6 — kuota per pengguna (429 + Retry-After)
+
+### Modul (`src/lib/tasks/quota.ts`)
+- `checkTaskQuota(db, userId)` tiga sinyal: token UsageRecord `reported=1`
+  per 24 jam (≥1.000.000), run nonterminal (`queued|running`, lewat relasi
+  task.userId karena TaskRun tidak punya kolom userId) ≥2, task baru per
+  24 jam ≥50.
+- Usage TIDAK dilaporkan (reported=0) diabaikan — "tidak tersedia", bukan
+  nol bohongan (rencana §K6).
+- Label eksplisit "batas pemakaian, bukan tagihan" (rencana: angka kuota
+  dikira billing).
+- Konstanta di modul (bukan env): belum ada kebutuhan operator mengubahnya;
+  ponytail: pindah ke tabel counter inkremental bila agregasi mahal.
+
+### Route (`POST /api/kawan/v1/tasks`)
+- Kuota dicek SEBELUM admission: 429 + header `Retry-After: 60` + body
+  berkode (`QUOTA_TOKENS`/`QUOTA_ACTIVE_RUNS`/`QUOTA_TASKS`) + pesan
+  Indonesia; idempotency key tidak terpakai untuk permintaan yang ditolak.
+
+### Tes (`quota.test.ts`, 6)
+- Pengguna baru lolos; reported=0 diabaikan; token ≥ batas → QUOTA_TOKENS +
+  retryAfter; run nonterminal ≥2 → QUOTA_ACTIVE_RUNS (terminal tak dihitung);
+  task ≥50 → QUOTA_TASKS (user lain tak terpengaruh); task di luar jendela
+  tak dihitung.
+
+### Gate K6
+tsc 0 · eslint 0/0 · npm test 1283/116 · build 0.

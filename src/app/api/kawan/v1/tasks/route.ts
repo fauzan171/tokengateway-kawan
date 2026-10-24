@@ -3,9 +3,10 @@
  * `POST` admission task+run+job dalam satu transaksi (SDD-AG-3).
  */
 
-import { requestId } from "@/lib/api/errors";
+import { requestId, STATUS } from "@/lib/api/errors";
 import { handleRouteError, jsonOk, readJson, requireContext } from "@/lib/api/route";
 import { createTask, listTasks } from "@/lib/tasks/tasks";
+import { checkTaskQuota } from "@/lib/tasks/quota";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,25 @@ export async function POST(request: Request): Promise<Response> {
   const started = Date.now();
   try {
     const { userId, db } = await requireContext();
+    // K6: kuota = batas pemakaian, bukan tagihan. Tolak 429 + Retry-After
+    // SEBELUM admission supaya idempotency key tidak terpakai untuk permintaan
+    // yang memang ditolak.
+    const quota = await checkTaskQuota(db, userId);
+    if (!quota.ok) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: quota.code,
+            message: quota.message,
+            requestId: reqId,
+          },
+        }),
+        {
+          status: STATUS.TOO_MANY_REQUESTS,
+          headers: { "content-type": "application/json", "retry-after": String(quota.retryAfterSeconds) },
+        },
+      );
+    }
     const body = await readJson(request);
     const result = await createTask(db, {
       userId,
