@@ -1284,7 +1284,7 @@ export function ChatView({
           )}
             <DocumentAttachButton api={documentsApi} />
             </div>
-          <div className="flex items-end">
+          <div className="flex min-w-0 flex-1 items-end">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
