@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { Menu, PanelLeft, Plus, Settings, X } from "lucide-react";
+import { Menu, PanelLeft, Plus, Settings, ShieldCheck, X } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { ChatSidebar } from "@/components/chat-sidebar";
@@ -15,8 +15,6 @@ type Theme = "system" | "light" | "dark";
 
 const SECTION_LABEL: Record<string, MessageKey> = {
   chat: "home.newChatHeader",
-  settings: "nav.settings",
-  about: "nav.about",
 };
 
 export default function Home() {
@@ -28,7 +26,7 @@ export default function Home() {
   const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [importNote, setImportNote] = useState("");
+
 
   /**
    * Gerbang masuk + pengalihan onboarding (REQ-NT-01): pengguna yang belum
@@ -90,17 +88,23 @@ export default function Home() {
       <div className="mb-4 flex items-center gap-2.5 px-2 text-[1.05rem] font-semibold tracking-tight"><BrandMark className="size-8" />Kawan</div>
       <Button className="h-10 w-full justify-start gap-2.5 rounded-xl text-sm font-medium shadow-sm" onClick={() => { setActiveChatId(null); navigate("chat"); }}><Plus aria-hidden />{t("nav.newChat")}</Button>
       <ChatSidebar activeChatId={activeChatId} onSelect={(id) => { setActiveChatId(id); navigate("chat"); }} />
-      <nav aria-label={t("nav.main")} className="mt-auto space-y-0.5 border-t pt-2">
-        {[ ["settings", t("nav.settings")], ["about", t("nav.about")] ].map(([id, label]) => (
-          <Button key={id} variant="ghost" className="h-9 w-full justify-start rounded-lg text-sm font-normal text-muted-foreground hover:text-foreground" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
-        ))}
+      <nav aria-label={t("nav.account")} className="mt-auto border-t pt-2">
+        <a
+          href="/pengaturan"
+          className="flex h-11 items-center gap-3 rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Settings aria-hidden className="size-4.5" />
+          {t("nav.settings")}
+        </a>
+        <a
+          href="/privasi"
+          className="flex h-11 items-center gap-3 rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ShieldCheck aria-hidden className="size-4.5" />
+          {t("nav.privacy")}
+        </a>
       </nav>
-<nav aria-label={t("nav.account")} className="mt-2 space-y-0.5 border-t pt-2">
-        {[["/preferensi", t("nav.preferences")], ["/pemakaian", t("nav.usage")], ["/admin", t("nav.admin")], ["/privasi", t("nav.privacy")]].map(([href, label]) => (
-          <a key={href} href={href!} className="flex h-9 items-center rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{label}</a>
-        ))}
-      </nav>
-      <a className="mt-3 inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-4 hover:underline" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
+      <a className="mt-2 px-3 text-xs text-muted-foreground/70" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
     </div>
   );
 
@@ -130,8 +134,6 @@ export default function Home() {
         <main id="content" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
           {section === "chat" ? (
             <ChatView initialChatId={activeChatId} onChatCreated={setActiveChatId} />
-          ) : section === "settings" ? (
-            <section className="mx-auto w-full max-w-3xl py-12"><Settings aria-hidden className="mb-5 size-7" /><h1 className="text-3xl font-semibold">{t("home.settingsTitle")}</h1><p className="mt-3 text-muted-foreground">{t("home.settingsSubtitle")}</p><div className="mt-10 rounded-2xl border p-6"><label htmlFor="theme" className="block font-medium">{t("settings.theme")}</label><p className="mt-2 text-sm text-muted-foreground">{t("home.themeHint")}</p><select id="theme" value={theme} onChange={event => { const value = event.target.value as Theme; setTheme(value); try { localStorage.setItem("kawan-theme", value); } catch { /* Theme remains usable without storage. */ } }} className="mt-5 min-h-11 w-full rounded-lg border bg-background px-3 sm:w-56"><option value="system">{t("settings.theme.system")}</option><option value="light">{t("settings.theme.light")}</option><option value="dark">{t("settings.theme.dark")}</option></select></div><div className="mt-6 rounded-2xl border p-6"><h2 className="font-medium">{t("home.dataTitle")}</h2><p className="mt-2 text-sm text-muted-foreground">{t("home.dataBody")}</p><div className="mt-5 flex flex-wrap items-center gap-3"><a href="/api/kawan/v1/export" download className="inline-flex min-h-11 items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted">{t("home.exportAll")}</a><label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted">{t("home.importFile")}<input type="file" accept="application/json,.json" className="sr-only" onChange={async event => { const file = event.target.files?.[0]; if (!file) return; const res = await fetch("/api/kawan/v1/chats/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() }); setImportNote(res.ok ? t("home.importOk") : t("home.importFailed")); event.target.value = ""; }} /></label><span role="status" aria-live="polite" className="text-sm text-muted-foreground">{importNote}</span></div></div></section>
           ) : (
 <section className="mx-auto w-full max-w-3xl py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">{t("home.aboutBody")}</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-block underline">by tokengateway.ai.id</a></section>
           )}

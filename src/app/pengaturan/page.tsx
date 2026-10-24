@@ -45,6 +45,21 @@ export default async function PengaturanPage() {
         <ChangePasswordForm />
       </section>
 
+      <nav aria-label="Tautan akun" className="mt-8 flex flex-col gap-2">
+        <a href="/preferensi" className="flex min-h-11 items-center justify-between rounded-xl border px-4 text-sm hover:bg-muted">
+          <span>{t("nav.preferences")}</span>
+          <span aria-hidden>›</span>
+        </a>
+        <a href="/pemakaian" className="flex min-h-11 items-center justify-between rounded-xl border px-4 text-sm hover:bg-muted">
+          <span>{t("nav.usage")}</span>
+          <span aria-hidden>›</span>
+        </a>
+        <a href="/admin" className="flex min-h-11 items-center justify-between rounded-xl border px-4 text-sm hover:bg-muted">
+          <span>{t("nav.admin")}</span>
+          <span aria-hidden>›</span>
+        </a>
+      </nav>
+
       <footer className="mt-auto pt-8">
         <a
           href="https://tokengateway.ai.id"

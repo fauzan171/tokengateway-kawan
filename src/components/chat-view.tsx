@@ -865,7 +865,7 @@ export function ChatView({
             </div>
           ) : (
             <div className="flex min-h-[50vh] flex-col justify-center p-4 text-left">
-              <h1 className="bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] bg-clip-text text-4xl font-medium tracking-tight text-transparent sm:text-5xl">
+              <h1 className="text-4xl font-medium tracking-tight text-neutral-500 dark:text-neutral-400 sm:text-5xl">
                 {t("chat.greeting")}
               </h1>
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
