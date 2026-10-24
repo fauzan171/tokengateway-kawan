@@ -28,11 +28,12 @@ export const GENERATE_FILE_TOOL: {
       type: "object",
       properties: {
         format: { type: "string", enum: [...SUPPORTED_FORMATS] },
-        displayName: { type: "string", description: "Nama berkas yang ditampilkan" },
-        content: { type: "string", description: "Isi berkas (wajib untuk md/txt/json)" },
+        displayName: { type: "string", maxLength: 120, description: "Nama berkas yang ditampilkan" },
+        content: { type: "string", maxLength: 200_000, description: "Isi berkas (wajib untuk md/txt/json)" },
         rows: {
           type: "array",
           items: { type: "array" },
+          maxItems: 2_000,
           description: "Baris data CSV (wajib untuk csv)",
         },
       },
@@ -113,7 +114,7 @@ const DOC_BLOCK_FORMS = [
     type: "object",
     properties: {
       type: { const: "heading" },
-      text: { type: "string" },
+      text: { type: "string", maxLength: 20_000 },
       level: { type: "integer", enum: [1, 2, 3] },
     },
     required: ["type", "text"],
@@ -122,7 +123,7 @@ const DOC_BLOCK_FORMS = [
     type: "object",
     properties: {
       type: { const: "paragraph" },
-      text: { type: "string" },
+      text: { type: "string", maxLength: 20_000 },
     },
     required: ["type", "text"],
   },
@@ -130,7 +131,7 @@ const DOC_BLOCK_FORMS = [
     type: "object",
     properties: {
       type: { const: "bullets" },
-      items: { type: "array", items: { type: "string" } },
+      items: { type: "array", items: { type: "string", maxLength: 20_000 }, maxItems: 100 },
       ordered: { type: "boolean", description: "true = daftar bernomor" },
     },
     required: ["type", "items"],
@@ -139,8 +140,8 @@ const DOC_BLOCK_FORMS = [
     type: "object",
     properties: {
       type: { const: "table" },
-      headers: { type: "array", items: { type: "string" } },
-      rows: { type: "array", items: { type: "array", items: { type: "string" } } },
+      headers: { type: "array", items: { type: "string", maxLength: 500 }, maxItems: 12 },
+      rows: { type: "array", items: { type: "array", items: { type: "string", maxLength: 500 } }, maxItems: 2_000 },
     },
     required: ["type", "headers", "rows"],
   },
@@ -148,8 +149,8 @@ const DOC_BLOCK_FORMS = [
     type: "object",
     properties: {
       type: { const: "code" },
-      text: { type: "string" },
-      language: { type: "string" },
+      text: { type: "string", maxLength: 20_000 },
+      language: { type: "string", maxLength: 32 },
     },
     required: ["type", "text"],
   },
@@ -169,8 +170,8 @@ const DOC_BLOCK_FORMS = [
     properties: {
       type: { const: "image" },
       artifactId: { type: "string", description: "ID artefak gambar milik pengguna (PNG/JPEG)" },
-      alt: { type: "string", description: "Teks pengganti untuk aksesibilitas" },
-      caption: { type: "string" },
+      alt: { type: "string", maxLength: 200, description: "Teks pengganti untuk aksesibilitas" },
+      caption: { type: "string", maxLength: 200 },
       widthPct: { type: "integer", minimum: 10, maximum: 100 },
     },
     required: ["type", "artifactId", "alt"],
@@ -199,8 +200,8 @@ export const GENERATE_DOCUMENT_TOOL: {
         doc: {
           type: "object",
           properties: {
-            title: { type: "string" },
-            blocks: { type: "array", items: { oneOf: [...DOC_BLOCK_FORMS] } },
+            title: { type: "string", maxLength: 200 },
+            blocks: { type: "array", items: { oneOf: [...DOC_BLOCK_FORMS] }, maxItems: 500 },
           },
           required: ["title", "blocks"],
           additionalProperties: false,

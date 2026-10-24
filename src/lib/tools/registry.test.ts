@@ -27,6 +27,7 @@ function context(overrides: Partial<ToolContext> = {}): ToolContext {
     signal: controller.signal,
     deadlineAt: new Date(Date.now() + 60_000),
     policyRevision: 1,
+    approvedDigest: null,
     ...overrides,
   };
 }

@@ -20,6 +20,8 @@
  * konteks dan justru menurunkan kepatuhan.
  */
 
+import { TOOL_CATALOG } from "@/lib/tools/catalog";
+
 /** Tingkat otoritas; angka kecil = lebih tinggi. */
 export const PROMPT_AUTHORITY = {
   policy: 1,
@@ -50,6 +52,17 @@ const POLICY = [
   "Jangan menampilkan persentase keyakinan yang tidak berasal dari pengukuran.",
 ].join("\n");
 
+/** P8: ringkas entri katalog hanya untuk tool aktif pada giliran ini. */
+function catalogForTools(active: readonly string[]): string {
+  const lines = ["Panduan pemilihan tool (ringkas):"];
+  for (const doc of TOOL_CATALOG) {
+    if (!active.includes(doc.id)) continue;
+    lines.push(`${doc.id}: ${doc.ringkas}`);
+    lines.push(`  jangan bila: ${doc.kapanJangan[0]}`);
+  }
+  return lines.join("\n");
+}
+
 /** Fakta kemampuan yang boleh dipakai model; tidak ada klaim berlebih. */
 export function buildCapabilityBlock(input: {
   tools: readonly string[];
@@ -63,6 +76,11 @@ export function buildCapabilityBlock(input: {
       ? `Tool yang benar-benar tersedia: ${input.tools.join(", ")}. Tool lain tidak ada.`
       : "Tidak ada tool yang tersedia pada giliran ini. Jangan mengaku memakai tool.",
   );
+  // P8/D5: detail kapan pakai/jangan + batas + contoh dari satu sumber
+  // (tools/catalog.ts) supaya model memilih tool secara sadar, bukan buta.
+  if (input.tools.length > 0) {
+    lines.push(catalogForTools(input.tools));
+  }
   lines.push(
     input.webSearch
       ? "Pencarian web aktif untuk giliran ini; sebut waktu pengambilan bila mengutip hasilnya."

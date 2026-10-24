@@ -1,7 +1,8 @@
-# Gelombang 3 — D3 + D4 + D6 + P2
+# Gelombang 3 — D3 + D4 + D6 + P2 + P8
 
 Tanggal: 2026-10-24. Cakupan: D3 (blok dokumen baru), D4 (template), D6
-(tata letak PPTX), P2 (manifest plugin deklaratif + tabel Plugin).
+(tata letak PPTX), P2 (manifest plugin deklaratif + tabel Plugin), P8
+(ToolDoc satu sumber tiga pembaca + penutupan W2-4 dan W2-8).
 
 ## Perubahan
 
@@ -210,3 +211,58 @@ tsc 0 · eslint 0/0 · npm test **1254 lulus / 112 file** · build 0
 ### Gate P2
 tsc 0 · eslint 0/0 · check-migrations OK · validate 2 schema OK ·
 migrate deploy sqlite OK · db:generate OK · npm test 1268/113 · build 0.
+
+---
+
+## P8 — ToolDoc satu sumber tiga pembaca (+ tutup W2-4, W2-8)
+
+### Katalog (`src/lib/tools/catalog.ts`)
+- `TOOL_CATALOG: ToolDoc[]` untuk SEMUA tool registry (tes kesesuaian 1:1 —
+  tidak ada tool terpasang yang tak terdokumentasi, tidak ada doc tanpa
+  tool). Field per riset §5.3: ringkas ≤120 char, kapanDipakai 2..5,
+  kapanJangan ≥2, argumen (nama/tipe/wajib/batas/keterangan), contoh
+  valid+tidakValid (JSON parse-able), efek+approval (approval diturunkan
+  dari registry), batas, kegagalan (kode+arti+tindakanModel), hasil.
+- `buildToolCatalogBlock()`: ringkasan penuh untuk pembaca prompt.
+- Pembaca pertama diaktifkan: `prompt-builder.ts` `buildCapabilityBlock`
+  kini menyisipkan panduan pemilihan per tool aktif giliran itu (id,
+  ringkas, "jangan bila" pertama) — model memilih tool sadar, bukan buta.
+  Pembaca kedua (panel UI) dan ketiga aktif: `docs/tools/<id>.md` dihasilkan
+  generator (`gen-docs.test.ts`, dijalankan ulang bila katalog berubah) dan
+  diverifikasi tes kesesuaian memuat ringkas/kapan/contoh/kode galat.
+
+### W2-4 ditutup: bentuk SDD-AG-4 di registry
+- `ToolResult` bertambah `text`, `sourceRefs` (`id/url/artifactId/locator`),
+  `artifactIds`, `errorCode`, `truncated` (SDD `04-execution-tools.md:62-66`).
+- `ToolContext` bertambah `taskId`, `runId`, `stepId`, `approvedDigest`
+  (wajib `string|null` — audit + approval terikat langkah).
+- Konsumen yang ada tidak pecah: handler lama tetap sah karena field baru
+  opsional; hanya konstruktor ctx di test yang perlu `approvedDigest: null`.
+
+### W2-8 ditutup: maxItems/maxLength di schema kanonik
+- `generate_file`: displayName 120, content 200.000, rows maxItems 2.000.
+- `generate_document` DOC_BLOCK_FORMS: heading/paragraph/code text
+  maxLength 20.000; language 32; bullets items maxItems 100 + item 20.000;
+  table headers maxItems 12 + cell 500, rows maxItems 2.000; image
+  alt/caption 200; doc title 200, blocks maxItems 500.
+- Angka sama dengan DOC_LIMITS yang ditegakkan parseDocSchema — schema
+  sekarang jujur di depan (model tahu batas sebelum mengirim), parser tetap
+  penegak akhir.
+
+### Tes (`catalog.test.ts` 8 + generator 1)
+- Kesesuaian 1:1 katalog↔registry (nama, efek, approval).
+- Aturan isi §5.3 (2..5 dipakai, ≥2 jangan, ringkas ≤120, tindakanModel,
+  contoh JSON, argumen terisi).
+- docs/tools/<id>.md ada + memuat ringkas/kapan/contoh/kode galat.
+- buildToolCatalogBlock memuat nama, larangan pertama, contoh valid.
+- Generator menulis ulang docs dari katalog.
+
+### Yang sengaja tidak (P8)
+- `web.read`/`web.search` belum ada di registry (FIX-10 jalan lewat jalur
+  chat sendiri) — katalog hanya mendokumentasikan tool terpasang; entri
+  menyusul saat tool web masuk registry.
+- Panel UI tool (pembaca kedua) menunggu K7/tiket UI sendiri; data sudah
+  siap lewat TOOL_CATALOG.
+
+### Gate P8
+tsc 0 · eslint 0/0 · npm test 1277/114 · build 0.

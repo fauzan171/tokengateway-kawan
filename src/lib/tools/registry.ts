@@ -49,18 +49,33 @@ export type ToolEffect = "read" | "local" | "write";
 
 export type ToolResult = {
   schemaVersion: typeof TOOL_SCHEMA_VERSION;
+  /** ok = tuntas; invalid = argumen; denied = approval/kebijakan; failed = pelaksanaan. */
   status: "ok" | "invalid" | "denied" | "failed";
+  /** Teks hasil untuk model — SELALU string bila ok (SDD: text wajib). */
+  text?: string;
+  /** Rujukan sumber (halaman/artefak) yang dipakai tool (SDD-AG-4). */
+  sourceRefs?: { id: string; url?: string; artifactId?: string; locator?: string }[];
+  /** Artefak yang dihasilkan (kartu unduhan UI). */
+  artifactIds?: string[];
   data?: unknown;
   message?: string;
+  errorCode?: string;
+  truncated?: boolean;
 };
 
 export type ToolContext = {
   /** Dari sesi, tidak pernah dari argumen model. */
   userId: string;
+  /** Identitas tugas/run/langkah (SDD-AG-4): audit + approval terikat langkah. */
+  taskId?: string;
+  runId?: string;
+  stepId?: string;
   signal: AbortSignal;
   deadlineAt: Date;
   /** Revisi kebijakan saat pemanggilan; approval yang lebih lama tidak berlaku. */
   policyRevision: number;
+  /** Digest approval satu-pakai bila tool write butuh persetujuan (SDD-AG-4). */
+  approvedDigest: string | null;
 };
 
 export type ToolInputErrorCode =

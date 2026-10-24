@@ -24,7 +24,7 @@ hijau. Jangan mengulang pekerjaan yang sudah selesai.
 - HEAD 042ce38 sudah push (042ce38 + ab12b97: tindak lanjut W2). Live masih
   c18ed34: `npm run build` 0, pm2 kawan+kawan-worker online,
   /api/kawan/v1/health -> {"ready":true}, /api/kawan/v1/agents -> 401.
-- npm test: 113 file, 1268 lulus (D3+D4+D6+P2 selesai). Itu baseline; JANGAN sampai turun.
+- npm test: 115 file, 1277 lulus (D3+D4+D6+P2+P8 selesai). Itu baseline; JANGAN sampai turun.
 
 ## SUMBER KEBENARAN (baca dulu, jangan mengarang)
 - docs/perbaikan-menyeluruh/STATUS.md                    -> papan status + blocker
@@ -46,9 +46,9 @@ Ikuti teks spesifikasinya apa adanya; jangan menambah fitur di luar gate.
 4. P2 — SELESAI (bukti: reports/gelombang-3.md §P2): manifest deklaratif di
    plugins/manifest.ts + tabel Plugin + migrasi dua provider + 14 tes.
    JANGAN diulang.
-5. P8 — ToolDoc satu sumber tiga pembaca. WAJIB sekalian menutup W2-4 (bentuk
-   ToolResult/ToolContext sesuai SDD 04-execution-tools.md:62-66) dan W2-8
-   (maxItems/maxLength di schema kanonik).
+5. P8 — SELESAI (bukti: reports/gelombang-3.md §P8): TOOL_CATALOG satu sumber
+   tiga pembaca + docs/tools/*.md + W2-4 (ToolResult/ToolContext SDD) + W2-8
+   (maxItems/maxLength schema) tertutup. JANGAN diulang.
 6. K6 — kuota per user, 429 + Retry-After.
 7. K7 — UI pemilih agent di task-view.tsx.
 8. K8 — audit admin run per agent.
@@ -83,7 +83,7 @@ Satu tahap selesai = gate hijau + commit + push sebelum tahap berikutnya.
 2. npm run lint                            -> 0 error, 0 WARNING (warning = gagal)
 3. node scripts/check-migrations.mjs       -> hanya bila skema berubah (+ deploy
    ke dev.db + db:generate)
-4. npm test                                -> >= 1268 lulus, 113 file
+4. npm test                                -> >= 1277 lulus, 115 file
 5. npm run build                           -> 0 (ini satu-satunya gate yang
    menangkap pelanggaran export route Next.js)
 
