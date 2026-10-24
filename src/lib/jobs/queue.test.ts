@@ -111,7 +111,8 @@ describe("lease", () => {
     const held = await claim(db, { workerId: workerId(0), id, leaseMs: 1_000 });
 
     const before = (await db.job.findUniqueOrThrow({ where: { id } })).leaseExpiresAt!;
-    const now = new Date(before.getTime() + 500);
+    // Heartbeat harus datang SEBELUM lease habis.
+    const now = new Date(before.getTime() - 500);
     expect(await heartbeat(db, held!, 60_000, now)).toBe(true);
 
     const after = (await db.job.findUniqueOrThrow({ where: { id } })).leaseExpiresAt!;
@@ -123,6 +124,27 @@ describe("lease", () => {
       indeterminate: 1,
     });
     expect(await heartbeat(db, held!, 60_000, new Date(after.getTime() + 2))).toBe(false);
+  });
+
+  it("heartbeat terlambat tidak menghidupkan lease mati", async () => {
+    const id = await enqueue(db, { kind: "chat.generate", payload: {} });
+    // Lease 1 ms lalu ditunggu habis: `heartbeat` memakai jam nyata.
+    const held = await claim(db, { workerId: workerId(0), id, leaseMs: 1 });
+    const expires = (await db.job.findUniqueOrThrow({ where: { id } })).leaseExpiresAt!;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(await heartbeat(db, held!, 60_000)).toBe(false);
+    const row = await db.job.findUniqueOrThrow({ where: { id } });
+    expect(row.leaseExpiresAt!.getTime()).toBe(expires.getTime());
+  });
+
+  it("complete menolak lease yang sudah kedaluwarsa", async () => {
+    const id = await enqueue(db, { kind: "chat.generate", payload: {} });
+    const held = await claim(db, { workerId: workerId(0), id, leaseMs: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(await complete(db, held!)).toBe(false);
+    expect((await db.job.findUniqueOrThrow({ where: { id } })).state).toBe("leased");
   });
 
   it("complete hanya berlaku untuk pemegang token", async () => {

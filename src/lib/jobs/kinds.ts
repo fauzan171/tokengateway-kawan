@@ -10,6 +10,7 @@
 
 export const JOB_KINDS = [
   "chat.generate",
+  "agent.run",
   "document.extract",
   "document.embed",
   "usage.aggregate",
@@ -27,4 +28,29 @@ const IDEMPOTENT: ReadonlySet<string> = new Set<JobKind>([
 
 export function isIdempotentKind(kind: string): boolean {
   return IDEMPOTENT.has(kind);
+}
+
+/**
+ * Kind yang benar-benar punya handler di worker (FIX-24/T14).
+ *
+ * `JOB_KINDS` adalah daftar kontrak yang dikenal; daftar ini adalah yang
+ * benar-benar dijalankan proses worker saat ini. `enqueue` menolak kind di luar
+ * sini supaya job tidak pernah mengendap `queued` tanpa penangan.
+ */
+export const HANDLED_KINDS = [
+  "chat.generate",
+  "agent.run",
+  "document.extract",
+  "storage.cleanup",
+] as const;
+
+export type HandledKind = (typeof HANDLED_KINDS)[number];
+
+/** Kind yang dikenal kontrak (boleh diantrekan), terlepas dari handler. */
+export function isKnownKind(kind: string): kind is JobKind {
+  return (JOB_KINDS as readonly string[]).includes(kind);
+}
+
+export function isHandledKind(kind: string): kind is HandledKind {
+  return (HANDLED_KINDS as readonly string[]).includes(kind);
 }

@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { ApiError, REQUEST_ID_HEADER, STATUS, requestId, toErrorResponse } from "@/lib/api/errors";
 import { logger } from "@/lib/api/logger";
 import { auth } from "@/lib/auth";
-import { createChat, listChats } from "@/lib/chat/chats";
+import { createChat, listChatsPaginated } from "@/lib/chat/chats";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
 
@@ -76,7 +76,8 @@ export async function GET(request: Request): Promise<Response> {
     const config = loadConfig();
     const db = await getDb(config.databaseUrl);
 
-    const chats = await listChats(db, userId);
+    // Dibatasi: daftar tanpa batas membengkak seiring riwayat pengguna.
+    const { chats } = await listChatsPaginated(db, { userId, limit: 100 });
 
     logger.info(
       { requestId: reqId, userId, route: ROUTE, latencyMs: Date.now() - started, result: "ok" },

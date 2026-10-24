@@ -33,6 +33,7 @@ npm-debug.log*
 storage/
 uploads/
 public/uploads/
+.data/
 
 # Snapshots & backups
 snapshots/
@@ -60,3 +61,10 @@ credentials/
 
 # Prisma schema turunan (dihasilkan scripts/make-sqlite-schema.mjs)
 /prisma/schema.sqlite.prisma
+e2e/.tmp
+
+# Laporan audit lokal (PDF hasil generate, bukan sumber)
+docs/audit/pdf/
+
+# Worktree agen orkestrasi lokal (bukan sumber repo)
+/.claude/

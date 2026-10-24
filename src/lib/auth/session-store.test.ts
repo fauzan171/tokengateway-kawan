@@ -36,7 +36,7 @@ afterAll(async () => {
 /** Membuat satu pengguna mentah; cukup untuk memenuhi foreign key Session. */
 async function makeUser(label: string): Promise<string> {
   const id = randomUUID();
-  await db.user.create({ data: { id, email: `${label}-${id}@contoh.test` } });
+  await db.user.create({ data: { id, email: `${label}-${id}@contoh.test`, status: "active" } });
   return id;
 }
 
@@ -178,6 +178,17 @@ describe("isSessionValid", () => {
     expect(await isSessionValid(db, { userId, token, now: new Date(expiresAt.getTime() + 1) })).toBe(
       false,
     );
+  });
+
+  it("KRITIS: false untuk pengguna berstatus disabled walau baris sesi masih ada", async () => {
+    const userId = await makeUser("nonaktif");
+    const token = "token-pengguna-nonaktif";
+    await createSession(db, { userId, token, expiresAt: new Date(Date.now() + 60_000) });
+
+    // Baris sesi sengaja TIDAK dihapus: status saja harus cukup menutup sesi.
+    await db.user.update({ where: { id: userId }, data: { status: "disabled" } });
+
+    expect(await isSessionValid(db, { userId, token })).toBe(false);
   });
 });
 

@@ -1,9 +1,14 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import {
   assertOutboundAllowed,
   assertRedirectAllowed,
+  dispatcherFor,
+  fetchOutbound,
   isBlockedAddress,
+  resolvePinnedTarget,
   OUTBOUND_LIMITS,
   type HostResolver,
   type OutboundPolicyOptions,
@@ -225,5 +230,41 @@ describe("OUTBOUND_LIMITS", () => {
   it("menetapkan batas yang wajar dan konsisten", () => {
     expect(OUTBOUND_LIMITS.connectTimeoutMs).toBeLessThan(OUTBOUND_LIMITS.totalTimeoutMs);
     expect(OUTBOUND_LIMITS.maxResponseBytes).toBeGreaterThan(0);
+  });
+});
+
+describe("penyematan alamat (anti DNS rebinding)", () => {
+  it("menyambung ke alamat hasil resolusi yang diperiksa, bukan resolusi kedua", async () => {
+    // Nama ini TIDAK ADA di DNS sungguhan: kalau `fetchOutbound` me-resolve
+    // ulang sendiri, permintaan gagal ENOTFOUND. Berhasil sampai ke server lokal
+    // hanya mungkin lewat alamat yang disematkan.
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("pinned");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+
+    try {
+      const url = new URL(`http://rebind.test:${port}/v1`);
+      const opts = options({
+        allowInsecureHttp: true,
+        resolve: resolver({ "rebind.test": ["127.0.0.1"] }),
+      });
+
+      const response = await fetchOutbound(url, {}, opts);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("pinned");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("tidak menyematkan apa pun saat allowlist dipakai", async () => {
+    const target = await resolvePinnedTarget(
+      new URL("https://gw.internal.example/v1"),
+      options({ allowlist: ["gw.internal.example"], resolve: resolver({}) }),
+    );
+    expect(dispatcherFor(target)).toBeUndefined();
   });
 });

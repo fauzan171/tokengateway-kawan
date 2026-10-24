@@ -9,7 +9,13 @@
  * hostname yang menunjuk ke alamat privat ikut tertolak — bukan hanya literal.
  */
 
-import { assertOutboundAllowed, DEFAULT_OUTBOUND_OPTIONS, type OutboundPolicyOptions } from "@/lib/net";
+import {
+  assertOutboundAllowed,
+  fetchOutbound,
+  DEFAULT_OUTBOUND_OPTIONS,
+  OUTBOUND_LIMITS,
+  type OutboundPolicyOptions,
+} from "@/lib/net";
 import { ApiError, STATUS } from "./errors";
 
 export type FetchJsonOptions = {
@@ -42,15 +48,20 @@ export async function fetchJson<T>(
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: options.method ?? "GET",
-      headers: options.headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal,
-      // Redirect tidak boleh melewati validasi egress atau meneruskan kredensial.
-      redirect: "error",
-    });
+    response = await fetchOutbound(
+      url,
+      {
+        method: options.method ?? "GET",
+        headers: options.headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal,
+      },
+      options.outbound ?? DEFAULT_OUTBOUND_OPTIONS,
+    );
   } catch (err) {
+    // Penolakan redirect (BAD_URL) sudah punya kode dan pesan sendiri; jangan
+    // ditimpa jadi "gateway tidak dapat dihubungi".
+    if (err instanceof ApiError) throw err;
     if (err instanceof Error && err.name === "TimeoutError") {
       throw new ApiError({
         status: STATUS.GATEWAY_TIMEOUT,
@@ -68,7 +79,7 @@ export async function fetchJson<T>(
     });
   }
 
-  const text = await response.text();
+  const text = await readCapped(response, OUTBOUND_LIMITS.maxResponseBytes);
   let data: T;
   try {
     data = (text === "" ? {} : JSON.parse(text)) as T;
@@ -82,4 +93,56 @@ export async function fetchJson<T>(
   }
 
   return { status: response.status, data };
+}
+
+/**
+ * Membaca body dengan batas byte. `response.text()` tidak dibatasi, dan ia
+ * menghitung byte SETELAH dekompresi — gzip bomb lolos. Reader dibatalkan
+ * begitu batas terlampaui supaya soket tidak menahan memori lebih lama.
+ */
+async function readCapped(response: Response, maxBytes: number): Promise<string> {
+  const declared = Number(response.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel().catch(() => {});
+    throw new ApiError({
+      status: STATUS.BAD_GATEWAY,
+      code: "UPSTREAM_TOO_LARGE",
+      message: "Balasan gateway melebihi batas ukuran.",
+      details: { declaredBytes: declared, maxBytes },
+    });
+  }
+
+  if (!response.body) return "";
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw new ApiError({
+          status: STATUS.BAD_GATEWAY,
+          code: "UPSTREAM_TOO_LARGE",
+          message: "Balasan gateway melebihi batas ukuran.",
+          details: { maxBytes },
+        });
+      }
+      chunks.push(value);
+    }
+  } finally {
+    // Batalkan juga saat sukses: stream yang sudah `done` aman, dan ini
+    // memastikan soket dilepas bila kita keluar lebih awal karena galat.
+    await reader.cancel().catch(() => {});
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
 }

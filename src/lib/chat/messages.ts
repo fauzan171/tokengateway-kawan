@@ -15,11 +15,16 @@
  * untuk rekonsiliasi klien setelah SSE selesai (SDD-4.4).
  */
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
 import { startGeneration } from "./start-generation";
+import { validateAttachments } from "./attachments";
 import { CHAT_FIELDS, toPublicChat, type ChatRow, type PublicChat } from "./chats";
+import { idempotencyDigest, isUniqueViolation } from "./idempotency";
+
+/** Nama operasi untuk digest; satu kunci tidak boleh dipakai lintas operasi. */
+export const OPERATION_SEND_MESSAGE = "chat.messages.send";
 
 const CONTENT_MAX = 100_000;
 const IDEMPOTENCY_KEY_MAX = 200;
@@ -92,39 +97,20 @@ function toPublicMessage(row: MessageRow): ChatMessageDto {
   };
 }
 
-/**
- * Digest kanonik dari isi permintaan yang bermakna (content + parentId + model).
- * Urutan field tetap dan `parentId`/`model` yang absen dinormalkan ke `null`
- * supaya dua permintaan yang sama menghasilkan digest yang sama (SDD-4.7).
- */
-export function idempotencyDigest(input: {
-  content: string;
-  parentId: string | null;
-  model: string | null;
-}): string {
-  const canonical = JSON.stringify([input.content, input.parentId, input.model]);
-  return createHash("sha256").update(canonical).digest("hex");
-}
-
-/** Kode unik Prisma (P2002). Duck-typing: modul ini tidak perlu mengimpor tipe
- *  klien Prisma hanya untuk satu pengecekan. */
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "P2002"
-  );
-}
-
 export type SendMessageInput = {
   userId: string;
   chatId: string;
   content: unknown;
   parentId: unknown;
   model: unknown;
+  /** Lampiran gambar dari body; divalidasi `validateAttachments`. */
+  attachments?: unknown;
+  /** FIX-06: dokumen yang dilampirkan ke chat (manifest ChatDocument). */
+  documentIds?: unknown;
   /** Nilai header `Idempotency-Key`; `null` bila tidak dikirim. */
   idempotencyKey: string | null;
+  /** Permintaan pencarian web; hanya `true` yang dihormati (REQ-NT-51). */
+  webSearch?: unknown;
 };
 
 function normalizeContent(value: unknown): string {
@@ -156,6 +142,27 @@ function normalizeModel(value: unknown): string | null {
   return value.trim();
 }
 
+/** FIX-06: dokumen dilampirkan ke chat lewat manifest ChatDocument. */
+const MAX_DOCUMENTS = 10;
+
+function normalizeDocumentIds(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw badRequest("INVALID_DOCUMENTS", "documentIds harus berupa array.");
+  const ids = value.map((id) => {
+    if (typeof id !== "string" || id.trim() === "") {
+      throw badRequest("INVALID_DOCUMENTS", "documentIds harus berisi teks tidak kosong.");
+    }
+    return id.trim();
+  });
+  if (new Set(ids).size !== ids.length) {
+    throw badRequest("INVALID_DOCUMENTS", "documentIds tidak boleh duplikat.");
+  }
+  if (ids.length > MAX_DOCUMENTS) {
+    throw badRequest("INVALID_DOCUMENTS", `Maksimal ${MAX_DOCUMENTS} dokumen per chat.`);
+  }
+  return ids;
+}
+
 function normalizeIdempotencyKey(value: string | null): string | null {
   if (value === null) return null;
   const key = value.trim();
@@ -178,8 +185,26 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
   const content = normalizeContent(input.content);
   const parentId = normalizeParentId(input.parentId);
   const model = normalizeModel(input.model);
+  const images = validateAttachments(input.attachments);
+  const documentIds = normalizeDocumentIds(input.documentIds);
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
-  const digest = idempotencyDigest({ content, parentId, model });
+  const webSearch = input.webSearch === true;
+  // Digest memuat owner + operasi + chat, jadi kunci yang sama pada chat atau
+  // operasi lain tidak memutar ulang hasil milik chat lain (FIX-03).
+  const digest = idempotencyDigest({
+    owner: input.userId,
+    operation: OPERATION_SEND_MESSAGE,
+    chatId: input.chatId,
+    payload: [
+      content,
+      parentId,
+      model,
+      // FIX-16: gambar hasil pembuatan ikut digest lewat artifactId-nya.
+      images.map((a) => [a.mime, a.dataUrl ?? null, a.artifactId ?? null]),
+      webSearch,
+      documentIds,
+    ],
+  });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -222,8 +247,64 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
         });
         const baseSeq = last?.seq ?? 0;
 
+        // FIX-06: manifest dokumen chat diperbarui dalam transaksi yang sama.
+        // Hanya dokumen milik pengguna yang berstatus ready yang diterima;
+        // lampiran ulang berisi superset ID yang sudah ada tidak menimpa.
+        if (documentIds.length > 0) {
+          const owned = await tx.document.findMany({
+            where: { userId: input.userId, id: { in: documentIds }, status: "ready" },
+            select: { id: true },
+          });
+          if (owned.length !== documentIds.length) {
+            throw badRequest("INVALID_DOCUMENTS", "Ada dokumen yang tidak ditemukan, bukan milik Anda, atau belum siap.");
+          }
+          const existing = await tx.chatDocument.findMany({
+            where: { chatId: input.chatId, documentId: { in: documentIds } },
+            select: { documentId: true },
+          });
+          const existingIds = new Set(existing.map((row) => row.documentId));
+          const toAdd = documentIds.filter((id) => !existingIds.has(id));
+          if (toAdd.length > 0) {
+            await tx.chatDocument.createMany({
+              data: toAdd.map((documentId) => ({
+                id: randomUUID(),
+                chatId: input.chatId,
+                documentId,
+                ownerId: input.userId,
+              })),
+            });
+          }
+        }
+
+        // FIX-16: gambar hasil pembuatan wajib milik pengguna ini dan masih
+        // hidup — artifactId dari klien tidak dipercaya begitu saja. Diperiksa
+        // di dalam transaksi yang sama supaya tidak ada jendela TOCTOU.
+        const artifactImageIds = images
+          .map((image) => image.artifactId)
+          .filter((id): id is string => typeof id === "string");
+        if (artifactImageIds.length > 0) {
+          const ownedArtifacts = await tx.artifact.findMany({
+            where: {
+              id: { in: artifactImageIds },
+              userId: input.userId,
+              deletedAt: null,
+              status: "ready",
+            },
+            select: { id: true },
+          });
+          if (ownedArtifacts.length !== artifactImageIds.length) {
+            throw badRequest("INVALID_ATTACHMENT", "Gambar tidak ditemukan atau bukan milik Anda.");
+          }
+        }
+
         const userMessageId = `msg_${randomUUID()}`;
-        const contentJson = JSON.stringify({ parts: [{ kind: "text", text: content }] });
+        const contentJson = JSON.stringify({
+          parts: [
+            { kind: "text", text: content },
+            ...(webSearch ? [{ kind: "web-search" }] : []),
+            ...images,
+          ],
+        });
 
         await tx.chatMessage.create({
           data: {
@@ -245,6 +326,23 @@ export async function sendMessage(db: Db, input: SendMessageInput): Promise<Send
             payloadJson: JSON.stringify({ text: content }),
           },
         });
+        for (const [index, image] of images.entries()) {
+          await tx.chatMessagePart.create({
+            data: {
+              id: randomUUID(),
+              messageId: userMessageId,
+              kind: "image",
+              ordinal: index + 1,
+              // FIX-16: hasil pembuatan disimpan sebagai rujukan artefak, bukan
+              // base64 permanen. Unggahan pengguna tetap membawa dataUrl-nya.
+              payloadJson: JSON.stringify(
+                image.artifactId
+                  ? { mime: image.mime, artifactId: image.artifactId }
+                  : { mime: image.mime, dataUrl: image.dataUrl },
+              ),
+            },
+          });
+        }
         // Placeholder assistant, Generation, dan Job dibuat oleh primitif bersama
         // supaya regenerate/edit/continue memakai jalur yang sama persis, bukan
         // tiga salinan yang menyimpang.

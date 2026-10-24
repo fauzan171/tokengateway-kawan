@@ -151,6 +151,87 @@ describe("createStreamParser", () => {
   });
 });
 
+describe("tool_calls", () => {
+  function toolDelta(delta: Record<string, unknown>): string {
+    return `data: ${JSON.stringify({
+      choices: [{ index: 0, delta, finish_reason: null }],
+    })}\n\n`;
+  }
+
+  it("arguments terbelah antar delta, id/name hanya di delta pertama", () => {
+    const p = createStreamParser();
+    const stream =
+      toolDelta({ tool_calls: [{ index: 0, id: "call_1", function: { name: "cari", arguments: '{"q":' } }] }) +
+      toolDelta({ tool_calls: [{ index: 0, function: { arguments: '"halo"}' } }] }) +
+      `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] })}\n\n` +
+      DONE;
+
+    const out = p.push(bytes(stream));
+    const calls = out.filter((d) => d.kind === "tool_call");
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.toolCall).toEqual({ index: 0, id: "call_1", name: "cari", argumentsDelta: '{"q":' });
+    expect(calls[1]?.toolCall).toEqual({ index: 0, argumentsDelta: '"halo"}' });
+    expect(out.find((d) => d.kind === "done")?.finishReason).toBe("tool_calls");
+  });
+
+  it("beberapa call sekaligus dalam satu delta keluar berurutan", () => {
+    const p = createStreamParser();
+    const out = p.push(
+      bytes(
+        toolDelta({
+          tool_calls: [
+            { index: 1, id: "b", function: { name: "dua", arguments: "{}" } },
+            { index: 0, id: "a", function: { name: "satu", arguments: "{}" } },
+          ],
+        }) + DONE,
+      ),
+    );
+    const calls = out.filter((d) => d.kind === "tool_call");
+    expect(calls.map((d) => d.toolCall?.index)).toEqual([1, 0]);
+  });
+
+  it("entri tanpa index angka dilewati tanpa lemparan", () => {
+    const p = createStreamParser();
+    const out = p.push(
+      bytes(
+        toolDelta({
+          tool_calls: [
+            { index: "nol", id: "x", function: { name: "rusak", arguments: "{}" } },
+            { index: 0, id: "ok", function: { name: "valid", arguments: "{}" } },
+          ],
+        }) + DONE,
+      ),
+    );
+    const calls = out.filter((d) => d.kind === "tool_call");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.toolCall?.id).toBe("ok");
+  });
+
+  it("arguments unicode terbelah di tengah byte tersambung tanpa U+FFFD", () => {
+    const p = createStreamParser();
+    const args = '{"q":"👋🏽"}';
+    const encoded = bytes(toolDelta({ tool_calls: [{ index: 0, id: "c", function: { name: "cari", arguments: args } }] }) + DONE);
+    // Potong di tengah byte emoji (kutip JSON di-escape, jadi cari emoji langsung).
+    const emojiAt = indexOfBytes(encoded, bytes("👋🏽"));
+    expect(emojiAt).toBeGreaterThanOrEqual(0);
+    const cut = emojiAt + 2;
+
+    // Sisa byte dikirim sebagai chunk KEDUA — itu yang diuji: karakter terbelah
+    // antar chunk. `flush()` hanya untuk stream yang benar-benar habis.
+    const out = [
+      ...p.push(encoded.subarray(0, cut)),
+      ...p.push(encoded.subarray(cut)),
+      ...p.flush(),
+    ];
+    const joined = out
+      .filter((d) => d.kind === "tool_call")
+      .map((d) => d.toolCall?.argumentsDelta ?? "")
+      .join("");
+    expect(joined).toBe(args);
+    expect(joined).not.toContain("\u{FFFD}");
+  });
+});
+
 /** Indeks byte pertama `needle` di `haystack`; -1 bila tidak ada. */
 function indexOfBytes(haystack: Uint8Array, needle: Uint8Array): number {
   outer: for (let i = 0; i + needle.length <= haystack.length; i += 1) {

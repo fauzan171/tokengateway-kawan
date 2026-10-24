@@ -60,6 +60,20 @@ export const PROVIDER_MESSAGES: Record<ProviderReason, string> = {
 /** Pesan 429 (verbatim SDD-5.4). `reason`-nya `UPSTREAM_ERROR`. */
 export const RATE_LIMITED_MESSAGE = "Terlalu banyak permintaan. Coba lagi sebentar.";
 
+/**
+ * Pesan 400/422: yang ditolak adalah PERMINTAAN kita, bukan gateway-nya rusak
+ * (AUD-02). `reason` tetap `UPSTREAM_ERROR` supaya kosakata SDD-3.2 utuh.
+ */
+export const INVALID_REQUEST_MESSAGE = "Permintaan ke gateway tidak sah.";
+
+/**
+ * Kode diagnostik untuk 400/422, ditulis ke `Generation.errorCode`.
+ *
+ * Terpisah dari `reason` supaya operator bisa membedakan payload invalid dari
+ * gangguan gateway tanpa mengubah kosakata `reason` yang dibekukan SDD-3.2.
+ */
+export const INVALID_REQUEST_CODE = "INVALID_UPSTREAM_REQUEST";
+
 /** Pesan koneksi putus di tengah (verbatim SDD-5.4). */
 export const DISCONNECTED_MESSAGE = "Koneksi terputus.";
 
@@ -100,9 +114,13 @@ export function fromUpstreamStatus(status: number): ProviderFailure {
   if (status >= 500) {
     return { reason: "UPSTREAM_ERROR", message: PROVIDER_MESSAGES.UPSTREAM_ERROR, retryable: true };
   }
-  // 4xx lain (mis. 400/422 dari gateway): permintaan kita ditolak, bukan
-  // masalah sesi pengguna. Tetap UPSTREAM_ERROR supaya tidak pernah menjadi
-  // 401/403 ke klien.
+  // 400/422 dari gateway: permintaan kita yang tidak sah (payload kosong,
+  // bentuk ditolak). Pesannya tidak boleh menyebut gateway rusak.
+  if (status === STATUS.BAD_REQUEST || status === STATUS.UNPROCESSABLE) {
+    return { reason: "UPSTREAM_ERROR", message: INVALID_REQUEST_MESSAGE, retryable: false };
+  }
+  // 4xx lain: permintaan kita ditolak, bukan masalah sesi pengguna. Tetap
+  // UPSTREAM_ERROR supaya tidak pernah menjadi 401/403 ke klien.
   return { reason: "UPSTREAM_ERROR", message: PROVIDER_MESSAGES.UPSTREAM_ERROR, retryable: false };
 }
 

@@ -20,9 +20,12 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { CircleAlert, CircleCheck, LoaderCircle, MessageCircle } from "lucide-react";
+import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/context";
+import type { MessageKey } from "@/lib/i18n/messages";
 import type { ValidationResult } from "@/lib/auth/validation";
 
 export type AuthFormValues = {
@@ -36,6 +39,8 @@ export type AuthFormProps = {
   mode: "login" | "register";
   /** Pesan informasi yang ditampilkan di atas formulir (mis. akun perlu aktivasi). */
   notice?: string;
+  /** Formulir ditutup (mis. pendaftaran publik dimatikan admin, REQ-NT-76). */
+  closed?: boolean;
   /** Server Action dari halaman pemanggil; menjalankan validator bersama. */
   onValidate: (values: AuthFormValues) => Promise<ValidationResult>;
 };
@@ -44,17 +49,17 @@ type FieldName = keyof AuthFormValues;
 
 type FieldSpec = {
   name: FieldName;
-  label: string;
+  label: MessageKey;
   type: "email" | "text" | "password";
   autoComplete: string;
   required: boolean;
-  hint?: string;
+  hint?: MessageKey;
   inputMode?: "email" | "text";
 };
 
 const EMAIL_FIELD: FieldSpec = {
   name: "email",
-  label: "Email",
+  label: "auth.email",
   type: "email",
   autoComplete: "email",
   inputMode: "email",
@@ -63,28 +68,28 @@ const EMAIL_FIELD: FieldSpec = {
 
 const LOGIN_FIELDS: FieldSpec[] = [
   EMAIL_FIELD,
-  { name: "password", label: "Kata sandi", type: "password", autoComplete: "current-password", required: true },
+  { name: "password", label: "auth.password", type: "password", autoComplete: "current-password", required: true },
 ];
 
 const REGISTER_FIELDS: FieldSpec[] = [
   EMAIL_FIELD,
   {
     name: "name",
-    label: "Nama (opsional)",
+    label: "auth.nameOptional",
     type: "text",
     autoComplete: "name",
     required: false,
-    hint: "Boleh dikosongkan.",
+    hint: "auth.nameHint",
   },
   {
     name: "password",
-    label: "Kata sandi",
+    label: "auth.password",
     type: "password",
     autoComplete: "new-password",
     required: true,
-    hint: "Panjang minimal ditentukan oleh aturan server.",
+    hint: "auth.passwordHint",
   },
-  { name: "confirmPassword", label: "Ulangi kata sandi", type: "password", autoComplete: "new-password", required: true },
+  { name: "confirmPassword", label: "auth.confirmPassword", type: "password", autoComplete: "new-password", required: true },
 ];
 
 const FIELD_ORDER: FieldName[] = ["email", "name", "password", "confirmPassword"];
@@ -94,22 +99,16 @@ const FIELD_ORDER: FieldName[] = ["email", "name", "password", "confirmPassword"
  * email terdaftar (REQ-NT-11). Kegagalan kredensial dan akun nonaktif
  * menghasilkan pesan yang sama persis.
  */
-const LOGIN_FAILED_MESSAGE =
-  "Email atau kata sandi tidak cocok, atau akunmu belum diaktifkan admin. Periksa kembali lalu coba lagi.";
-
-const NETWORK_MESSAGE = "Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.";
-const GENERIC_REGISTER_MESSAGE = "Pendaftaran tidak dapat diselesaikan. Coba lagi sebentar lagi.";
-
-const TEXT: Record<AuthFormProps["mode"], { title: string; subtitle: string; submit: string }> = {
+const TEXT: Record<AuthFormProps["mode"], { title: MessageKey; subtitle: MessageKey; submit: MessageKey }> = {
   login: {
-    title: "Masuk ke Kawan",
-    subtitle: "Gunakan email dan kata sandi akunmu.",
-    submit: "Masuk",
+    title: "auth.loginTitle",
+    subtitle: "auth.loginSubtitle",
+    submit: "auth.loginSubmit",
   },
   register: {
-    title: "Buat akun Kawan",
-    subtitle: "Daftar dengan email. Akun baru perlu diaktifkan admin sebelum bisa masuk.",
-    submit: "Daftar",
+    title: "auth.registerTitle",
+    subtitle: "auth.registerSubtitle",
+    submit: "auth.registerSubmit",
   },
 };
 
@@ -117,7 +116,8 @@ function firstErrorName(errors: Record<string, string>): FieldName | undefined {
   return FIELD_ORDER.find((name) => errors[name]);
 }
 
-export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
+export function AuthForm({ mode, notice, closed = false, onValidate }: AuthFormProps) {
+  const t = useT();
   const router = useRouter();
   const fieldId = useId();
   const [values, setValues] = useState<AuthFormValues>({
@@ -159,7 +159,7 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
     try {
       validation = await onValidate(values);
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
       setPending(false);
       return;
     }
@@ -167,7 +167,7 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
     if (!validation.success) {
       const fieldErrors = validation.errors as Partial<Record<FieldName, string>>;
       setErrors(fieldErrors);
-      setFormError("Periksa kembali isian yang ditandai.");
+      setFormError(t("common.checkFieldsAgain"));
       setPending(false);
       setFocusTarget(firstErrorName(validation.errors) ?? null);
       return;
@@ -181,7 +181,7 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
           redirect: false,
         });
         if (!result || result.error) {
-          setFormError(LOGIN_FAILED_MESSAGE);
+          setFormError(t("auth.loginFailed"));
           setPending(false);
           return;
         }
@@ -202,10 +202,10 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
       if (!response.ok) {
         if (payload?.fields) {
           setErrors(payload.fields as Partial<Record<FieldName, string>>);
-          setFormError("Periksa kembali isian yang ditandai.");
+          setFormError(t("common.checkFieldsAgain"));
           setFocusTarget(firstErrorName(payload.fields) ?? null);
         } else {
-          setFormError(payload?.error ?? GENERIC_REGISTER_MESSAGE);
+          setFormError(payload?.error ?? t("auth.registerFailed"));
         }
         setPending(false);
         return;
@@ -216,7 +216,7 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
       // aktivasi (REQ-NT-11).
       router.push("/masuk?daftar=berhasil");
     } catch {
-      setFormError(NETWORK_MESSAGE);
+      setFormError(t("common.network"));
       setPending(false);
     }
   }
@@ -225,14 +225,12 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm">
         <div className="mb-7 flex items-center gap-3 text-xl font-semibold">
-          <span className="rounded-xl bg-foreground p-2 text-background">
-            <MessageCircle aria-hidden className="size-5" />
-          </span>
+          <BrandMark className="size-9" />
           Kawan
         </div>
 
-        <h1 className="text-2xl font-semibold tracking-tight">{text.title}</h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">{text.subtitle}</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t(text.title)}</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{t(text.subtitle)}</p>
 
         {notice ? (
           <p
@@ -240,7 +238,11 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
             aria-live="polite"
             className="mt-6 flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm leading-6"
           >
-            <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+            {closed ? (
+              <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+            ) : (
+              <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+            )}
             <span>{notice}</span>
           </p>
         ) : null}
@@ -258,11 +260,11 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
             return (
               <div key={field.name}>
                 <label htmlFor={inputId} className="block text-sm font-medium">
-                  {field.label}
+                  {t(field.label)}
                 </label>
                 {field.hint ? (
                   <p id={hintId} className="mt-1 text-xs text-muted-foreground">
-                    {field.hint}
+                    {t(field.hint)}
                   </p>
                 ) : null}
                 <input
@@ -310,14 +312,14 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
             </p>
           ) : null}
 
-          <Button type="submit" disabled={pending} aria-busy={pending} className="h-11 w-full">
+          <Button type="submit" disabled={pending || closed} aria-busy={pending} className="h-11 w-full">
             {pending ? (
               <>
                 <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
-                Memproses…
+                {t("common.processing")}
               </>
             ) : (
-              text.submit
+              t(text.submit)
             )}
           </Button>
         </form>
@@ -328,7 +330,7 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
               href="/lupa-sandi"
               className="font-medium text-foreground underline underline-offset-4"
             >
-              Lupa kata sandi?
+              {t("auth.forgot")}
             </Link>
           </p>
         ) : null}
@@ -336,16 +338,16 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
         <p className="mt-6 text-sm text-muted-foreground">
           {mode === "login" ? (
             <>
-              Belum punya akun?{" "}
+              {t("auth.noAccount")}{" "}
               <Link href="/daftar" className="font-medium text-foreground underline underline-offset-4">
-                Daftar sekarang
+                {t("auth.registerNow")}
               </Link>
             </>
           ) : (
             <>
-              Sudah punya akun?{" "}
+              {t("auth.haveAccount")}{" "}
               <Link href="/masuk" className="font-medium text-foreground underline underline-offset-4">
-                Masuk di sini
+                {t("auth.signInHere")}
               </Link>
             </>
           )}
@@ -356,7 +358,7 @@ export function AuthForm({ mode, notice, onValidate }: AuthFormProps) {
         href="https://tokengateway.ai.id"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+        className="inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-4 hover:underline"
       >
         by tokengateway.ai.id
       </a>

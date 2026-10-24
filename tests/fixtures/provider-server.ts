@@ -25,9 +25,17 @@ export const SCENARIOS = [
   "timeout",
   "unauthorized",
   "rate-limited",
+  "rate-limited-once",
+  "bad-request",
+  "server-error",
   "corrupted",
   "drop",
+"eof-no-done",
+  "length-truncated",
+  "no-done-marker",
   "redirect",
+  "file-tool",
+  "document-tool",
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];
@@ -132,10 +140,14 @@ export const TOOL_CALL_ID = "call_fixture_1";
 
 export const CORRUPTED_BODY = '{"choices":[{"delta":{"content":"terpotong';
 
+/** Sekali pakai untuk skenario `rate-limited-once`; direset tiap fixture. */
+let retriedOnce = false;
+
 async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
   switch (scenario) {
     case "redirect": {
-      res.writeHead(307, { location: "/redirect-target" });
+      // Lintas host: kredensial tidak boleh ikut ke tujuan redirect.
+      res.writeHead(307, { location: "http://127.0.0.1:1/models" });
       res.end();
       return;
     }
@@ -209,6 +221,99 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
       return;
     }
 
+    case "file-tool": {
+      sseHeaders(res);
+      const args = JSON.stringify({ format: "md", displayName: "laporan", content: "# Laporan\n\nIsi." });
+      // Dua potongan: argumen tool memang datang terfragmentasi di dunia nyata.
+      const cut = Math.floor(args.length / 2);
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: TOOL_CALL_ID,
+                    type: "function",
+                    function: { name: "generate_file", arguments: args.slice(0, cut) },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+      );
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(cut) } }] },
+              finish_reason: "tool_calls",
+            },
+          ],
+          usage: { prompt_tokens: 12, completion_tokens: 30, total_tokens: 42 },
+        })}\n\n`,
+      );
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
+    case "document-tool": {
+      sseHeaders(res);
+      const args = JSON.stringify({
+        format: "pdf",
+        displayName: "laporan",
+        doc: {
+          title: "Laporan",
+          blocks: [
+            { type: "heading", text: "Bab 1" },
+            { type: "paragraph", text: "Isi." },
+          ],
+        },
+      });
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: TOOL_CALL_ID,
+                    type: "function",
+                    function: { name: "generate_document", arguments: args },
+                  },
+                ],
+              },
+              finish_reason: "tool_calls",
+            },
+          ],
+          usage: { prompt_tokens: 12, completion_tokens: 30, total_tokens: 42 },
+        })}\n\n`,
+      );
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
     case "usage-present":
     case "usage-absent": {
       sseHeaders(res);
@@ -246,6 +351,92 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
       return;
     }
 
+    case "rate-limited-once": {
+      // 429 pada percobaan pertama, sukses pada percobaan berikutnya: menguji
+      // retry benar-benar dijalankan, bukan hanya 429 berulang.
+      if (!retriedOnce) {
+        retriedOnce = true;
+        res.writeHead(429, { "content-type": "application/json", "retry-after": "0" });
+        res.end(JSON.stringify({ error: { message: "Terlalu banyak permintaan.", type: "rate_limit_error" } }));
+        return;
+      }
+      sseHeaders(res);
+      for (const piece of ["Setelah ", "retry."]) {
+        await writeEvent(res, chunkEvent(piece, false));
+      }
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
+    case "eof-no-done": {
+      // Stream ditutup rapi TANPA `[DONE]` dan tanpa `finish_reason`: jawaban
+      // terpotong yang tampak sukses (AUD-09).
+      sseHeaders(res);
+      await writeEvent(res, chunkEvent("Kalimat yang menggantung", false));
+      res.end();
+      return;
+    }
+
+    case "no-done-marker": {
+      // Bentuk balasan 9Router yang TERBUKTI dari produksi: tidak pernah
+      // mengirim `data: [DONE]`, hanya `finish_reason` di delta terakhir.
+      // Parser harus tetap menutup stream sebagai `done` (stream-parse.ts:157).
+      sseHeaders(res);
+      for (const piece of ["Jawaban ", "tanpa DONE."]) {
+        await writeEvent(res, chunkEvent(piece, false));
+      }
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+          usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+
+    case "length-truncated": {
+      sseHeaders(res);
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [{ index: 0, delta: { content: "Jawaban panjang yang terpotong" }, finish_reason: "length" }],
+        })}\n\n`,
+      );
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
+    case "bad-request": {
+      // Body memuat penanda rahasia: uji memastikan ia tidak bocor ke log.
+      res.writeHead(400, {
+        "content-type": "application/json",
+        "x-request-id": "req-uji-400",
+      });
+      res.end(
+        JSON.stringify({
+          error: { message: "messages kosong", type: "invalid_request_error", code: "invalid_messages" },
+          canary: "sk-canary-" + "b".repeat(24),
+        }),
+      );
+      return;
+    }
+
+    case "server-error": {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { type: "server_error" } }));
+      return;
+    }
+
     case "corrupted": {
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.end(CORRUPTED_BODY);
@@ -265,6 +456,7 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
 
 export async function startProviderFixture(): Promise<ProviderFixture> {
   const requests: RecordedRequest[] = [];
+  retriedOnce = false;
 
   const server = createServer((req, res) => {
     void (async () => {
@@ -278,10 +470,6 @@ export async function startProviderFixture(): Promise<ProviderFixture> {
         body,
       });
       try {
-        if (req.url === "/redirect-target") {
-          await handle(res, "usage-present");
-          return;
-        }
         await handle(res, scenario);
       } catch {
         if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });

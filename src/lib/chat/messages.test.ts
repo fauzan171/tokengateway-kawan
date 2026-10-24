@@ -14,7 +14,8 @@ import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import type { Config } from "@/lib/config/env";
 import type { Db } from "@/lib/db";
 import { createChat } from "./chats";
-import { getChat, idempotencyDigest, sendMessage } from "./messages";
+import { getChat, sendMessage } from "./messages";
+import { idempotencyDigest } from "./idempotency";
 
 const state = vi.hoisted(() => ({
   userId: "",
@@ -57,6 +58,7 @@ beforeEach(async () => {
     modelCacheTtlSeconds: 600,
     outboundAllowlist: [],
     allowInsecureHttp: false,
+    maxUploadBytes: 10 * 1024 * 1024,
   };
   await db.user.create({ data: { id: state.userId, email: `${state.userId}@contoh.test` } });
 });
@@ -210,16 +212,16 @@ describe("sendMessage", () => {
     expect(messages[1].status).toBe("streaming");
   });
 
-  it("digest kanonik: urutan field tetap, parentId/model absen = null", () => {
-    expect(idempotencyDigest({ content: "a", parentId: null, model: null })).toBe(
-      idempotencyDigest({ content: "a", parentId: null, model: null }),
-    );
-    expect(idempotencyDigest({ content: "a", parentId: null, model: null })).not.toBe(
-      idempotencyDigest({ content: "a", parentId: "msg_1", model: null }),
-    );
-    expect(idempotencyDigest({ content: "a", parentId: null, model: "gpt-4o-mini" })).not.toBe(
-      idempotencyDigest({ content: "a", parentId: null, model: "gpt-4o" }),
-    );
+  it("digest kanonik: owner+operasi+chat ikut, payload berbeda menghasilkan kunci berbeda", () => {
+    const base = { owner: "u1", operation: "chat.messages.send", chatId: "c1", payload: ["a", null, null, [], false] };
+    expect(idempotencyDigest(base)).toBe(idempotencyDigest({ ...base }));
+    // Kunci yang sama tidak boleh memutar ulang hasil milik owner/chat lain.
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, owner: "u2" }));
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, chatId: "c2" }));
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, operation: "chat.stop" }));
+    // Payload yang berbeda (model lain, parent lain) harus berbeda.
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, payload: ["a", "msg_1", null, [], false] }));
+    expect(idempotencyDigest(base)).not.toBe(idempotencyDigest({ ...base, payload: ["a", null, "gpt-4o", [], false] }));
   });
 });
 
@@ -291,5 +293,28 @@ describe("POST /api/kawan/v1/chat/{chatId}/messages", () => {
     const chatId = await seedChat();
     const res = await POST(request(chatId, ["bukan", "objek"]), ctx(chatId));
     expect(res.status).toBe(400);
+  });
+});
+
+// FIX-06: admission documentIds mengisi manifest ChatDocument.
+describe("sendMessage documentIds", () => {
+  it("menautkan dokumen ready milik pengguna ke chat", async () => {
+    const chatId = await seedChat();
+    const doc = await db.document.create({
+      data: { id: "doc_ok", userId: state.userId, filename: "a.txt", mime: "text/plain", sizeBytes: 1, storageKey: "k", status: "ready" },
+    });
+    await send(chatId, { documentIds: [doc.id] });
+    const manifest = await db.chatDocument.findMany({ where: { chatId } });
+    expect(manifest.map((m) => m.documentId)).toEqual([doc.id]);
+  });
+
+  it("menolak dokumen milik pengguna lain", async () => {
+    const chatId = await seedChat();
+    const other = await db.user.create({ data: { id: "u2", email: "u2@t.id" } });
+    const doc = await db.document.create({
+      data: { id: "doc_lain", userId: other.id, filename: "b.txt", mime: "text/plain", sizeBytes: 1, storageKey: "k", status: "ready" },
+    });
+    await expect(send(chatId, { documentIds: [doc.id] })).rejects.toMatchObject({ code: "INVALID_DOCUMENTS" });
+    expect(await db.chatDocument.count({ where: { chatId } })).toBe(0);
   });
 });
