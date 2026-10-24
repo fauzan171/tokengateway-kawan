@@ -1,8 +1,8 @@
-# Gelombang 3 — D3 + D4
+# Gelombang 3 — D3 + D4 + D6
 
 Tanggal: 2026-10-24. Cakupan: D3 (rencana §3 baris D3): `pageBreak` → `divider`
-→ `bullets.ordered` → `image` (via `artifactId`), dan D4 (rencana §3 baris D4):
-tiga template sebagai data. Keduanya menyentuh jalur dokumen yang sama.
+→ `bullets.ordered` → `image` (via `artifactId`); D4 (baris D4): tiga template
+sebagai data; D6 (baris D6): tata letak PPTX berbasis tinggi terhitung.
 
 ## Perubahan
 
@@ -78,7 +78,7 @@ tiga template sebagai data. Keduanya menyentuh jalur dokumen yang sama.
 | `npx tsc --noEmit -p tsconfig.json` | 0 error |
 | `npm run lint` | 0 error, 0 warning |
 | `node scripts/check-migrations.mjs` | OK (skema tidak berubah, tidak dijalankan ulang penuh) |
-| `npm test` | **1250 lulus / 111 file** (baseline 1229/109 + 9 D3 + 12 D4) |
+| `npm test` | **1254 lulus / 112 file** (baseline 1229/109 + 9 D3 + 12 D4 + 4 D6) |
 | `npm run build` | exit 0 |
 
 Tes baru: `src/lib/artifacts/document-d3.test.ts` (9 tes: parse batas 20
@@ -130,3 +130,35 @@ DOCX, sharedStrings XLSX, slide kedua + `prst="line"` + `ppt/media` PPTX).
 
 ### Gate D4
 tsc 0 · eslint 0/0 · npm test **1250 lulus / 111 file** (baseline 1238/110 + 12 baru D4) · build 0
+
+---
+
+## D6 — tata letak PPTX dihitung, bukan rumus tetap
+
+### Masalah (riset T4/T5)
+- Rumus lama `y = 1,3 + used*0,6` dengan 12 blok/slide menempatkan blok
+  ke-12 di 7,9 inci — meluber dari slide 16:9 (tinggi 5,625 inci).
+- Semua blok `table` diletakkan di `y: 1,3` yang sama: tabel kedua menimpa
+  tabel pertama di slide yang sama.
+- Tabel 12 kolom (batas kanonik) tetap lolos render di slide selebar 10 inci.
+
+### Perubahan (`renderPptxBytes`)
+- Kursor tinggi berjalan mulai 1,3 inci; tiap blok menghitung konsumsinya
+  (teks 0,6; divider 0,6; image = rasio asli + caption 0,4; tabel = penuh).
+- Slide baru otomatis saat kursor melewati 5,4 inci (buffer bawah 0,225).
+- Tabel SELALU dapat slide sendiri (`newSlide` sebelum render) — tidak ada
+  lagi tumpang-tindih dua tabel.
+- Kolom tabel dipotong ke `PPTX_TABLE_MAX_COLS = 8` — lebih ketat dari
+  batas kanonik 12, sesuai riset §3.1 "boleh lebih ketat, tidak boleh lebih
+  longgar".
+- `pageBreak` (D3) tetap slide baru tanpa konsumsi tinggi.
+
+### Tes (`pptx-layout.test.ts`, 4)
+- 12 blok teks: semua `a:off/a:ext` XML slide berada 0 ≤ y+h ≤ 5,625 inci
+  (pembaca independen, EMU → inci).
+- 200 paragraf: tidak ada elemen keluar slide.
+- Dua tabel: slide terpisah (tabel kedua tidak menimpa).
+- Tabel 12 kolom: `h9`/`H9` tidak ada di XML slide tabel (dipotong 8).
+
+### Gate D6
+tsc 0 · eslint 0/0 · npm test **1254 lulus / 112 file** · build 0

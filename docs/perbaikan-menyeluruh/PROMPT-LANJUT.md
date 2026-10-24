@@ -24,7 +24,7 @@ hijau. Jangan mengulang pekerjaan yang sudah selesai.
 - HEAD 042ce38 sudah push (042ce38 + ab12b97: tindak lanjut W2). Live masih
   c18ed34: `npm run build` 0, pm2 kawan+kawan-worker online,
   /api/kawan/v1/health -> {"ready":true}, /api/kawan/v1/agents -> 401.
-- npm test: 111 file, 1250 lulus (D3+D4 selesai). Itu baseline; JANGAN sampai turun.
+- npm test: 112 file, 1254 lulus (D3+D4+D6 selesai). Itu baseline; JANGAN sampai turun.
 
 ## SUMBER KEBENARAN (baca dulu, jangan mengarang)
 - docs/perbaikan-menyeluruh/STATUS.md                    -> papan status + blocker
@@ -40,7 +40,9 @@ Ikuti teks spesifikasinya apa adanya; jangan menambah fitur di luar gate.
 2. D4 — SELESAI (bukti: reports/gelombang-3.md §D4): template laporan/surat/
    rekap di artifacts/templates.ts + jalur template di generate_document + 12 tes.
    JANGAN diulang.
-3. D6 — tata letak PPTX: hitung tinggi, satu tabel per slide, 8 kolom.
+3. D6 — SELESAI (bukti: reports/gelombang-3.md §D6): tata letak PPTX dihitung
+   dari tinggi, tabel satu per slide, 8 kolom, assert XML slides dalam 5,625 inci.
+   JANGAN diulang.
 4. P2 — manifest plugin deklaratif + tabel Plugin + migrasi dua provider.
 5. P8 — ToolDoc satu sumber tiga pembaca. WAJIB sekalian menutup W2-4 (bentuk
    ToolResult/ToolContext sesuai SDD 04-execution-tools.md:62-66) dan W2-8
@@ -79,7 +81,7 @@ Satu tahap selesai = gate hijau + commit + push sebelum tahap berikutnya.
 2. npm run lint                            -> 0 error, 0 WARNING (warning = gagal)
 3. node scripts/check-migrations.mjs       -> hanya bila skema berubah (+ deploy
    ke dev.db + db:generate)
-4. npm test                                -> >= 1250 lulus, 111 file
+4. npm test                                -> >= 1254 lulus, 112 file
 5. npm run build                           -> 0 (ini satu-satunya gate yang
    menangkap pelanggaran export route Next.js)
 

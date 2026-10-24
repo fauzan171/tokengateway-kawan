@@ -329,7 +329,21 @@ export async function renderXlsxBytes(doc: DocSchema, resolveImage: ImageResolve
   return Buffer.from(arrayBuffer as ArrayBuffer);
 }
 
-/** PPTX: judul di slide pertama, maksimal 12 blok per slide, table jadi addTable. */
+/**
+ * PPTX (D6): tata letak berbasis tinggi terhitung, bukan rumus tetap.
+ *
+ * Slide LAYOUT_16x9 = 10 x 5,625 inci. Kursor konten mulai di y = 1,3 (di bawah
+ * judul). Setiap blok menghitung tinggi konsumsinya; saat kursor melewati
+ * SLIDE_CONTENT_BOTTOM, slide baru dibuat — tidak ada lagi blok yang "meluber"
+ * ke bawah tepi (temuan riset T4). Tabel mendapat slide sendiri (satu tabel
+ * per slide) dan dipotong ke 8 kolom — lebih ketat dari batas kanonik 12
+ * karena lebar slide hanya 10 inci.
+ */
+const SLIDE_CONTENT_TOP_IN = 1.3;
+const SLIDE_CONTENT_BOTTOM_IN = 5.4;
+const PPTX_TEXT_H_IN = 0.6;
+const PPTX_TABLE_MAX_COLS = 8;
+
 export async function renderPptxBytes(doc: DocSchema, resolveImage: ImageResolver | null = null): Promise<Buffer> {
   const pptx = new PptxGenJS();
   pptx.title = doc.title;
@@ -343,15 +357,27 @@ export async function renderPptxBytes(doc: DocSchema, resolveImage: ImageResolve
     bold: true,
     color: TEMA.color.text.slice(1).toUpperCase(),
   });
-  let used = 0;
+  let cursor = SLIDE_CONTENT_TOP_IN;
+  const newSlide = (): void => {
+    slide = pptx.addSlide();
+    cursor = SLIDE_CONTENT_TOP_IN;
+  };
   for (const block of doc.blocks) {
-    if (used >= 12) {
-      slide = pptx.addSlide();
-      used = 0;
+    if (block.type === "pageBreak") {
+      // D3: slide baru — pemisah paling alami di deck. D6: tidak dianggap
+      // konsumsi tinggi.
+      newSlide();
+      continue;
     }
     if (block.type === "table") {
+      // D6: satu tabel per slide (semua tabel lama diletakkan di y sama dan
+      // saling menimpa). Potong kolom ke batas PPTX 8 — lebih ketat dari
+      // batas kanonik 12 karena slide hanya 10 inci.
+      newSlide();
+      const headers = block.headers.slice(0, PPTX_TABLE_MAX_COLS);
+      const rows = block.rows.map((row) => row.slice(0, PPTX_TABLE_MAX_COLS));
       slide.addTable(
-        [block.headers, ...block.rows].map((row) =>
+        [headers, ...rows].map((row) =>
           row.map((cell, index) => ({
             text: cell,
             options: {
@@ -360,38 +386,45 @@ export async function renderPptxBytes(doc: DocSchema, resolveImage: ImageResolve
             },
           })),
         ),
-        { x: 0.5, y: 1.3, w: 9 },
+        { x: 0.5, y: SLIDE_CONTENT_TOP_IN, w: 9 },
       );
-      used++;
-    } else if (block.type === "pageBreak") {
-      // D3: slide baru — pemisah paling alami di deck.
-      slide = pptx.addSlide();
-      used = 0;
-    } else if (block.type === "divider") {
-      // D3: garis horizontal penuh lebar slide.
-      slide.addShape(pptx.ShapeType.line, { x: 0.5, y: 1.3 + used * 0.6, w: 9, h: 0 });
-      used++;
-    } else if (block.type === "image") {
+      cursor = SLIDE_CONTENT_BOTTOM_IN;
+      continue;
+    }
+    if (block.type === "divider") {
+      // D3: garis horizontal penuh; D6: tinggi satu baris teks.
+      if (cursor + PPTX_TEXT_H_IN > SLIDE_CONTENT_BOTTOM_IN) newSlide();
+      slide.addShape(pptx.ShapeType.line, { x: 0.5, y: cursor, w: 9, h: 0 });
+      cursor += PPTX_TEXT_H_IN;
+      continue;
+    }
+    if (block.type === "image") {
       // D3: gambar via data URL; lebar relatif dari lebar konten 9 inci.
+      // D6: tinggi rasio ikut dihitung — gambar tinggi memicu slide baru.
       const stored = resolveImage ? await resolveImage(block.artifactId) : null;
+      const w = (9 * (block.widthPct ?? 100)) / 100;
+      const size = stored ? imageSize(stored.bytes) : null;
+      const h = stored
+        ? size && size.width > 0
+          ? (w * size.height) / size.width
+          : w
+        : PPTX_TEXT_H_IN;
+      const captionH = block.caption ? 0.4 : 0;
+      if (cursor + h + captionH > SLIDE_CONTENT_BOTTOM_IN) newSlide();
       if (stored) {
-        const w = (9 * (block.widthPct ?? 100)) / 100;
-        // Tinggi dari rasio asli byte; tak terbaca -> persegi.
-        const size = imageSize(stored.bytes);
-        const h = size && size.width > 0 ? (w * size.height) / size.width : w;
         slide.addImage({
           data: `data:${stored.mime};base64,${stored.bytes.toString("base64")}`,
           x: 0.5,
-          y: 1.3 + used * 0.6,
+          y: cursor,
           w,
           h,
         });
       } else {
         slide.addText(`[${block.alt}]`, {
           x: 0.5,
-          y: 1.3 + used * 0.6,
+          y: cursor,
           w: 9,
-          h: 0.6,
+          h: PPTX_TEXT_H_IN,
           fontSize: TEMA.ptx.body,
           color: TEMA.color.text.slice(1).toUpperCase(),
         });
@@ -399,33 +432,34 @@ export async function renderPptxBytes(doc: DocSchema, resolveImage: ImageResolve
       if (block.caption) {
         slide.addText(block.caption, {
           x: 0.5,
-          y: 1.3 + used * 0.6 + 0.1,
+          y: cursor + h + 0.05,
           w: 9,
           h: 0.4,
           fontSize: TEMA.ptx.body,
           color: TEMA.color.text.slice(1).toUpperCase(),
         });
       }
-      used++;
-    } else {
-      const text =
-        block.type === "bullets"
-          ? block.items
-              .map((item, index) => (block.ordered ? `${index + 1}. ${item}` : `• ${item}`))
-              .join("\n")
-          : block.type === "heading"
-            ? block.text
-            : block.text;
-      slide.addText(text, {
-        x: 0.5,
-        y: 1.3 + used * 0.6,
-        w: 9,
-        h: 0.6,
-        fontSize: TEMA.ptx.body,
-        color: TEMA.color.text.slice(1).toUpperCase(),
-      });
-      used++;
+      cursor += h + captionH;
+      continue;
     }
+    const text =
+      block.type === "bullets"
+        ? block.items
+            .map((item, index) => (block.ordered ? `${index + 1}. ${item}` : `• ${item}`))
+            .join("\n")
+        : block.type === "heading"
+          ? block.text
+          : block.text;
+    if (cursor + PPTX_TEXT_H_IN > SLIDE_CONTENT_BOTTOM_IN) newSlide();
+    slide.addText(text, {
+      x: 0.5,
+      y: cursor,
+      w: 9,
+      h: PPTX_TEXT_H_IN,
+      fontSize: TEMA.ptx.body,
+      color: TEMA.color.text.slice(1).toUpperCase(),
+    });
+    cursor += PPTX_TEXT_H_IN;
   }
   return pptx.write({ outputType: "nodebuffer" }) as unknown as Promise<Buffer>;
 }
