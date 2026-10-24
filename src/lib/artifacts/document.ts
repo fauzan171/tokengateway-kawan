@@ -30,7 +30,7 @@ export type ParsedDocSchema = DocSchema & {
   unknownBlocks: number;
 };
 
-/** Bentuk salah (bukan objek, judul kosong, blocks bukan array, >500 blok) dilempar; sisanya dipotong. */
+/** Bentuk salah (bukan objek, judul kosong, blocks bukan array) dilempar; kelebihan jumlah/panjang dipotong dan dilaporkan lewat `truncated`. */
 export function parseDocSchema(value: unknown): ParsedDocSchema {
   if (typeof value !== "object" || value === null) throw new ArtifactError("INVALID_DOC_SCHEMA");
   const raw = value as Record<string, unknown>;

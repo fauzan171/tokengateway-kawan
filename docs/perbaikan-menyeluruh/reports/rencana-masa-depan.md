@@ -109,11 +109,17 @@ Rujukan utama: `reports/riset-standar-dokumen.md` §2 (T1–T7), §3.1 (batas), 
 
 Bukti penerimaan D (dari riset §8): round-trip `renderDocxBytes → detectFormat = docx`
 (idem xlsx/pptx); judul jahat tetap ter-render; konversi pdf→md = 400; 13 kolom
-dipotong ke 12 dengan `truncated: true`; 501 blok = `INVALID_DOC_SCHEMA`;
-500 blok × 20k char = dipotong dengan `truncated: true`; PPTX tidak meluber.
+dipotong ke 12 dengan `truncated: true`; 501 blok = dipotong ke 500 dengan
+`truncated: true`; 500 blok × 20k char = dipotong dengan `truncated: true`; PPTX
+tidak meluber.
 
 > Koreksi 2026-10-23 (setelah D1): kontrak yang **diterapkan** memotong + melaporkan
 > (`truncated`/`unknownBlocks`), bukan melempar `TABLE_TOO_WIDE`/`DOC_TOO_LARGE`.
+> Koreksi 2026-10-24 (W2-3): "tata letak tidak digeser" juga tidak benar untuk jalur
+> dokumen — lebar halaman 612 → 595 berarti kolom teks 468 → 451 pt, jadi
+> pembungkusan baris PDF lama bisa berubah. Yang benar-benar dijaga: margin 72 dan
+> geometri jalur transkrip (50/780).
+>
 > Kode galat itu tidak pernah ada di `src/`; menyebutnya sebagai bukti penerimaan
 > adalah klaim yang salah dan sudah diganti di sini.
 

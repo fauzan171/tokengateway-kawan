@@ -79,9 +79,20 @@ gate setiap tahap. R5 bukan alasan menunda keamanan ke akhir.
 
 Setiap FIX harus mempunyai perubahan kode nyata, test perilaku, bukti UI/HTTP bila
 relevan, dan hasil gate. Status: `planned`, `in_progress`, `blocked_external`,
-`verified_fixture`, `verified_live`, `released`. Semua FIX di paket ini masih
-`planned`. Dependency tersedia di kode tidak berarti dependency sudah aman untuk
-fitur baru; API dan lisensi versi yang akan dipakai harus diverifikasi saat implementasi.
+`verified_fixture`, `verified_live`, `released`.
+
+**Keadaan 2026-10-24:** FIX-01…24 sudah tidak ada yang `planned`; rinciannya di
+[STATUS.md](STATUS.md). Setelah itu pekerjaan berjalan sebagai gelombang di atas
+rencana yang sama:
+
+| Gelombang | Isi | Status |
+|---|---|---|
+| 1 | D0a–D0c, D1, P1, K1/K2 | `verified` — [reports/gelombang-1.md](reports/gelombang-1.md) |
+| 2 | D2, P3, K3/K4/K5 | `verified` (review pass, 6 medium/6 low) — [reports/gelombang-2.md](reports/gelombang-2.md) |
+| 3 | D3, D4, D6, P2, P8, K6, K7, K8 | belum dimulai — [reports/rencana-masa-depan.md](reports/rencana-masa-depan.md) |
+
+Dependency tersedia di kode tidak berarti dependency sudah aman untuk fitur baru;
+API dan lisensi versi yang akan dipakai harus diverifikasi saat implementasi.
 
 Batas model yang tidak dapat dihilangkan ditangani dengan verifikasi, fallback,
 dan informasi yang jujur. Menandainya "fixed 100%" tidak memenuhi penerimaan.

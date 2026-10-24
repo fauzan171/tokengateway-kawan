@@ -133,6 +133,9 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const displayName = typeof body["displayName"] === "string" ? body["displayName"] : "";
+    // Diisi hanya oleh cabang dokumen terstruktur di bawah.
+    let docTruncated = false;
+    let docUnknownBlocks = 0;
 
     let input: Parameters<typeof createArtifact>[1]["input"] | null;
     if (format === "png") {
@@ -154,7 +157,13 @@ export async function POST(request: Request): Promise<Response> {
         });
       }
       try {
-        input = { format, doc: parseDocSchema(body["doc"]) };
+        // W2-7: potongan tidak boleh hilang diam-diam di jalur API. Jalur chat
+        // menerbitkan note `doc-truncated`; di sini flag-nya dikembalikan di
+        // badan respons 201 supaya klien bisa memberi tahu hal yang sama.
+        const parsed = parseDocSchema(body["doc"]);
+        docTruncated = parsed.truncated;
+        docUnknownBlocks = parsed.unknownBlocks;
+        input = { format, doc: parsed };
       } catch (err) {
         if (err instanceof ArtifactError && err.code === "INVALID_DOC_SCHEMA") {
           throw new ApiError({
@@ -203,7 +212,17 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
-    return jsonOk({ artifact }, reqId, 201);
+    return jsonOk(
+      {
+        artifact,
+        // W2-7: flag pemotongan terlihat di jalur API, bukan sekadar di jalur chat.
+        ...(docTruncated || docUnknownBlocks > 0
+          ? { docTruncated, docUnknownBlocks }
+          : {}),
+      },
+      reqId,
+      201,
+    );
   } catch (err) {
     if (err instanceof ArtifactError) {
       return handleRouteError(

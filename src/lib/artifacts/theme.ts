@@ -6,10 +6,11 @@
  * PDF dengan ukuran halaman berbeda. Semua angka tampilan sekarang hanya boleh
  * berasal dari sini.
  *
- * Catatan kompatibilitas: ukuran halaman disatukan ke A4, tetapi geometri tata
- * letak tiap jalur sengaja TIDAK diubah (`margin` 72 adalah default PDFKit,
- * `pdf.*` adalah geometri jalur transkrip 50/780). Menyatukan margin akan
- * menggeser teks yang sudah ada, dan itu di luar lingkup D2.
+ * Catatan kompatibilitas: ukuran halaman disatukan ke A4 (612 -> 595 pt), jadi
+ * lebar kolom teks jalur dokumen ikut menyempit 468 -> 451 pt dan pembungkusan
+ * baris PDF lama BISA bergeser. Yang sengaja TIDAK diubah adalah margin (72 =
+ * default PDFKit) dan geometri jalur transkrip (`pdf.*` 50/780); menyatukan
+ * margin akan menggeser teks yang sudah ada, dan itu di luar lingkup D2.
  *
  * Semua objek dibekukan: tema adalah konstanta, bukan konfigurasi runtime.
  */
@@ -28,9 +29,13 @@ export type Tema = {
     body: number;
     code: number;
     chat: number;
+    /** Nama font monospace yang dikenali PDFKit dan docx sekaligus. */
+    mono: string;
   };
   /** Warna teks utama dan baris tabel bergantian (hex, untuk DOCX/PPTX). */
   color: { text: string; tableAlt: string };
+  /** Ukuran font PPTX (inci-based deck). */
+  ptx: { title: number; body: number };
   /** Geometri jalur transkrip percakapan; dipertahankan apa adanya. */
   pdf: { marginX: number; firstBaselineOffset: number };
 };
@@ -53,7 +58,9 @@ export const TEMA: Tema = deepFreeze({
     body: 11,
     code: 10,
     chat: 12,
+    mono: "Courier",
   },
   color: { text: "#111827", tableAlt: "#f3f4f6" },
+  ptx: { title: 24, body: 12 },
   pdf: { marginX: 50, firstBaselineOffset: 62 },
 });

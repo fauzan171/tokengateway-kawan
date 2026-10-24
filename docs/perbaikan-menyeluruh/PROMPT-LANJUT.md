@@ -1,102 +1,97 @@
-# PROMPT — Lanjutkan FIX-16 → FIX-24 (tokengateway-kawan)
+# PROMPT — Lanjutkan gelombang 3 (Kawan)
 
-Tempel blok di bawah ke harness/agent baru. Isinya cukup untuk mulai tanpa konteks lain.
+Diperbarui: 2026-10-24. Tempel blok di bawah ke harness/agent baru. Isinya cukup
+untuk mulai tanpa konteks lain.
 
 ---
 
 ```
-Kamu senior systems engineer. Kerjakan tiket FIX-16 sampai FIX-24 secara
-BERURUTAN di repo ini sampai semua `verified` di STATUS.md dan semua gate hijau.
+Kamu senior systems engineer. Lanjutkan repo tokengateway-kawan dari keadaan yang
+sudah terverifikasi, lalu kerjakan GELOMBANG 3 secara BERURUTAN sampai semua gate
+hijau. Jangan mengulang pekerjaan yang sudah selesai.
 
 ## LOKASI & BRANCH
 - Repo: /home/hermes/workspace/projects/tokengateway-kawan
 - Branch: merge/main-into-feat-nt-p1 (JANGAN ganti branch, JANGAN force-push)
 - Remote: origin (github fauzan171). `git push origin HEAD` setelah tiap commit.
-- HEAD saat prompt ini dibuat: a32dc2a (FIX-15). FIX-13/14/15 sudah `verified`.
+- JANGAN menyentuh .claude/ dan .claude/worktrees/.
+
+## KEADAAN SEKARANG (jangan diulang)
+- FIX-01…24: tidak ada lagi yang `planned`. Rincian di STATUS.md.
+- Gelombang 1 (D0a–D0c, D1, P1, K1/K2): verified — reports/gelombang-1.md
+- Gelombang 2 (D2, P3, K3/K4/K5): verified, review pass 0 high/blocker,
+  6 medium + 6 low — reports/gelombang-2.md
+- HEAD c18ed34 sudah push dan live: `npm run build` 0, pm2 kawan+kawan-worker
+  online, /api/kawan/v1/health -> {"ready":true}, /api/kawan/v1/agents -> 401.
+- npm test: 109 file, 1226 lulus. Itu baseline; JANGAN sampai turun.
 
 ## SUMBER KEBENARAN (baca dulu, jangan mengarang)
-- docs/perbaikan-menyeluruh/STATUS.md          → papan status tiket
-- docs/perbaikan-menyeluruh/02-rencana-implementasi.md → spesifikasi tiap FIX
-- docs/perbaikan-menyeluruh/reports/FIX-*.md    → format laporan yang diharapkan
-- tasks/agent-v1/                               → kontrak task/SDD
+- docs/perbaikan-menyeluruh/STATUS.md                    -> papan status + blocker
+- docs/perbaikan-menyeluruh/reports/rencana-masa-depan.md -> rencana gelombang 3 (§3–§5)
+- docs/perbaikan-menyeluruh/reports/riset-*.md            -> riset per jalur
+- docs/perbaikan-menyeluruh/reports/gelombang-*.md        -> format laporan gelombang
+- tasks/agent-v1/                                         -> kontrak task/SDD
 Ikuti teks spesifikasinya apa adanya; jangan menambah fitur di luar gate.
 
+## URUTAN GELOMBANG 3
+1. D3 — blok baru satu per satu: pageBreak -> divider -> bullets.ordered -> image
+   (via artifactId). Rujukan: riset-standar-dokumen.md, rencana baris D3.
+2. D4 — tiga template sebagai data (laporan, surat, rekap) di artifacts/templates.ts.
+3. D6 — tata letak PPTX: hitung tinggi, satu tabel per slide, 8 kolom.
+4. P2 — manifest plugin deklaratif + tabel Plugin + migrasi dua provider.
+5. P8 — ToolDoc satu sumber tiga pembaca. WAJIB sekalian menutup W2-4 (bentuk
+   ToolResult/ToolContext sesuai SDD 04-execution-tools.md:62-66) dan W2-8
+   (maxItems/maxLength di schema kanonik).
+6. K6 — kuota per user, 429 + Retry-After.
+7. K7 — UI pemilih agent di task-view.tsx.
+8. K8 — audit admin run per agent.
+
+Satu tahap selesai = gate hijau + commit + push sebelum tahap berikutnya.
+
+## HUTANG KECIL YANG MASIH TERBUKA
+- `toolsEnabled = true` masih hardcode di src/lib/chat/generate.ts (~1035). Ganti
+  dengan pembacaan capability + registry; tanpa itu plugin tidak bisa mematikan tool.
+- W2-7: route src/app/api/kawan/v1/artifacts/route.ts membuang flag `truncated`
+  dari parseDocSchema (asimetris dengan jalur chat yang menerbitkan note).
+- W2-2 sisa: penggantian karakter >U+00FF jadi "?" masih tanpa catatan runtime;
+  komentar sudah ada, note pemakai belum.
+
 ## ATURAN KERAS
-- JANGAN modifikasi/hapus .claude/ atau .claude/worktrees/ atau worktree orchestrator.
 - DILARANG grep/find rekursif di src/generated/, node_modules/, .git/.
   Selalu --exclude-dir={src/generated,node_modules,.git}.
 - JANGAN dump file skema/modul besar. Pakai `sed -n`, `head`, `tail`, grep berskopa.
-- Log terminal seminimal mungkin: saat test/lint hanya ambil baris ringkasan akhir
-  atau jejak kegagalan saja.
-- Selesaikan tiket N sampai LULUS GATE + TER-COMMIT + TER-PUSH sebelum menyentuh N+1.
-- Inisiatif commit & push SENDIRI tiap tiket selesai. Jangan berhenti untuk minta izin.
+- Log terminal seminimal mungkin: saat test/lint ambil baris ringkasan akhir saja.
+- Migrasi additive, WAJIB dua provider (sqlite + postgresql), lalu:
+  node scripts/check-migrations.mjs && npx prisma migrate deploy --schema
+  prisma/schema.sqlite.prisma && npm run db:generate
+- DILARANG: BOOLEAN, SERIAL, UUID, JSONB, TIMESTAMPTZ, BYTEA, INTERVAL,
+  CONCURRENTLY, IF NOT EXISTS, PRAGMA, AUTOINCREMENT di migration.sql.
+  Boolean disimpan sebagai Int 0/1.
+- Bahasa komentar/docstring/pesan galat/UI: Indonesia. Identifier tetap verbatim.
+- Jangan menambah dependensi kalau stdlib atau yang terpasang cukup.
+- Inisiatif commit & push tiap tahap selesai. Jangan minta izin.
 
-## GATE WAJIB PER TIKET (semua harus hijau, tanpa kompromi)
-1. npx tsc --noEmit -p tsconfig.json      → 0 error
-2. npm run lint                           → 0 error, 0 WARNING (warning = gagal)
-3. node scripts/check-migrations.mjs      → hanya jika ada perubahan skema
-   + npx prisma migrate deploy --schema prisma/schema.sqlite.prisma (bila perlu)
-   + npm run db:generate
-4. npm test                               → SEMUA baseline lulus + tes baru lulus
-   Baseline saat ini: 1012 passed / 94 file. Jangan sampai turun.
+## GATE WAJIB PER TAHAP (semua hijau, tanpa kompromi)
+1. npx tsc --noEmit -p tsconfig.json      -> 0 error
+2. npm run lint                            -> 0 error, 0 WARNING (warning = gagal)
+3. node scripts/check-migrations.mjs       -> hanya bila skema berubah (+ deploy
+   ke dev.db + db:generate)
+4. npm test                                -> >= 1226 lulus, 109 file
+5. npm run build                           -> 0 (ini satu-satunya gate yang
+   menangkap pelanggaran export route Next.js)
 
-## LANGKAH PER TIKET
-1. Baca spesifikasi tiket di 02-rencana-implementasi.md + baris STATUS.md.
-2. Recon dengan `sed -n`/grep berskopa: cari modul, route, model Prisma, helper
-   yang SUDAH ada. Pakai ulang, jangan tulis ulang (repo punya pola sendiri).
-3. Implementasi modular + strongly typed, ikut konvensi sekitar.
-   WAJIB: jalur positif (happy path) DAN jalur negatif (penolakan, batas,
-   isolasi antar pengguna, input tidak sah) punya tes.
-4. Kalau ada perubahan skema: migrasi manual untuk SQLite DAN PostgreSQL,
-   lalu jalankan gate migrasi di atas.
-5. Jalankan gate penuh. Kalau gagal, perbaiki sampai hijau — jangan lapor "hampir".
-6. Tulis docs/perbaikan-menyeluruh/reports/FIX-NN.md (format lihat FIX-14/15):
-   masalah, solusi, tabel perubahan, daftar tes, output gate, batas yang
-   SENGAJA dilewati + alasan.
-7. Ubah baris FIX-NN di STATUS.md: `planned` → `verified` + ringkasan bukti.
-8. Commit + push:
-   git add <path eksplisit per-file, JANGAN `.claude`>
-   git commit -m "fix(FIX-NN): <ringkasan deskriptif>"
-   git push origin HEAD
-   Lalu laporkan: hash commit, output gate, file yang berubah.
-
-## SCOPE TIKET BERIKUTNYA (ringkas — spesifikasi penuh ada di .md)
-- FIX-16 (R3): media. Perbaiki capability gating; probe format/size/error gateway.
-  STT → transkrip + timestamp, editable sebelum kirim. TTS → playback punya
-  cancel/revoke URL. Image generation → Artifact (BUKAN dataUrl base64 menetap di
-  history). Rekam mikrofon via MediaRecorder/getUserMedia SETELAH izin + tindakan
-  pengguna; fallback upload kalau API/codec tidak ada.
-  Video: ffprobe metadata → FFmpeg frame sampling + audio extract di runner → STT
-  → rangkuman dengan timestamp/frame provenance. Batasi durasi/FPS/pixel/jumlah
-  frame/output; JANGAN klaim sudah menonton semua frame. Generasi video hanya
-  adapter provider yang benar-benar mendukung, dengan polling job, timeout, quota,
-  cancellacion/ambiguity. Diarization = speaker A/B, BUKAN menebak identitas suara.
-  Lulus: permission denied/codec unsupported/provider down punya fallback; video
-  panjang dibatasi; sumber timestamp bisa dibuka; output tersimpan sesuai retention.
-  Catatan: ffmpeg/ffprobe ADA di /home/hermes/.hermes/tools/ffmpeg-9.0.1-linux-x64/bin/
-  (tidak di PATH). Modul existing: src/lib/media/{audio,images,config}.ts,
-  route src/app/api/kawan/v1/media/{images,speech,transcribe}.
-- FIX-17 (R4): sandbox/browser/screen sharing/akses perangkat. Adapter E2B ikut
-  SDD-AG-5: satu runtime per run, user nonprivileged, filesystem sementara,
-  CPU/RAM/wall caps, network default deny, tanpa DB/key/socket host.
-- FIX-18 (semua tahap): eval profil; butuh FIX-04, FIX-10/13/15 untuk eval lanjut.
-- FIX-19 (R3/R4): WO-AG-P0-03 + perluasan tools aplikasi.
-- FIX-20 (R4): WO-AG-P3-02; tanda tangan digital (bukan QR/tulisan tangan).
-- FIX-21 (R4): butuh FIX-08, FIX-20, FIX-24.
-- FIX-22 (setelah single agent terukur): multi-agent; jangan kerjakan sebelum
-  ada bukti kebutuhan.
-- FIX-23 (semua tahap): setiap storage baru WAJIB integrasi cleanup.
-- FIX-24 (R0–R5): metrik; mengikuti fitur baru.
-Ubah nama file inventaris di .md kalau nomor tiket bergeser — jangan pakai asumsi.
-
-## SETELAH FIX-24 SELESAI
-Jalankan `npm run build` (build produksi bersih) dan laporkan tabel:
-| Tiket | Commit SHA | Tes baru | Total tes lulus | Status di STATUS.md |
+## UJI LIVE (opsional, jika perlu bukti nyata)
+- Situs: kawanku.tokengateway.ai.id
+- Kredensial HANYA di ~/.hermes/cache/scratch/kawan-live-test/cred.txt (mode 0600).
+  JANGAN menulis kredensial ke repo, chat, prompt, atau git.
+- Deploy: backup dev.db ke ~/.hermes/cache/scratch/kawan-deploy-*/, npm run build,
+  pm2 restart kawan kawan-worker --update-env, lalu verifikasi health + agents.
 
 ## CARA MELAPOR
-Ringkas. Hanya: ringkasan perubahan, output gate (angka), hash commit.
-Sebutkan dengan jujur batas yang TIDAK dikerjakan + risikonya. Jangan pernah
-mengaku tes/deploy lulus tanpa bukti output nyata.
+Ringkas: ringkasan perubahan, output gate (angka), hash commit. Sebutkan dengan
+jujur batas yang TIDAK dikerjakan + risikonya. Jangan pernah mengaku tes/deploy
+lulus tanpa bukti output nyata. Gate live yang tidak tersedia dicatat
+`blocked_external`, tidak pernah dianggap pass.
 
-MULAI DARI FIX-16 SEKARANG.
+MULAI DARI D3 SEKARANG.
 ```

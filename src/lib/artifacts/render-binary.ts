@@ -16,8 +16,10 @@ import PptxGenJS from "pptxgenjs";
 import type { DocSchema } from "./document";
 import { TEMA } from "./theme";
 
-// Karakter di luar Latin-1 diganti "?" — font inti Helvetica/Courier PDFKit tidak
-// punya glifnya; WinAnsi encoding melempar error bila dibiarkan.
+// Catatan pdf-nonlatin (D2): font inti Helvetica/Courier PDFKit tidak punya
+// glif di luar Latin-1; WinAnsi encoding melempar error bila dibiarkan, jadi
+// karakter >U+00FF diganti "?". Bila butuh CJK/emoji/aksara asli, sematkan TTF
+// Unicode (opsi B, DITUNDA) — bukan perbaikan satu baris.
 const latin1 = (text: string) => text.replace(/[^\x00-\xFF]/g, "?");
 
 /** PDF: heading tebal + besar per level, bullets "• ", table dipisah " | ", code Courier. */
@@ -55,7 +57,7 @@ export async function renderPdfBytes(doc: DocSchema): Promise<Buffer> {
         for (const row of block.rows) pdf.text(latin1(row.join(" | ")));
         break;
       case "code":
-        pdf.font("Courier").fontSize(TEMA.font.code).text(latin1(block.text));
+        pdf.font(TEMA.font.mono).fontSize(TEMA.font.code).text(latin1(block.text));
         break;
       default:
         pdf.font("Helvetica").fontSize(TEMA.font.body).text(latin1(block.text));
@@ -94,7 +96,7 @@ export async function renderDocxBytes(doc: DocSchema): Promise<Buffer> {
         );
         break;
       case "code":
-        children.push(new Paragraph({ children: [new TextRun({ text: block.text, font: "Courier New" })] }));
+        children.push(new Paragraph({ children: [new TextRun({ text: block.text, font: TEMA.font.mono, color: "111827" })] }));
         break;
       default:
         children.push(new Paragraph({ text: block.text }));
@@ -125,7 +127,7 @@ export async function renderXlsxBytes(doc: DocSchema): Promise<Buffer> {
     switch (block.type) {
       case "table": {
         const header = sheet.addRow(block.headers);
-        header.font = { bold: true };
+        header.font = { bold: true, color: { argb: "FF" + TEMA.color.text.slice(1).toUpperCase() } };
         for (const row of block.rows) sheet.addRow(row);
         break;
       }
@@ -151,7 +153,15 @@ export async function renderPptxBytes(doc: DocSchema): Promise<Buffer> {
   const pptx = new PptxGenJS();
   pptx.title = doc.title;
   let slide = pptx.addSlide();
-  slide.addText(doc.title, { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 24, bold: true });
+  slide.addText(doc.title, {
+    x: 0.5,
+    y: 0.3,
+    w: 9,
+    h: 0.8,
+    fontSize: TEMA.ptx.title,
+    bold: true,
+    color: TEMA.color.text.slice(1).toUpperCase(),
+  });
   let used = 0;
   for (const block of doc.blocks) {
     if (used >= 12) {
@@ -160,7 +170,15 @@ export async function renderPptxBytes(doc: DocSchema): Promise<Buffer> {
     }
     if (block.type === "table") {
       slide.addTable(
-        [block.headers, ...block.rows].map((row) => row.map((cell) => ({ text: cell }))),
+        [block.headers, ...block.rows].map((row) =>
+          row.map((cell, index) => ({
+            text: cell,
+            options: {
+              fontSize: TEMA.ptx.body,
+              fill: index % 2 === 0 ? undefined : { color: TEMA.color.tableAlt.slice(1).toUpperCase() },
+            },
+          })),
+        ),
         { x: 0.5, y: 1.3, w: 9 },
       );
       used++;
@@ -171,7 +189,14 @@ export async function renderPptxBytes(doc: DocSchema): Promise<Buffer> {
           : block.type === "heading"
             ? block.text
             : block.text;
-      slide.addText(text, { x: 0.5, y: 1.3 + used * 0.6, w: 9, h: 0.6, fontSize: 12 });
+      slide.addText(text, {
+        x: 0.5,
+        y: 1.3 + used * 0.6,
+        w: 9,
+        h: 0.6,
+        fontSize: TEMA.ptx.body,
+        color: TEMA.color.text.slice(1).toUpperCase(),
+      });
       used++;
     }
   }

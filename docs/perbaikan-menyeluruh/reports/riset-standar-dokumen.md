@@ -279,12 +279,12 @@ Alasan tiap keputusan:
 | Entitas | Batas | Perilaku saat lewat |
 |---|---|---|
 | `title` | 200 char | dipotong |
-| `blocks` | 500 | tolak `INVALID_DOC_SCHEMA` (seperti sekarang) |
+| `blocks` | 500 | potong + `truncated: true` (D1: menolak berarti 600 paragraf = nol dokumen) |
 | `text` (heading/paragraph/code) | 20.000 char | dipotong (seperti sekarang) |
-| total karakter seluruh blok | 200.000 | tolak `DOC_TOO_LARGE` |
+| total karakter seluruh blok | 200.000 | potong + `truncated: true` |
 | `bullets.items` | 100 butir | sisanya dibuang + `truncated: true` |
 | satu item bullets | 500 char | dipotong |
-| `table.headers` | 12 kolom | tolak `TABLE_TOO_WIDE` |
+| `table.headers` | 12 kolom | potong kolom ke-13 dst + `truncated: true` |
 | `table.rows` | 2.000 baris | sisanya dibuang + `truncated: true` |
 | satu sel tabel | 500 char | dipotong |
 | `code.language` | 32 char, `[a-z0-9+#-]` | jatuh ke `undefined` |
@@ -517,7 +517,7 @@ relevan untuk dokumen (tidak ada eksekusi kode).
 | Round-trip | `renderDocxBytes` → `detectFormat` = `docx`; `extractText` mengembalikan teks yang sama (idem xlsx, pptx) |
 | Judul jahat | `title: "Laporan/2026: Q1"` → XLSX tetap ter-render, nama sheet tersanitasi |
 | Konversi | `convertFrom` artefak pdf + `format: md` → 400 `CONVERSION_UNSUPPORTED`, bukan file .md berisi byte PDF |
-| Batas | 13 kolom → `TABLE_TOO_WIDE`; 2.001 baris → terpotong + `truncated: true`; 500 blok × 20k char → `DOC_TOO_LARGE` |
+| Batas | 13 kolom → dipotong ke 12 + `truncated: true`; 2.001 baris → dipotong + `truncated: true`; 501 blok → dipotong ke 500 + `truncated: true`; total 10M char → dipotong, bukan galat |
 | Tata letak PPTX | 12 blok → semua kotak teks berada di dalam 0 ≤ y ≤ 5,625 inci (assert pada XML `ppt/slides`) |
 | Tema | PDF/DOCX/XLSX dari dokumen yang sama memakai ukuran font & margin dari satu objek tema |
 | Dokumentasi tool | setiap tool di `CHAT_TOOLS` punya `ToolDoc` lengkap; `docs/tools/<id>.md` cocok dengan data; setiap kode galat punya `tindakanModel` |

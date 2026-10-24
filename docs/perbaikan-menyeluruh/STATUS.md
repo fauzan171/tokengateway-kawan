@@ -68,9 +68,10 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | `node scripts/check-migrations.mjs` | OK (2 provider, init dibekukan, urutan sama) |
 | `python3 tasks/agent-v1/check_docs.py` | LULUS, 0 pelanggaran |
 | `python3 tasks/nontechnical-v1/tools/check_docs.py` | LULUS |
-| `npm test` | **79 file, 786 test lulus**, 138 dtk, exit 0 |
+| `npm test` | **109 file, 1226 test lulus**, exit 0 (gelombang 2 + fix chat `c18ed34`) |
 | `npx eslint` 8 berkas berubah | exit 0 |
 | `npm run build` | **exit 0** — gagal sekali karena cache `.next` korup (`WasmHash._updateWithBuffer`), hijau setelah `rm -rf .next` |
+| Deploy live (`c18ed34`) | `npm run build` 0, `pm2 restart kawan kawan-worker`, health `{"ready":true}`, `/api/kawan/v1/agents` 401 |
 | Fresh + upgrade populated dua provider | belum (tidak ada PostgreSQL lokal) |
 
 ## Run-3 [CC] (sesi baru, scope FIX-03, `--max-turns 120`)
@@ -127,16 +128,30 @@ turn pada sesi [CC] panjang, dengan payload konteks besar. Ini batas upstream,
 bukan bug repo. Rencana: work-order per FIX dengan `--max-turns 40` dan wajib
 menulis report sebelum turn habis.
 
+## Gelombang eksekusi di atas FIX-01…24
+
+FIX-01…24 sudah ditutup. Pekerjaan setelahnya berjalan sebagai gelombang, dengan
+rencana di `reports/rencana-masa-depan.md` dan hasil di `reports/gelombang-*.md`.
+
+| Gelombang | Cakupan | Status | Bukti |
+|---|---|---|---|
+| 1 | D0a–D0c (ZIP/sheet/konversi), D1 (batas kanonik DocSchema), P1 (registry tool), K1/K2 (registry agent + migrasi) | **verified** | `reports/gelombang-1.md` |
+| 2 | D2 (tema dokumen A4), P3 (registry jadi sumber tool chat), K3/K4/K5 (admission/eksekusi/API agent) | **verified**, review pass dengan 6 medium + 6 low | `reports/gelombang-2.md` |
+| 3 | D3, D4, D6, P2, P8, K6, K7, K8 | **belum dimulai** | `reports/rencana-masa-depan.md` §3–§5 |
+
+Sisa gate yang **belum** bisa ditutup di lingkungan ini dicatat di bagian
+`## Blocker eksternal`, bukan dianggap lulus.
+
 ## Sisa pekerjaan (jujur)
 
 Commit `a143533` di `merge/main-into-feat-nt-p1`, sudah dipush. Gate final
 dijalankan ulang setelah perbaikan lint: `tsc` 0, `eslint` 0 keluhan,
 `chat-view` 7/7, `npm test` **787/787**, `npm run build` 0.
 
-FIX tuntas: 01, 02, 03 (kecuali butir judul-dari-state), 24-baseline,
-FIX-04 sebagian (konteks server). Belum disentuh: FIX-05…23, fase R1–R5.
-
-`reports/FIX-03.md` sudah ditulis. Laporan untuk FIX-01/02/04 belum ada.
+Bagian ini mencatat keadaan pada 2026-10-22 dan **sudah tidak berlaku**: setelah
+itu FIX-05…24 dikerjakan sampai `verified`, lalu gelombang 1 dan 2 selesai. Angka
+gate terkini ada di `## Gate terakhir`; keadaan per gelombang di tabel di atas.
+`reports/FIX-03.md` sudah ditulis; laporan FIX-01/02/04 masih belum ada.
 
 ## Insiden produksi 2026-10-21 19:12–19:16 — migrasi belum diterapkan
 
@@ -169,3 +184,5 @@ pm2; commit kode saja tidak cukup.
 | SMTP/API sender | 07, 21 | Reset email tetap jalur operator; tidak ada klaim kirim nyata |
 | OAuth provider (Google) | 20 | Adapter + fixture; live gate `blocked_external` |
 | Provider media (STT/TTS/image) | 16 | Probe nyata tidak dapat dijalankan |
+| Plugin pihak ketiga (eksekusi kode) | P2 | Sengaja NON-GOAL: hanya manifest deklaratif yang menyalakan tool yang sudah ada; tidak ada `eval`/remote code |
+| Billing/kuota sebagai tagihan | K6 | Kuota adalah BATAS pemakaian, bukan tagihan. Usage tak dilaporkan = "tidak tersedia", tidak ditaksir |
