@@ -684,6 +684,33 @@ model TaskMessage {
   @@index([taskId, createdAt, id])
 }
 
+
+/// Plugin deklaratif (P2, riset-plugin §4): manifest JSON berversi, bukan kode.
+///
+/// Install = simpan manifest + sha256 (kanonik: kunci terurut) + reviewer;
+/// enabled selalu 0 saat install — menyalakan wajib review manusia.
+/// Update = baris baru dengan (pluginId, version) berbeda, bukan mutasi.
+/// Instruksi eksekusi TIDAK PERNAH disimpan di sini: tool harus sudah
+/// terdaftar di registry (manifest.ts menolak nama asing).
+model Plugin {
+  id           String   @id
+  /// id manifest kebab-case; satu id boleh punya banyak versi.
+  pluginId     String
+  version      String
+  /// 0/1; selalu 0 saat install, diaktifkan admin setelah review.
+  enabled      Int      @default(0)
+  /// Manifest JSON mentah yang sudah lolos parsePluginManifest.
+  manifestJson String
+  /// SHA-256 hex dari canonicalManifestJson.
+  sha256       String
+  /// Idempotensi admin yang menginstal (reviewer).
+  installedBy  String
+  installedAt  DateTime @default(now())
+
+  @@unique([pluginId, version])
+  @@index([pluginId, enabled])
+}
+
 /// Kredensial konektor pihak ketiga (FIX-20).
 ///
 /// Token selalu tersimpan sebagai envelope AES-GCM dengan AAD

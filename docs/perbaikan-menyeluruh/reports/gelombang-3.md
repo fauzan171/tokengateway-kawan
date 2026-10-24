@@ -1,8 +1,7 @@
-# Gelombang 3 — D3 + D4 + D6
+# Gelombang 3 — D3 + D4 + D6 + P2
 
-Tanggal: 2026-10-24. Cakupan: D3 (rencana §3 baris D3): `pageBreak` → `divider`
-→ `bullets.ordered` → `image` (via `artifactId`); D4 (baris D4): tiga template
-sebagai data; D6 (baris D6): tata letak PPTX berbasis tinggi terhitung.
+Tanggal: 2026-10-24. Cakupan: D3 (blok dokumen baru), D4 (template), D6
+(tata letak PPTX), P2 (manifest plugin deklaratif + tabel Plugin).
 
 ## Perubahan
 
@@ -162,3 +161,52 @@ tsc 0 · eslint 0/0 · npm test **1250 lulus / 111 file** (baseline 1238/110 + 1
 
 ### Gate D6
 tsc 0 · eslint 0/0 · npm test **1254 lulus / 112 file** · build 0
+
+---
+
+## P2 — manifest plugin deklaratif + tabel Plugin
+
+### Modul (`src/lib/plugins/manifest.ts`)
+- `parsePluginManifest(raw)`: JSON string atau objek → `PluginManifest`
+  tervalidasi. `manifestVersion` wajib tepat 1; id kebab-case; version
+  semver; batas ukuran (128 KiB, 20 tool/prompt/capability, body prompt
+  8.000 char).
+- Subset JSON-Schema DIBEKUKAN: hanya `type/enum/required/properties/items`;
+  kedalaman maks 8. `$ref`/`oneOf`/`allOf`/`anyOf`/`$defs`/kunci asing
+  ditolak `SCHEMA_KEYWORD_REJECTED` — `$ref` = lubang SSRF/logic
+  (rencana §P2, riset-plugin §4).
+- Nama tool wajib terdaftar di registry (P1); asing → `UNKNOWN_TOOL` —
+  plugin TIDAK menambah executor.
+- `effect` manifest wajib SAMA dengan registry — write tidak bisa dibungkus
+  jadi read (penurunan bahaya ditolak `EFFECT_MISMATCH`).
+- `canonicalManifestJson`: JSON kunci terurut untuk hash yang stabil
+  terhadap urutan kunci.
+- Galat semua berkode `ManifestError` — route bisa menerjemahkan ke 400.
+
+### Tabel `Plugin` (migrasi dua provider `20261102000000_plugin_manifest`)
+- Kolom: id, pluginId, version, enabled (Int 0/1, default 0), manifestJson,
+  sha256, installedBy, installedAt.
+- Unique (pluginId, version): update = baris baru, bukan mutasi diam-diam.
+- Index (pluginId, enabled): lookup plugin aktif per id.
+- `enabled` selalu 0 saat install — menyalakan wajib review manusia
+  (rencana §P2). Route enable/disable + wiring generate (P3) belum: P3
+  eksplisit terpisah dan menunggu keputusan capability per-tool.
+
+### Yang SENGAJA tidak dibangun (P2, sesuai riset §4)
+- Install otomatis dari URL/git/tarball; auto-sync; eksekusi build script.
+- MCP eksternal; framework plugin umum; SDK konektor.
+- Route API install/aktifkan — P2 hanya lapisan data + validator; pintu
+  manusia datang bersama P3 (butuh keputusan capability intersection).
+
+### Tes (`manifest.test.ts`, 14)
+- Bentuk dasar: manifest sah, JSON rusak, manifestVersion 2 ditolak, id
+  non-kebab, semver salah, field kosong.
+- Registry: tool asing `UNKNOWN_TOOL`, effect diturunkan `EFFECT_MISMATCH`,
+  tool ganda `DUPLICATE_TOOL`, tools kosong.
+- Subset: parameter sah lolos; `$ref` dengan pesan SSRF; oneOf/allOf/anyOf/
+  pattern/minimum ditolak; kedalaman 12 ditolak.
+- Hash kanonik: urutan kunci tidak mengubah sha256; beda isi = beda hash.
+
+### Gate P2
+tsc 0 · eslint 0/0 · check-migrations OK · validate 2 schema OK ·
+migrate deploy sqlite OK · db:generate OK · npm test 1268/113 · build 0.
