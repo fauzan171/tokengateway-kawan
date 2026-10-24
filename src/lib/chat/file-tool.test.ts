@@ -88,6 +88,24 @@ describe("parseGenerateDocumentArgs", () => {
     ).toThrowError(expect.objectContaining({ code: "INVALID_TOOL_ARGS" }));
   });
 
+  it("D4: jalur template menang atas doc; data masuk lewat buildDocFromTemplate", () => {
+    const args = parseGenerateDocumentArgs({
+      format: "docx",
+      displayName: "surat.docx",
+      template: "surat",
+      data: { kop: "PT K", tujuan: "Yth. X", isi: ["isi"], penutup: "t", penandaTangan: "a" },
+      doc: { title: "diabaikan", blocks: [{ type: "paragraph", text: "x" }] },
+    });
+    expect(args.doc.title).toBe("PT K");
+    expect(args.doc.blocks.some((b) => b.type === "divider")).toBe(true);
+  });
+
+  it("D4: template tak dikenal → INVALID_TOOL_ARGS yang menyebut pilihan sah", () => {
+    expect(() =>
+      parseGenerateDocumentArgs({ format: "pdf", displayName: "l", template: "faktur", data: {} }),
+    ).toThrowError(/laporan, surat, rekap/);
+  });
+
   it("doc title kosong → INVALID_TOOL_ARGS", () => {
     expect(() =>
       parseGenerateDocumentArgs({ format: "pdf", displayName: "l", doc: { title: "", blocks: [] } }),

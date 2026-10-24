@@ -3,6 +3,7 @@
 import { ArtifactError } from "@/lib/artifacts/render";
 import { isArtifactFormat, type ArtifactFormat } from "@/lib/artifacts/format";
 import { parseDocSchema, type DocSchema } from "@/lib/artifacts/document";
+import { DOC_TEMPLATE_IDS, buildDocFromTemplate } from "@/lib/artifacts/templates";
 
 export const GENERATE_FILE_TOOL_NAME = "generate_file";
 
@@ -189,7 +190,7 @@ export const GENERATE_DOCUMENT_TOOL: {
   function: {
     name: GENERATE_DOCUMENT_TOOL_NAME,
     description:
-      "Gunakan tool ini bila pengguna minta dokumen rapi (PDF, Word, Excel) dengan judul, bab, daftar bernomor, tabel, gambar (artifactId), atau pemisah halaman.",
+      "Gunakan tool ini bila pengguna minta dokumen rapi (PDF, Word, Excel) dengan judul, bab, daftar bernomor, tabel, gambar (artifactId), atau pemisah halaman. Untuk laporan/surat/rekap, kirim \`template\` + \`data\` — hasilnya konsisten tanpa menyusun blok manual.",
     parameters: {
       type: "object",
       properties: {
@@ -204,8 +205,12 @@ export const GENERATE_DOCUMENT_TOOL: {
           required: ["title", "blocks"],
           additionalProperties: false,
         },
+        // D4: jalur template — model mengisi data, struktur dibangun fungsi.
+        template: { type: "string", enum: [...DOC_TEMPLATE_IDS] },
+        data: { type: "object", description: "Isi sesuai template (laporan/surat/rekap)" },
       },
-      required: ["format", "displayName", "doc"],
+      required: ["format", "displayName"],
+      anyOf: [{ required: ["doc"] }, { required: ["template", "data"] }],
     },
   },
 };
@@ -238,16 +243,25 @@ export function parseGenerateDocumentArgs(args: unknown): {
   let doc: DocSchema;
   let truncated = false;
   let unknownBlocks = 0;
-  try {
-    const parsed = parseDocSchema(record.doc);
-    doc = { title: parsed.title, blocks: parsed.blocks };
-    truncated = parsed.truncated;
-    unknownBlocks = parsed.unknownBlocks;
-  } catch (err) {
-    if (err instanceof ArtifactError && err.code === "INVALID_DOC_SCHEMA") {
-      throw new ArtifactError("INVALID_TOOL_ARGS", err.message);
+  // D4: jalur template menang atas doc mentah bila keduanya dikirim — template
+  // menegakkan struktur, doc mentah dari model tidak konsisten.
+  if (typeof record.template === "string" && record.template !== "") {
+    const built = buildDocFromTemplate(record.template, record.data);
+    doc = { title: built.title, blocks: built.blocks };
+    truncated = built.truncated;
+    unknownBlocks = built.unknownBlocks;
+  } else {
+    try {
+      const parsed = parseDocSchema(record.doc);
+      doc = { title: parsed.title, blocks: parsed.blocks };
+      truncated = parsed.truncated;
+      unknownBlocks = parsed.unknownBlocks;
+    } catch (err) {
+      if (err instanceof ArtifactError && err.code === "INVALID_DOC_SCHEMA") {
+        throw new ArtifactError("INVALID_TOOL_ARGS", err.message);
+      }
+      throw err;
     }
-    throw err;
   }
   return {
     format: record.format,
