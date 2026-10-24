@@ -69,11 +69,27 @@ type SearxngResponse = {
 };
 
 /** Mencari di web. Mengembalikan `[]` untuk query kosong, tanpa jaringan. */
+/**
+ * ENG-1: normalisasi query pencarian. Query mentah pengguna berisi URL
+ * penuh + tanda baca naratif (em-dash, dsb.) yang membuat engine
+ * menolak (terverifikasi: query URL panjang = 0 hasil, kata kunci
+ * bersih = 5-11 hasil). URL dilepas dari query; konten halamannya
+ * dibaca lewat enrichSources, bukan pencarian.
+ */
+function normalizeSearchQuery(raw: string): string {
+  return raw
+    // URL tidak dibuang juga tidak dipecah: engine gagal untuk keduanya;
+    // fallback utama adalah readSource langsung di generate.ts. Cukup buang
+    // tanda baca naratif yang mengacaukan parser engine.
+    .replace(/[\u2014\u2013]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 export async function webSearch(
   query: string,
   options: { limit?: number; signal?: AbortSignal; outbound?: OutboundPolicyOptions } = {},
 ): Promise<SearchResult[]> {
-  const trimmed = query.trim();
+  const trimmed = normalizeSearchQuery(query);
   if (!trimmed) return [];
 
   const config = readWebSearchConfig();

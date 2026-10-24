@@ -9,7 +9,7 @@
 
 const SNIPPET_MAX = 300;
 /** Batas teks halaman yang masuk prompt per sumber; sisanya dipotong. */
-const TEXT_MAX = 2_000;
+const TEXT_MAX = 6_000;
 
 /**
  * Bentuk minimal yang dibutuhkan prompt: hasil pencarian polos maupun sumber
@@ -51,6 +51,16 @@ export function webSearchRequested(contentJson: string | null | undefined): bool
  */
 const FRESH_DATA_PATTERN =
   /\b(hari ini|kemarin|sekarang|terbaru|terkini|tahun ini|2024|2025|2026|harga|kapan|cuaca|berita|jadwal|update)\b/i;
+/**
+ * ENG-1: pesan ber-URL dengan kata kerja pemeriksaan (cek, buka, baca,
+ * jelaskan, lihat, ringkas) memicu pencarian juga - tujuannya membaca
+ * halaman itu, bukan menjawab dari memori.
+ */
+export function wantsUrlInspection(query: string): boolean {
+  const hasUrl = /https?:\/\//.test(query);
+  const intent = /\b(cek|buka|baca|jelaskan|lihat|ringkas|review|periksa)\b/i;
+  return hasUrl && intent.test(query);
+}
 
 export function wantsFreshData(query: string): boolean {
   return FRESH_DATA_PATTERN.test(query);

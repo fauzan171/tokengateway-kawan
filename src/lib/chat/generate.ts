@@ -42,9 +42,9 @@ import { buildContext } from "@/lib/documents/context";
 import { readEmbeddingConfig } from "@/lib/documents/embed";
 import { retrieveChunks, type RetrievedChunk } from "@/lib/documents/retrieve";
 import { extractCitations } from "@/lib/documents/citations";
-import { buildSearchSystem, wantsFreshData, webSearchRequested } from "@/lib/search/prompt";
+import { buildSearchSystem, wantsFreshData, wantsUrlInspection, webSearchRequested } from "@/lib/search/prompt";
 import { readWebSearchConfig, webSearch, type SearchResult } from "@/lib/search/web";
-import { enrichSources, type EnrichedSource } from "@/lib/sources/read";
+import { enrichSources, readSource, type EnrichedSource } from "@/lib/sources/read";
 import { buildMemoryContext } from "@/lib/memory/store";
 import { assertHeld, LeaseLost, type FenceChecker } from "@/lib/jobs/fence";
 import { StopRequested, stopIfRequested } from "./stop";
@@ -984,7 +984,7 @@ export async function runGeneration(
     searchConfigured &&
     query.trim() !== "" &&
     !webSearchRequested(lastUserRow?.contentJson) &&
-    wantsFreshData(query);
+    (wantsFreshData(query) || wantsUrlInspection(query));
   if (query.trim() !== "" && (webSearchRequested(lastUserRow?.contentJson) || needsFreshData)) {
     autoSearched = needsFreshData && !webSearchRequested(lastUserRow?.contentJson);
     // Progres yang terlihat: pengguna tahu apa yang sedang dikerjakan, bukan
@@ -1024,6 +1024,43 @@ export async function runGeneration(
       });
     }
   }
+  // ENG-1: engine pencarian tidak stabil untuk query ber-URL (terverifikasi:
+  // searxng upstream kena suspend/captcha; hasil 0 konsisten). Bila pesan
+  // memuat URL dan hasil pencarian kosong, baca halaman URL itu LANGSUNG —
+  // readSource terbukti mengembalikan 5000+ char berisi README repo GitHub.
+  if (
+    enriched.length === 0 &&
+    sources.length === 0 &&
+    !searchFailed &&
+    /https?:\/\//.test(query)
+  ) {
+    const urlMatch = query.match(/https?:\/\/[^\s]+/);
+    if (urlMatch) {
+      await publishEvent(db, generationId, "phase", {
+        phase: "reading",
+        label: "Membaca tautan langsung",
+      });
+      try {
+        const direct = await readSource(urlMatch[0], {
+          outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
+        });
+        enriched = [
+          {
+            title: direct.source.title,
+            url: direct.source.url,
+            snippet: direct.text.slice(0, 300),
+            fetchedAt: direct.source.fetchedAt,
+            reach: "reachable",
+            contentHash: direct.source.contentHash,
+            text: direct.text,
+          },
+        ];
+      } catch {
+        // Tautan mati/terblokir: biarkan model jujur tanpa sumber.
+      }
+    }
+  }
+
   const searchSystem = buildSearchSystem(enriched.length > 0 ? enriched : sources) ?? null;
   // FIX-13: memori eksplisit pengguna. Tidak ada penyimpanan otomatis di sini —
   // hanya membaca butir yang sudah disetujui pengguna.

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildSearchSystem, wantsFreshData, webSearchRequested } from "./prompt";
+import { buildSearchSystem, wantsFreshData, wantsUrlInspection, webSearchRequested } from "./prompt";
 
 describe("webSearchRequested", () => {
   it("true bila ada bagian web-search", () => {
@@ -92,10 +92,11 @@ describe("buildSearchSystem", () => {
 
   it("FIX-10: memotong teks halaman panjang dan jatuh ke snippet bila teks null", () => {
     const long = buildSearchSystem([
-      { title: "L", url: "https://g.test/7", snippet: "s", text: "y".repeat(5000) },
+      { title: "L", url: "https://g.test/7", snippet: "s", text: "y".repeat(7000) },
     ]);
-    expect(long?.includes("y".repeat(2000))).toBe(true);
-    expect(long?.includes("y".repeat(2001))).toBe(false);
+    // ENG-1: batas naik 2000 -> 6000; README GitHub (mulai ~char 3300) kini ikut.
+    expect(long?.includes("y".repeat(6000))).toBe(true);
+    expect(long?.includes("y".repeat(6001))).toBe(false);
 
     const noText = buildSearchSystem([
       { title: "N", url: "https://h.test/8", snippet: "snippet cadangan", text: null },
@@ -120,5 +121,16 @@ describe("wantsFreshData (UX-1 auto-search)", () => {
     "",
   ])("%s tidak memicu pencarian", (q) => {
     expect(wantsFreshData(q)).toBe(false);
+  });
+});
+
+describe("wantsUrlInspection (ENG-1)", () => {
+  it("URL + kata kerja pemeriksaan = true", () => {
+    expect(wantsUrlInspection("jelaskan isi repo ini https://github.com/x/y")).toBe(true);
+    expect(wantsUrlInspection("cek https://example.com")).toBe(true);
+  });
+  it("URL tanpa kata kerja, atau kalimat tanpa URL = false", () => {
+    expect(wantsUrlInspection("https://github.com/x/y")).toBe(false);
+    expect(wantsUrlInspection("apa itu fotosintesis")).toBe(false);
   });
 });

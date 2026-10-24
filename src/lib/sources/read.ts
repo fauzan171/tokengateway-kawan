@@ -80,9 +80,22 @@ function extractTitle(html: string): string {
   return title?.[1] ? decodeEntities(title[1]).replace(/\s+/g, " ").trim() : "";
 }
 
+/**
+ * ENG-1: pilih wadah konten utama bila ada - <article>, <main> - supaya
+ * menu navigasi/footer tidak mendominasi teks halaman (kasus nyata:
+ * README GitHub terbenam di char ke-3300+ di balik menu). Kandidat
+ * terpanjang yang menang; tanpa kecocokan, HTML apa adanya (fallback).
+ */
+function pickMainContent(html: string): string {
+  const article = html.match(/<article[^>]*>[\s\S]*?<\/article>/i);
+  const main = html.match(/<main[^>]*>[\s\S]*?<\/main>/i);
+  const candidates = [article?.[0], main?.[0]].filter((v): v is string => typeof v === "string");
+  if (candidates.length === 0) return html;
+  return candidates.reduce((a, b) => (b.length > a.length ? b : a));
+}
 function htmlToText(html: string): string {
   return decodeEntities(
-    stripNoise(html)
+    stripNoise(pickMainContent(html))
       .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr)[^>]*>/gi, "\n")
       .replace(/<[^>]+>/g, " "),
   )
