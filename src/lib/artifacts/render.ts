@@ -3,7 +3,7 @@
  * renderArtifactBytesAsync di bawah; renderer biner ada di render-binary.ts.
  */
 
-import { renderDocxBytes, renderPdfBytes, renderPptxBytes, renderXlsxBytes } from "./render-binary";
+import { renderDocxBytes, renderPdfBytes, renderPptxBytes, renderXlsxBytes, type ImageResolver } from "./render-binary";
 import { writeZip, type ZipInputEntry } from "./zip";
 import type { DocSchema } from "./document";
 
@@ -40,16 +40,16 @@ function asDoc(input: ArtifactInput): DocSchema {
 }
 
 /** Renderer asinkron: varian teks pakai renderArtifactBytes, biner pakai render-binary. */
-export async function renderArtifactBytesAsync(input: ArtifactInput): Promise<Buffer> {
+export async function renderArtifactBytesAsync(input: ArtifactInput, resolveImage: ImageResolver | null = null): Promise<Buffer> {
   switch (input.format) {
     case "pdf":
-      return renderPdfBytes(asDoc(input));
+      return renderPdfBytes(asDoc(input), resolveImage);
     case "docx":
-      return renderDocxBytes(asDoc(input));
+      return renderDocxBytes(asDoc(input), resolveImage);
     case "xlsx":
-      return renderXlsxBytes(asDoc(input));
+      return renderXlsxBytes(asDoc(input), resolveImage);
     case "pptx":
-      return renderPptxBytes(asDoc(input));
+      return renderPptxBytes(asDoc(input), resolveImage);
     case "zip":
       return writeZip(input.files);
     case "png":

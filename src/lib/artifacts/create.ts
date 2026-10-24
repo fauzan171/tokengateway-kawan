@@ -11,6 +11,7 @@ import type { Db } from "@/lib/db";
 import { deleteDocument, readDocument, saveDocument, storageRoot } from "@/lib/documents/storage";
 import { mimeForFormat, sanitizeDisplayName, MAX_ARTIFACT_BYTES, type ArtifactFormat } from "./format";
 import { ArtifactError, renderArtifactBytesAsync, type ArtifactInput } from "./render";
+import type { ImageResolver } from "./render-binary";
 
 /** Batas artefak per pengguna per 24 jam. */
 const DAILY_QUOTA = 100;
@@ -64,13 +65,36 @@ export type CreateArtifactInput = {
   parentArtifactId?: string | null;
 };
 
+/**
+ * Resolver gambar D3: buka byte artefak milik user via readArtifactForModel
+ * (ready + owner + belum kedaluwarsa) dan validasi mime + ukuran maksimal.
+ * Byte yang tidak memenuhi dikembalikan null — renderer menggantinya dengan
+ * teks [alt], bukan menggagalkan render.
+ */
+export function docImageResolver(db: Db, userId: string, root = storageRoot()): ImageResolver {
+  const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+  const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  return async (artifactId) => {
+    const stored = await readArtifactForModel(db, userId, artifactId, root);
+    if (!stored) return null;
+    if (!IMAGE_MIMES.has(stored.mime)) return null;
+    if (stored.bytes.byteLength > MAX_IMAGE_BYTES) return null;
+    return stored;
+  };
+}
+
 export async function createArtifact(
   db: Db,
   args: CreateArtifactInput,
   root = storageRoot(),
 ): Promise<PublicArtifact> {
   const format = args.input.format as ArtifactFormat;
-  const bytes = await renderArtifactBytesAsync(args.input);
+  // D3: blok image dalam doc di-resolve ke byte milik user ini saja.
+  const resolveImage =
+    "doc" in args.input && args.input.doc
+      ? docImageResolver(db, args.userId, root)
+      : null;
+  const bytes = await renderArtifactBytesAsync(args.input, resolveImage);
   if (bytes.byteLength > MAX_ARTIFACT_BYTES) throw new ArtifactError("TOO_LARGE");
 
   // FIX-12: lineage. Parent wajib milik user yang sama dan masih hidup; versi

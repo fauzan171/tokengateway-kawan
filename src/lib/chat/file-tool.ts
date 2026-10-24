@@ -130,6 +130,7 @@ const DOC_BLOCK_FORMS = [
     properties: {
       type: { const: "bullets" },
       items: { type: "array", items: { type: "string" } },
+      ordered: { type: "boolean", description: "true = daftar bernomor" },
     },
     required: ["type", "items"],
   },
@@ -151,6 +152,28 @@ const DOC_BLOCK_FORMS = [
     },
     required: ["type", "text"],
   },
+  // D3: blok presentasi + gambar via rujukan artifactId (bukan base64).
+  {
+    type: "object",
+    properties: { type: { const: "pageBreak" } },
+    required: ["type"],
+  },
+  {
+    type: "object",
+    properties: { type: { const: "divider" } },
+    required: ["type"],
+  },
+  {
+    type: "object",
+    properties: {
+      type: { const: "image" },
+      artifactId: { type: "string", description: "ID artefak gambar milik pengguna (PNG/JPEG)" },
+      alt: { type: "string", description: "Teks pengganti untuk aksesibilitas" },
+      caption: { type: "string" },
+      widthPct: { type: "integer", minimum: 10, maximum: 100 },
+    },
+    required: ["type", "artifactId", "alt"],
+  },
 ] as const;
 
 /** Tool dokumen terstruktur: satu-satunya jalan ke PDF/DOCX/XLSX. */
@@ -166,7 +189,7 @@ export const GENERATE_DOCUMENT_TOOL: {
   function: {
     name: GENERATE_DOCUMENT_TOOL_NAME,
     description:
-      "Gunakan tool ini bila pengguna minta dokumen rapi (PDF, Word, Excel) dengan judul, bab, daftar, atau tabel.",
+      "Gunakan tool ini bila pengguna minta dokumen rapi (PDF, Word, Excel) dengan judul, bab, daftar bernomor, tabel, gambar (artifactId), atau pemisah halaman.",
     parameters: {
       type: "object",
       properties: {

@@ -5,9 +5,14 @@ import { ArtifactError } from "./render";
 export type DocBlock =
   | { type: "heading"; text: string; level?: 1 | 2 | 3 }
   | { type: "paragraph"; text: string }
-  | { type: "bullets"; items: string[] }
+  | { type: "bullets"; items: string[]; ordered?: boolean }
   | { type: "table"; headers: string[]; rows: string[][] }
-  | { type: "code"; text: string; language?: string };
+  | { type: "code"; text: string; language?: string }
+  // D3: blok baru. pageBreak/divider presentasi murni; image hanya rujukan
+  // artifactId milik user — byte tidak pernah masuk skema (tanpa base64).
+  | { type: "pageBreak" }
+  | { type: "divider" }
+  | { type: "image"; artifactId: string; alt: string; caption?: string; widthPct?: number };
 
 export type DocSchema = { title: string; blocks: DocBlock[] };
 
@@ -22,6 +27,9 @@ export const DOC_LIMITS = {
   tableRows: 2_000,
   bullets: 100,
   cell: 500,
+  // D3: gambar per dokumen dan teks pendek (alt/caption).
+  images: 20,
+  shortText: 200,
 } as const;
 
 export type ParsedDocSchema = DocSchema & {
@@ -44,6 +52,7 @@ export function parseDocSchema(value: unknown): ParsedDocSchema {
   const blocks: DocBlock[] = [];
   let unknownBlocks = 0;
   let truncated = false;
+  let images = 0;
   let remaining = DOC_LIMITS.totalChars;
 
   const clip = (text: string, max: number): string => {
@@ -97,7 +106,8 @@ export function parseDocSchema(value: unknown): ParsedDocSchema {
         }
         if (all.length > DOC_LIMITS.bullets) truncated = true;
         const items = all.slice(0, DOC_LIMITS.bullets).map((i) => clip(i, DOC_LIMITS.text));
-        blocks.push({ type: "bullets", items });
+        // D3: ordered membuka daftar bernomor tanpa tipe blok baru.
+        blocks.push({ type: "bullets", items, ...(b.ordered === true ? { ordered: true } : {}) });
         break;
       }
       case "table": {
@@ -137,6 +147,38 @@ export function parseDocSchema(value: unknown): ParsedDocSchema {
           ...(typeof b.language === "string" ? { language: b.language } : {}),
         });
         break;
+      // D3: pageBreak/divider tidak membawa payload — cukup tipe yang benar.
+      case "pageBreak":
+        blocks.push({ type: "pageBreak" });
+        break;
+      case "divider":
+        blocks.push({ type: "divider" });
+        break;
+      case "image": {
+        // Syarat minimal: artifactId string tidak kosong + alt untuk
+        // aksesibilitas. Byte dan validasi mime/ukuran tetap di jalur render,
+        // bukan di skema — skema tidak boleh jadi validator byte.
+        if (typeof b.artifactId !== "string" || !b.artifactId.trim() || typeof b.alt !== "string") {
+          unknownBlocks += 1;
+          break;
+        }
+        // 20 gambar per dokumen: sisanya dibuang + truncated, bukan ditolak.
+        if (images >= DOC_LIMITS.images) {
+          truncated = true;
+          break;
+        }
+        images += 1;
+        blocks.push({
+          type: "image",
+          artifactId: b.artifactId.trim(),
+          alt: clip(b.alt, DOC_LIMITS.shortText),
+          ...(typeof b.caption === "string" ? { caption: clip(b.caption, DOC_LIMITS.shortText) } : {}),
+          ...(typeof b.widthPct === "number" && Number.isFinite(b.widthPct)
+            ? { widthPct: Math.min(100, Math.max(10, Math.round(b.widthPct))) }
+            : {}),
+        });
+        break;
+      }
       default:
         unknownBlocks += 1;
         break;

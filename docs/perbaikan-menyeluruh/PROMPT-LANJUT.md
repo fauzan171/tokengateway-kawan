@@ -21,9 +21,10 @@ hijau. Jangan mengulang pekerjaan yang sudah selesai.
 - Gelombang 1 (D0a–D0c, D1, P1, K1/K2): verified — reports/gelombang-1.md
 - Gelombang 2 (D2, P3, K3/K4/K5): verified, review pass 0 high/blocker,
   6 medium + 6 low — reports/gelombang-2.md
-- HEAD c18ed34 sudah push dan live: `npm run build` 0, pm2 kawan+kawan-worker
-  online, /api/kawan/v1/health -> {"ready":true}, /api/kawan/v1/agents -> 401.
-- npm test: 109 file, 1226 lulus. Itu baseline; JANGAN sampai turun.
+- HEAD 042ce38 sudah push (042ce38 + ab12b97: tindak lanjut W2). Live masih
+  c18ed34: `npm run build` 0, pm2 kawan+kawan-worker online,
+  /api/kawan/v1/health -> {"ready":true}, /api/kawan/v1/agents -> 401.
+- npm test: 110 file, 1238 lulus (D3 selesai). Itu baseline; JANGAN sampai turun.
 
 ## SUMBER KEBENARAN (baca dulu, jangan mengarang)
 - docs/perbaikan-menyeluruh/STATUS.md                    -> papan status + blocker
@@ -34,8 +35,8 @@ hijau. Jangan mengulang pekerjaan yang sudah selesai.
 Ikuti teks spesifikasinya apa adanya; jangan menambah fitur di luar gate.
 
 ## URUTAN GELOMBANG 3
-1. D3 — blok baru satu per satu: pageBreak -> divider -> bullets.ordered -> image
-   (via artifactId). Rujukan: riset-standar-dokumen.md, rencana baris D3.
+1. D3 — SELESAI (bukti: reports/gelombang-3.md): pageBreak/divider/ordered/
+   image masuk skema + 4 renderer + tool schema + 9 tes. JANGAN diulang.
 2. D4 — tiga template sebagai data (laporan, surat, rekap) di artifacts/templates.ts.
 3. D6 — tata letak PPTX: hitung tinggi, satu tabel per slide, 8 kolom.
 4. P2 — manifest plugin deklaratif + tabel Plugin + migrasi dua provider.
@@ -51,8 +52,8 @@ Satu tahap selesai = gate hijau + commit + push sebelum tahap berikutnya.
 ## HUTANG KECIL YANG MASIH TERBUKA
 - `toolsEnabled = true` masih hardcode di src/lib/chat/generate.ts (~1035). Ganti
   dengan pembacaan capability + registry; tanpa itu plugin tidak bisa mematikan tool.
-- W2-7: route src/app/api/kawan/v1/artifacts/route.ts membuang flag `truncated`
-  dari parseDocSchema (asimetris dengan jalur chat yang menerbitkan note).
+- W2-7 SUDAH ditutup di ab12b97: route kini mengembalikan flag
+  docTruncated/docUnknownBlocks di respons 201.
 - W2-2 sisa: penggantian karakter >U+00FF jadi "?" masih tanpa catatan runtime;
   komentar sudah ada, note pemakai belum.
 
@@ -76,7 +77,7 @@ Satu tahap selesai = gate hijau + commit + push sebelum tahap berikutnya.
 2. npm run lint                            -> 0 error, 0 WARNING (warning = gagal)
 3. node scripts/check-migrations.mjs       -> hanya bila skema berubah (+ deploy
    ke dev.db + db:generate)
-4. npm test                                -> >= 1226 lulus, 109 file
+4. npm test                                -> >= 1238 lulus, 110 file
 5. npm run build                           -> 0 (ini satu-satunya gate yang
    menangkap pelanggaran export route Next.js)
 
