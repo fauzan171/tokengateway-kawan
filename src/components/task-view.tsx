@@ -32,6 +32,8 @@ export function TaskView({ taskId }: { taskId?: string }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // UX-1: stream SSE terputus — tampilkan sambung ulang, jangan diam.
+  const [stalled, setStalled] = useState(false);
   const [live, setLive] = useState("");
   const seqRef = useRef(0);
 
@@ -75,6 +77,7 @@ export function TaskView({ taskId }: { taskId?: string }) {
       if (!response.ok) throw new Error("gagal");
       const payload = (await response.json()) as Snapshot;
       setSnapshot(payload);
+      setStalled(false);
       seqRef.current = 0;
       setLive("");
     } catch {
@@ -97,7 +100,10 @@ export function TaskView({ taskId }: { taskId?: string }) {
           `/api/kawan/v1/tasks/${active}/runs/${run.id}/events?afterSeq=${seqRef.current}`,
           { signal: controller.signal },
         );
-        if (!response.ok || !response.body) return;
+        if (!response.ok || !response.body) {
+          setStalled(true);
+          return;
+        }
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -131,7 +137,8 @@ export function TaskView({ taskId }: { taskId?: string }) {
           }
         }
       } catch {
-        // Koneksi putus: snapshot tetap benar, pengguna bisa menyambung ulang.
+        // Koneksi putus: snapshot tetap benar; sinyalkan lewat banner.
+        setStalled(true);
       }
     })();
     return () => controller.abort();
@@ -186,7 +193,7 @@ export function TaskView({ taskId }: { taskId?: string }) {
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
       <section aria-label={t("tasks.list")} className="lg:w-72 lg:shrink-0">
-        <ul className="flex flex-col gap-1">
+        <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto overscroll-contain lg:max-h-none lg:overflow-visible">
           {tasks.map((task) => (
             <li key={task.id}>
               <button
@@ -217,6 +224,16 @@ export function TaskView({ taskId }: { taskId?: string }) {
           </p>
         ) : null}
 
+                {stalled ? (
+          <div            role="status"            className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-2 text-xs text-muted-foreground"            data-testid="sse-stalled-banner"          >
+            <span>{t("tasks.stalled")}</span>
+            <button
+              type="button"              className="min-h-8 rounded-md border px-3 font-medium hover:bg-muted"              onClick={() => active && void loadSnapshot(active)}
+            >
+              {t("tasks.reconnect")}
+            </button>
+          </div>
+        ) : null}
         <div aria-live="polite" aria-atomic="false" className="flex flex-col gap-3">
           {snapshot?.messages.map((row) => (
             <article

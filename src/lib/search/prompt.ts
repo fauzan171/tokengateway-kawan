@@ -43,6 +43,19 @@ export function webSearchRequested(contentJson: string | null | undefined): bool
   );
 }
 
+/**
+ * UX-1 (auto-search): apakah teks pertanyaan jelas menuntut data terkini —
+ * berita, harga, cuaca, jadwal, atau penyebut waktu eksplisit ("hari ini",
+ * "terbaru", tahun berjalan). Hanya heuristik pemicu; bukan penentu jawaban.
+ * Dipakai generate.ts saat tombol Globe tidak dinyalakan pengguna.
+ */
+const FRESH_DATA_PATTERN =
+  /\b(hari ini|kemarin|sekarang|terbaru|terkini|tahun ini|2024|2025|2026|harga|kapan|cuaca|berita|jadwal|update)\b/i;
+
+export function wantsFreshData(query: string): boolean {
+  return FRESH_DATA_PATTERN.test(query);
+}
+
 /** System prompt berisi hasil pencarian. `undefined` bila tidak ada hasil. */
 export function buildSearchSystem(results: readonly PromptSource[]): string | undefined {
   if (results.length === 0) return undefined;

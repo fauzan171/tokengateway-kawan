@@ -110,3 +110,24 @@ describe("K7 pemilih agent", () => {
     expect(label?.textContent).toContain("Peneliti");
   });
 });
+
+describe("UX-1: banner sambung ulang saat SSE putus", () => {
+  it("fetch events ditolak → banner stalled + tombol sambung ulang tampil", async () => {
+    stub(true);
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/agents") return json(AGENTS);
+      if (url === "/api/kawan/v1/tasks") return json(TASKS);
+      if (url === "/api/kawan/v1/tasks/task_1")
+        return json({
+          task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" },
+          run: { id: "run_1", status: "running", segment: 1, errorCode: null, agentId: "peneliti" },
+          messages: [],
+        });
+      if (url.includes("/events")) return json({}, 500);
+      return json({}, 404);
+    });
+    await render("task_1");
+    await act(async () => {});
+    expect(container.querySelector('[data-testid="sse-stalled-banner"]')).not.toBeNull();
+  });
+});

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildSearchSystem, webSearchRequested } from "./prompt";
+import { buildSearchSystem, wantsFreshData, webSearchRequested } from "./prompt";
 
 describe("webSearchRequested", () => {
   it("true bila ada bagian web-search", () => {
@@ -101,5 +101,24 @@ describe("buildSearchSystem", () => {
       { title: "N", url: "https://h.test/8", snippet: "snippet cadangan", text: null },
     ]);
     expect(noText).toContain("snippet cadangan");
+  });
+});
+
+describe("wantsFreshData (UX-1 auto-search)", () => {
+  it.each([
+    "berapa harga Bitcoin hari ini?",
+    "berita terbaru tentang pemilu",
+    "cuaca Jakarta sekarang",
+    "jadwal bioskop tahun ini",
+  ])("%s terdeteksi butuh data terkini", (q) => {
+    expect(wantsFreshData(q)).toBe(true);
+  });
+
+  it.each([
+    "apa itu fotosintesis?",
+    "tolong ringkas paragraf ini",
+    "",
+  ])("%s tidak memicu pencarian", (q) => {
+    expect(wantsFreshData(q)).toBe(false);
   });
 });

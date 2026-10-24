@@ -107,13 +107,13 @@ export default function Home() {
       <a href="#content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-4">{t("nav.skip")}</a>
       <aside className="hidden h-full w-64 shrink-0 overflow-y-auto border-r bg-sidebar md:block">{navigation}</aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-20 items-center justify-between border-b px-5 sm:px-9">
+        <header className="flex h-14 items-center justify-between border-b px-5 sm:h-16 sm:px-9">
           <div className="flex items-center gap-3">
             <Dialog.Root open={open} onOpenChange={setOpen}>
               <Dialog.Trigger render={<Button variant="ghost" className="size-11 md:hidden" aria-label={t("nav.openMenu")} />}><Menu /></Dialog.Trigger>
               <Dialog.Portal>
-                <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/40" />
-                <Dialog.Popup className="fixed inset-y-0 left-0 z-50 w-[min(85vw,20rem)] bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+                <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 data-[ending-style]:opacity-0" />
+                <Dialog.Popup className="fixed inset-y-0 left-0 z-50 w-[min(85vw,20rem)] bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-200 data-[ending-style]:-translate-x-full data-[starting-style]:-translate-x-full">
                   <Dialog.Title className="sr-only">{t("nav.menuTitle")}</Dialog.Title>
                   <Dialog.Close render={<Button variant="ghost" className="absolute right-2 top-2 size-11" aria-label={t("nav.closeMenu")} />}><X /></Dialog.Close>
                   {navigation}
@@ -122,9 +122,9 @@ export default function Home() {
             </Dialog.Root>
             <span className="text-sm font-medium">{t(SECTION_LABEL[section] ?? "home.newChatHeader")}</span>
           </div>
-<span className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">{t("home.preview")}</span>
+<span className="hidden rounded-full border px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex">{t("home.preview")}</span>
         </header>
-        <main id="content" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
+        <main id="content" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-9">
           {section === "chat" ? (
             <ChatView initialChatId={activeChatId} onChatCreated={setActiveChatId} />
           ) : section === "settings" ? (

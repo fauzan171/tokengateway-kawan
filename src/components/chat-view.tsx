@@ -6,6 +6,7 @@ import { DocumentAttachButton, DocumentChips, useDocuments } from "./documents-p
 import { SourceList } from "./source-list";
 import { PromptPicker } from "./prompt-picker";
 import { MediaControls } from "./media-controls";
+import { KawanMascot } from "./kawan-mascot";
 import {
   Send,
   Square,
@@ -208,6 +209,9 @@ export function ChatView({
   // Progres yang terlihat (bukan animasi): fase nyata dari server, mis.
   // "Mencari di web", "Membaca 2 halaman sumber", "Menjalankan 1 tool".
   const [phases, setPhases] = useState<{ phase: string; label: string }[]>([]);
+  // UX-1: indikator pemuatan saat pindah chat, supaya layar tidak terlihat
+  // seperti chat kosong sebelum riwayatnya tiba.
+  const [loadingChat, setLoadingChat] = useState(false);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState(false);
@@ -320,6 +324,7 @@ export function ChatView({
   }, []);
 
   const refreshChat = useCallback(async (id: string, preferredLeaf?: string | null) => {
+    setLoadingChat(true);
     try {
       const res = await fetch(`/api/kawan/v1/chat/${id}`);
       if (!res.ok) return;
@@ -339,6 +344,7 @@ export function ChatView({
         if (typeof data.chat?.modelRef === "string") setModelRef(data.chat.modelRef);
       }
     } catch {}
+    setLoadingChat(false);
   }, []);
 
   // FIX-03: pindah chat membatalkan stream lama, membuang action ID lama, dan
@@ -845,15 +851,24 @@ export function ChatView({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col max-w-4xl w-full mx-auto p-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col max-sm:px-0 p-4">
       {/* Area Pesan */}
       {/* Pesan baru diumumkan pembaca layar tanpa memindahkan fokus (WCAG 4.1.3). */}
       <div role="log" aria-live="polite" aria-relevant="additions" className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4">
         {activeMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-8">
-            <h2 className="text-2xl font-semibold mb-2">{t("chat.emptyTitle")}</h2>
-            <p className="text-sm max-w-md">{t("chat.emptyBody")}</p>
-          </div>
+          loadingChat && messages.length === 0 ? (
+            <div className="space-y-3" aria-hidden data-testid="chat-loading-skeleton">
+              <div className="h-16 w-3/5 animate-pulse rounded-2xl bg-muted/60" />
+              <div className="ml-auto h-10 w-2/5 animate-pulse rounded-2xl bg-primary/20" />
+              <div className="h-24 w-4/5 animate-pulse rounded-2xl bg-muted/60" />
+            </div>
+          ) : (
+<div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-8">
+              <KawanMascot mood="idle" size={72} className="mb-3" />
+              <h2 className="text-2xl font-semibold mb-2">{t("chat.emptyTitle")}</h2>
+              <p className="text-sm max-w-md">{t("chat.emptyBody")}</p>
+            </div>
+          )
         ) : (
           activeMessages.map((m) => {
             const text = parseText(m.contentJson);
@@ -983,11 +998,20 @@ export function ChatView({
                       // Progres nyata: label fase terakhir dari server. Bila belum
                       // ada fase (mis. tepat setelah kirim), jatuh ke "berpikir".
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
-                        <span className="size-2 rounded-full bg-primary animate-pulse" />
+                        <KawanMascot mood="thinking" size={18} />
                         {phases.length > 0 ? phases[phases.length - 1]!.label : t("chat.thinking")}
                       </span>
                     ) : (
                       <span className="text-muted-foreground italic">{t("chat.noReply")}</span>
+                    )}
+                    {m.status === "streaming" && phases.length > 0 && (
+                      <div
+                        className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"
+                        data-testid="stream-phase"
+                      >
+                        <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                        {phases[phases.length - 1]!.label}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1021,7 +1045,16 @@ export function ChatView({
                 {m.role === "assistant" &&
                   openCitation?.messageId === m.id &&
                   !isEditing && (
-                    <div className="mt-1 max-w-[85%] rounded-lg border bg-background p-2 text-xs text-muted-foreground">
+                    <div className="relative mt-1 max-h-64 max-w-[85%] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-background p-2 pr-8 text-xs text-muted-foreground">
+                      {openCitation.text === null ? t("chat.loadingChunk") : openCitation.text}
+                      <button
+                        type="button"
+                        aria-label={t("chat.closeCitation")}
+                        onClick={() => setOpenCitation(null)}
+                        className="absolute right-1 top-1 inline-flex min-h-8 min-w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="size-4" />
+                      </button>
                       {openCitation.text === null
                         ? t("chat.loadingChunk")
                         : openCitation.text}
@@ -1042,9 +1075,9 @@ export function ChatView({
                           aria-label={t("chat.prevBranch")}
                           disabled={sibIdx <= 0 || isStreaming}
                           onClick={() => handleSwitchBranch(siblings[sibIdx - 1].id)}
-                          className="hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
                         >
-                          <ChevronLeft className="size-3" />
+                          <ChevronLeft className="size-5" />
                         </button>
                         <span>
                           {sibIdx + 1} / {siblings.length}
@@ -1054,9 +1087,9 @@ export function ChatView({
                           aria-label={t("chat.nextBranch")}
                           disabled={sibIdx >= siblings.length - 1 || isStreaming}
                           onClick={() => handleSwitchBranch(siblings[sibIdx + 1].id)}
-                          className="hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
                         >
-                          <ChevronRight className="size-3" />
+                          <ChevronRight className="size-5" />
                         </button>
                       </div>
                     )}
@@ -1164,9 +1197,9 @@ export function ChatView({
                   type="button"
                   aria-label={t("chat.removeAttachment", { index: index + 1 })}
                   onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
-                  className="absolute -right-1.5 -top-1.5 rounded-full border bg-background p-0.5 text-muted-foreground hover:text-foreground"
+                  className="absolute -right-1.5 -top-1.5 flex min-h-8 min-w-8 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground"
                 >
-                  <X className="size-3" />
+                  <X className="size-4" />
                 </button>
               </li>
             ))}
@@ -1179,7 +1212,8 @@ export function ChatView({
         <div className="relative rounded-2xl border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
           {/* Dokumen (WP-NT-P6-10): chip di dalam kotak, seperti ChatGPT/Gemini. */}
           <DocumentChips api={documentsApi} />
-          <div className="flex items-center">
+          <div className="flex flex-col sm:flex-row sm:items-center">
+            <div className="flex flex-wrap items-center gap-1 pb-1 pl-2 pt-1 sm:contents">
           {webSearchAvailable && (
             <button
               type="button"
@@ -1248,7 +1282,9 @@ export function ChatView({
               </button>
             </>
           )}
-          <DocumentAttachButton api={documentsApi} />
+            <DocumentAttachButton api={documentsApi} />
+            </div>
+          <div className="flex items-end">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1269,9 +1305,8 @@ export function ChatView({
             }
             className="w-full resize-none bg-transparent px-4 py-3.5 text-sm outline-none max-h-36 min-h-[52px]"
             rows={1}
-            disabled={isStreaming}
           />
-          <div className="flex items-center gap-1.5 pr-2.5">
+          <div className="flex items-center gap-1.5 pb-2 pr-2.5">
             {isStreaming ? (
               <Button
                 type="button"
@@ -1289,13 +1324,14 @@ export function ChatView({
                 type="submit"
                 size="sm"
                 className="size-9 rounded-xl p-0"
-                disabled={!input.trim()}
+                disabled={!input.trim() && attachments.length === 0}
                 title={t("chat.send")}
                 aria-label={t("chat.send")}
               >
                 <Send className="size-4" />
               </Button>
             )}
+          </div>
           </div>
           </div>
         </div>

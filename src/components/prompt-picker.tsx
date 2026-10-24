@@ -121,7 +121,7 @@ export function PromptPicker({ onApply }: { onApply: (body: string) => void }) {
       </button>
 
       {open && (
-        <div ref={popupRef} className="absolute bottom-full left-0 z-10 mb-2 w-80 rounded-xl border bg-background p-3 shadow-md">
+        <div ref={popupRef} className="absolute bottom-full left-0 z-10 mb-2 w-80 max-w-[calc(100vw-2.5rem)] max-h-[70vh] overflow-y-auto rounded-xl border bg-background p-3 shadow-md">
           {prompts.length > 0 && (
             <ul className="mb-3 max-h-56 space-y-1 overflow-y-auto">
               {prompts.map((prompt) => (

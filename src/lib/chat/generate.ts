@@ -42,8 +42,8 @@ import { buildContext } from "@/lib/documents/context";
 import { readEmbeddingConfig } from "@/lib/documents/embed";
 import { retrieveChunks, type RetrievedChunk } from "@/lib/documents/retrieve";
 import { extractCitations } from "@/lib/documents/citations";
-import { buildSearchSystem, webSearchRequested } from "@/lib/search/prompt";
-import { webSearch, type SearchResult } from "@/lib/search/web";
+import { buildSearchSystem, wantsFreshData, webSearchRequested } from "@/lib/search/prompt";
+import { readWebSearchConfig, webSearch, type SearchResult } from "@/lib/search/web";
 import { enrichSources, type EnrichedSource } from "@/lib/sources/read";
 import { buildMemoryContext } from "@/lib/memory/store";
 import { assertHeld, LeaseLost, type FenceChecker } from "@/lib/jobs/fence";
@@ -972,11 +972,28 @@ export async function runGeneration(
   let sources: SearchResult[] = [];
   let enriched: EnrichedSource[] = [];
   let searchFailed = false;
+  let autoSearched = false;
   const lastUserRow = [...ancestry].reverse().find((row) => row.role === "user");
-  if (query.trim() !== "" && webSearchRequested(lastUserRow?.contentJson)) {
+  // UX-1 (auto-search): pertanyaan yang jelas menuntut data terkini — berita,
+  // harga, cuaca, "hari ini", "terbaru" — dipakai pencarian web otomatis
+  // meski pengguna tidak menyalakan tombol Globe. Heuristik hanya kata kunci
+  // waktu/kenaikan-baru: pertanyaan biasa tidak tersentuh. Konfigurasi mesin
+  // tetap wajib; tanpa WEBSEARCH_BASE_URL tidak ada yang berubah.
+  const searchConfigured = readWebSearchConfig() !== undefined;
+  const needsFreshData =
+    searchConfigured &&
+    query.trim() !== "" &&
+    !webSearchRequested(lastUserRow?.contentJson) &&
+    wantsFreshData(query);
+  if (query.trim() !== "" && (webSearchRequested(lastUserRow?.contentJson) || needsFreshData)) {
+    autoSearched = needsFreshData && !webSearchRequested(lastUserRow?.contentJson);
     // Progres yang terlihat: pengguna tahu apa yang sedang dikerjakan, bukan
     // hanya "sedang berpikir". Fase ini benar-benar terjadi — bukan animasi.
-    await publishEvent(db, generationId, "phase", { phase: "searching", label: "Mencari di web" });
+    await publishEvent(db, generationId, "phase", {
+      phase: "searching",
+      label: autoSearched ? "Data terkini terdeteksi; mencari di web" : "Mencari di web",
+      data: { auto: autoSearched },
+    });
     try {
       sources = await webSearch(query, {
         limit: 5,

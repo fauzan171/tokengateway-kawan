@@ -174,6 +174,33 @@ describe("matriks kapabilitas ChatView", () => {
  * FIX-03 — idempotensi kiriman. Dua klik sebelum balasan server tiba tidak
  * boleh menghasilkan dua job: satu action ID, satu permintaan POST.
  */
+describe("UX-1: skeleton pemuatan chat", () => {
+  it("fetch chat tertunda → skeleton tampil, bukan judul kosong", async () => {
+    let release: (() => void) | null = null;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/models") return json({ models: [] });
+      if (url === "/api/kawan/v1/capabilities") return json(NONE);
+      if (url === "/api/kawan/v1/documents") return json({ documents: [] });
+      if (url === "/api/kawan/v1/chat/chat_1") {
+        await new Promise<void>((resolve) => { release = resolve; });
+        return json({ chat: { id: "chat_1" }, messages: [] });
+      }
+      return json({}, 404);
+    });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(<ChatView initialChatId="chat_1" />);
+    });
+    await act(async () => {});
+    expect(container.querySelector('[data-testid="chat-loading-skeleton"]')).not.toBeNull();
+    act(() => release?.());
+    await act(async () => {});
+    expect(container.querySelector('[data-testid="chat-loading-skeleton"]')).toBeNull();
+  });
+});
+
 describe("idempotensi kiriman (FIX-03)", () => {
   function typeInto(textarea: HTMLTextAreaElement, text: string) {
     const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;

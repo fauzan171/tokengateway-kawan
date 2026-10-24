@@ -68,7 +68,7 @@ provider. Gate yang membutuhkannya dicatat `blocked_external`.
 | `node scripts/check-migrations.mjs` | OK (2 provider, init dibekukan, urutan sama) |
 | `python3 tasks/agent-v1/check_docs.py` | LULUS, 0 pelanggaran |
 | `python3 tasks/nontechnical-v1/tools/check_docs.py` | LULUS |
-| `npm test` | **118 file, 1291 test lulus**, exit 0 (gelombang 3 lengkap; 62 tes baru) |
+| `npm test` | **119 file, 1304 test lulus**, exit 0 (UX-1; 13 tes baru; gelombang 3: 1291/118) |
 | `npx eslint` 8 berkas berubah | exit 0 |
 | `npm run build` | **exit 0** — gagal sekali karena cache `.next` korup (`WasmHash._updateWithBuffer`), hijau setelah `rm -rf .next` |
 | Deploy live (`c18ed34`) | `npm run build` 0, `pm2 restart kawan kawan-worker`, health `{"ready":true}`, `/api/kawan/v1/agents` 401 |
@@ -138,6 +138,7 @@ rencana di `reports/rencana-masa-depan.md` dan hasil di `reports/gelombang-*.md`
 | 1 | D0a–D0c (ZIP/sheet/konversi), D1 (batas kanonik DocSchema), P1 (registry tool), K1/K2 (registry agent + migrasi) | **verified** | `reports/gelombang-1.md` |
 | 2 | D2 (tema dokumen A4), P3 (registry jadi sumber tool chat), K3/K4/K5 (admission/eksekusi/API agent) | **verified**, review pass dengan 6 medium + 6 low | `reports/gelombang-2.md` |
 | 3 | D3 (blok pageBreak/divider/bullets.ordered/image via artifactId), D4 (template laporan/surat/rekap), D6 (tata letak PPTX terhitung), P2 (manifest plugin + tabel Plugin + migrasi 2 provider), P8 (ToolDoc satu sumber 3 pembaca; menutup W2-4 + W2-8), K6 (kuota 429 + Retry-After), K7 (UI pemilih agent + label agent aktif), K8 (audit admin run per agent) | **verified** — gelombang 3 selesai | `reports/gelombang-3.md` |
+| UX-1 | Kenyamanan UI mobile+desktop: composer 2 baris, skeleton pindah chat, fase streaming persist, tap target 44px, clamp PromptPicker, banner sambung-ulang SSE task, header/padding mobile, transisi drawer + **maskot Kawan** (blob 3 mood) + **auto-search** heuristik data terkini (wantsFreshData) | **verified** | `reports/ux-1.md` |
 
 Sisa gate yang **belum** bisa ditutup di lingkungan ini dicatat di bagian
 `## Blocker eksternal`, bukan dianggap lulus.
