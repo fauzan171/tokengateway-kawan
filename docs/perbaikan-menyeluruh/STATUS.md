@@ -139,6 +139,7 @@ rencana di `reports/rencana-masa-depan.md` dan hasil di `reports/gelombang-*.md`
 | 2 | D2 (tema dokumen A4), P3 (registry jadi sumber tool chat), K3/K4/K5 (admission/eksekusi/API agent) | **verified**, review pass dengan 6 medium + 6 low | `reports/gelombang-2.md` |
 | 3 | D3 (blok pageBreak/divider/bullets.ordered/image via artifactId), D4 (template laporan/surat/rekap), D6 (tata letak PPTX terhitung), P2 (manifest plugin + tabel Plugin + migrasi 2 provider), P8 (ToolDoc satu sumber 3 pembaca; menutup W2-4 + W2-8), K6 (kuota 429 + Retry-After), K7 (UI pemilih agent + label agent aktif), K8 (audit admin run per agent) | **verified** — gelombang 3 selesai | `reports/gelombang-3.md` |
 | UX-1 | Kenyamanan UI mobile+desktop: composer 2 baris, skeleton pindah chat, fase streaming persist, tap target 44px, clamp PromptPicker, banner sambung-ulang SSE task, header/padding mobile, transisi drawer + **maskot Kawan** (blob 3 mood) + **auto-search** heuristik data terkini (wantsFreshData) | **verified** | `reports/ux-1.md` |
+| UX-2 | Paritas visual Gemini: token warna (canvas/surface/pill), sidebar collapsible 64px, item aktif rounded-full, canvas dokumen max-w-3xl, pill user #e9eef6, asisten flush-left + glyph, zero-state gradient 4 kartu, dock rounded-28 + disclaimer | **verified** | `reports/ux-2.md` |
 
 Sisa gate yang **belum** bisa ditutup di lingkungan ini dicatat di bagian
 `## Blocker eksternal`, bukan dianggap lulus.
