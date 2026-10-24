@@ -20,6 +20,7 @@ import {
   X,
   ImagePlus,
   Globe,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -851,10 +852,10 @@ export function ChatView({
   }
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col max-sm:px-0 p-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col max-sm:px-0 p-4">
       {/* Area Pesan */}
       {/* Pesan baru diumumkan pembaca layar tanpa memindahkan fokus (WCAG 4.1.3). */}
-      <div role="log" aria-live="polite" aria-relevant="additions" className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4">
+      <div role="log" aria-live="polite" aria-relevant="additions" className="kawan-thin-scroll flex-1 space-y-5 overflow-y-auto pb-4">
         {activeMessages.length === 0 ? (
           loadingChat && messages.length === 0 ? (
             <div className="space-y-3" aria-hidden data-testid="chat-loading-skeleton">
@@ -863,10 +864,26 @@ export function ChatView({
               <div className="h-24 w-4/5 animate-pulse rounded-2xl bg-muted/60" />
             </div>
           ) : (
-<div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-8">
-              <KawanMascot mood="idle" size={72} className="mb-3" />
-              <h2 className="text-2xl font-semibold mb-2">{t("chat.emptyTitle")}</h2>
-              <p className="text-sm max-w-md">{t("chat.emptyBody")}</p>
+            <div className="flex min-h-[50vh] flex-col justify-center p-4 text-left">
+              <h1 className="bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] bg-clip-text text-4xl font-medium tracking-tight text-transparent sm:text-5xl">
+                {t("chat.greeting")}
+              </h1>
+              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[t("chat.suggest1"), t("chat.suggest2"), t("chat.suggest3"), t("chat.suggest4")].map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setInput(item)}
+                    className="flex h-28 cursor-pointer flex-col justify-between rounded-2xl bg-[#f0f4f9] p-4 text-left text-sm text-neutral-700 transition-colors hover:bg-neutral-200/70 dark:bg-[#1e1f20] dark:text-neutral-300 dark:hover:bg-neutral-800"
+                  >
+                    <span className="line-clamp-3">{item}</span>
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Sparkles className="size-3.5" aria-hidden />
+                      {t("chat.tryPrompt")}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )
         ) : (
@@ -968,10 +985,10 @@ export function ChatView({
                   </div>
                 ) : (
                   <div
-                    className={`min-w-0 max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                    className={`min-w-0 max-w-[85%] text-[0.925rem] leading-relaxed ${
                       m.role === "user"
-                        ? "bg-primary text-primary-foreground ml-auto"
-                        : "bg-muted border border-border text-foreground"
+                        ? "ml-auto rounded-3xl bg-[#e9eef6] px-5 py-3 text-neutral-900 dark:bg-[#282a2c] dark:text-neutral-100"
+                        : "text-foreground"
                     }`}
                   >
                     {images.length > 0 && (
@@ -990,7 +1007,11 @@ export function ChatView({
                     )}
                     {text ? (
                       m.role === "assistant" ? (
-                        <Markdown text={text} />
+                        <div className="min-w-0 w-full">
+                          {/* Penanda respons bot ala Gemini: glyph kecil di atas teks. */}
+                          <div className="mb-1.5"><KawanMascot mood="idle" size={20} /></div>
+                          <Markdown text={text} />
+                        </div>
                       ) : (
                         <p className="whitespace-pre-wrap break-words">{text}</p>
                       )
@@ -1209,7 +1230,7 @@ export function ChatView({
         <div className="mb-1 flex items-center">
           <PromptPicker onApply={(body) => setInput(applyVariables(body, { isi: input }))} />
         </div>
-        <div className="relative rounded-2xl border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+        <div className="kawan-composer relative rounded-[28px] border border-neutral-200/60 bg-[#f0f4f9] p-1 shadow-sm dark:border-neutral-800/80 dark:bg-[#1e1f20] focus-within:ring-1 focus-within:ring-neutral-400 dark:focus-within:ring-neutral-600">
           {/* Dokumen (WP-NT-P6-10): chip di dalam kotak, seperti ChatGPT/Gemini. */}
           <DocumentChips api={documentsApi} />
           <div className="flex flex-col sm:flex-row sm:items-center">
@@ -1303,7 +1324,7 @@ export function ChatView({
                 ? t("chat.composerPlaceholderSend")
                 : t("chat.composerPlaceholderNewline")
             }
-            className="w-full resize-none bg-transparent px-4 py-3.5 text-sm outline-none max-h-36 min-h-[52px]"
+            className="w-full resize-none bg-transparent px-4 py-3.5 text-[0.95rem] leading-relaxed outline-none placeholder:text-muted-foreground/80 max-h-40 min-h-[56px]"
             rows={1}
           />
           <div className="flex items-center gap-1.5 pb-2 pr-2.5">
@@ -1312,7 +1333,7 @@ export function ChatView({
                 type="button"
                 size="sm"
                 variant="destructive"
-                className="size-9 rounded-xl p-0"
+                className="size-10 rounded-full p-0 shadow-sm"
                 onClick={handleStop}
                 title={t("chat.stop")}
                 aria-label={t("chat.stop")}
@@ -1323,7 +1344,7 @@ export function ChatView({
               <Button
                 type="submit"
                 size="sm"
-                className="size-9 rounded-xl p-0"
+                className="size-10 rounded-full p-0 shadow-sm"
                 disabled={!input.trim() && attachments.length === 0}
                 title={t("chat.send")}
                 aria-label={t("chat.send")}
@@ -1336,6 +1357,9 @@ export function ChatView({
           </div>
         </div>
       </form>
+      <p className="mt-2 select-none text-center text-[11px] text-neutral-400 dark:text-neutral-500">
+        {t("chat.disclaimer")}
+      </p>
     </div>
   );
 }

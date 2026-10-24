@@ -197,7 +197,7 @@ export function ChatSidebar({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("sidebar.search")}
-            className="min-h-9 w-full rounded-lg border bg-background pl-8 pr-2 text-sm"
+            className="min-h-9 w-full rounded-xl border-transparent bg-muted/70 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:bg-background"
           />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -242,7 +242,7 @@ export function ChatSidebar({
         </p>
       )}
 
-      <nav aria-label={t("sidebar.history")} className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+      <nav aria-label={t("sidebar.history")} className="kawan-thin-scroll mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
         {groups.length === 0 && (
           <p className="text-xs text-muted-foreground">
             {query ? t("sidebar.noResults") : t("sidebar.noChats")}
@@ -250,7 +250,7 @@ export function ChatSidebar({
         )}
         {groups.map((group) => (
           <section key={group.label}>
-            <h2 className="px-1 text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+            <h2 className="mb-1 mt-2 px-2 text-[0.68rem] font-medium uppercase tracking-widest text-muted-foreground/70">
               {GROUP_LABEL[group.label] ? t(GROUP_LABEL[group.label]) : group.label}
             </h2>
             <ul className="mt-1 space-y-0.5">
@@ -289,7 +289,7 @@ export function ChatSidebar({
                         type="button"
                         onClick={() => onSelect(chat.id)}
                         aria-current={activeChatId === chat.id ? "page" : undefined}
-                        className="min-h-11 min-w-0 flex-1 truncate rounded-md px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-muted aria-[current=page]:font-medium"
+                        className="min-h-11 min-w-0 flex-1 truncate rounded-full px-3 text-left text-sm transition-colors hover:bg-neutral-200/50 dark:hover:bg-neutral-800 aria-[current=page]:bg-[#e2e7ef] aria-[current=page]:font-medium dark:aria-[current=page]:bg-[#2d2f31]"
                       >
                         {chat.pinned && <Pin aria-hidden className="mr-1 inline size-3 align-[-1px]" />}
                         {/* Judul bawaan dilabeli dari state, bukan dari nilai teks:

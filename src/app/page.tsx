@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { Menu, Plus, Settings, X } from "lucide-react";
+import { Menu, PanelLeft, Plus, Settings, X } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { ChatSidebar } from "@/components/chat-sidebar";
@@ -24,6 +24,8 @@ export default function Home() {
   const router = useRouter();
   const [section, setSection] = useState("chat");
   const [open, setOpen] = useState(false);
+  // UX-2: sidebar dapat diciutkan (w-64 <-> w-16) ala Gemini.
+  const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [importNote, setImportNote] = useState("");
@@ -84,18 +86,18 @@ export default function Home() {
   }
 
   const navigation = (
-    <div className="flex h-full min-h-0 flex-col p-5">
-      <div className="mb-6 flex items-center gap-3 text-xl font-semibold"><BrandMark className="size-9" />Kawan</div>
-      <Button className="h-11 w-full justify-start gap-3" onClick={() => { setActiveChatId(null); navigate("chat"); }}><Plus aria-hidden />{t("nav.newChat")}</Button>
+    <div className="flex h-full min-h-0 flex-col px-3 pt-4 pb-3">
+      <div className="mb-4 flex items-center gap-2.5 px-2 text-[1.05rem] font-semibold tracking-tight"><BrandMark className="size-8" />Kawan</div>
+      <Button className="h-10 w-full justify-start gap-2.5 rounded-xl text-sm font-medium shadow-sm" onClick={() => { setActiveChatId(null); navigate("chat"); }}><Plus aria-hidden />{t("nav.newChat")}</Button>
       <ChatSidebar activeChatId={activeChatId} onSelect={(id) => { setActiveChatId(id); navigate("chat"); }} />
-      <nav aria-label={t("nav.main")} className="mt-4 space-y-1 border-t pt-3">
+      <nav aria-label={t("nav.main")} className="mt-auto space-y-0.5 border-t pt-2">
         {[ ["settings", t("nav.settings")], ["about", t("nav.about")] ].map(([id, label]) => (
-          <Button key={id} variant="ghost" className="h-10 w-full justify-start" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
+          <Button key={id} variant="ghost" className="h-9 w-full justify-start rounded-lg text-sm font-normal text-muted-foreground hover:text-foreground" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id!)}>{label}</Button>
         ))}
       </nav>
-<nav aria-label={t("nav.account")} className="mt-4 space-y-1 border-t pt-3">
+<nav aria-label={t("nav.account")} className="mt-2 space-y-0.5 border-t pt-2">
         {[["/preferensi", t("nav.preferences")], ["/pemakaian", t("nav.usage")], ["/admin", t("nav.admin")], ["/privasi", t("nav.privacy")]].map(([href, label]) => (
-          <a key={href} href={href!} className="flex h-10 items-center rounded-md px-3 text-sm font-medium hover:bg-muted">{label}</a>
+          <a key={href} href={href!} className="flex h-9 items-center rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{label}</a>
         ))}
       </nav>
       <a className="mt-3 inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-4 hover:underline" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
@@ -105,11 +107,12 @@ export default function Home() {
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
       <a href="#content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-4">{t("nav.skip")}</a>
-      <aside className="hidden h-full w-64 shrink-0 overflow-y-auto border-r bg-sidebar md:block">{navigation}</aside>
+      <aside className={`hidden h-full shrink-0 overflow-hidden border-r bg-sidebar transition-all duration-300 ease-in-out md:block ${collapsed ? "w-16" : "w-64"}`}>{navigation}</aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b px-5 sm:h-16 sm:px-9">
+        <header className="flex h-14 items-center justify-between border-b/60 bg-background/80 px-4 backdrop-blur sm:h-14 sm:px-6">
           <div className="flex items-center gap-3">
             <Dialog.Root open={open} onOpenChange={setOpen}>
+              <Button variant="ghost" className="hidden size-10 rounded-full md:inline-flex" aria-label={t("nav.toggleSidebar")} title={t("nav.toggleSidebar")} onClick={() => setCollapsed((v) => !v)}><PanelLeft className="size-4" /></Button>
               <Dialog.Trigger render={<Button variant="ghost" className="size-11 md:hidden" aria-label={t("nav.openMenu")} />}><Menu /></Dialog.Trigger>
               <Dialog.Portal>
                 <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 data-[ending-style]:opacity-0" />
