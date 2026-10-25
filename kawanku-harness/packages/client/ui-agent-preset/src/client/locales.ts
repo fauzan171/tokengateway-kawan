@@ -21,6 +21,14 @@ export type AgentPresetSettingsKey =
   | 'presetMinimalDescription'
   | 'presetCordisName'
   | 'presetCordisDescription'
+  | 'presetChatName'
+  | 'presetChatDescription'
+  | 'presetRisetName'
+  | 'presetRisetDescription'
+  | 'presetDataName'
+  | 'presetDataDescription'
+  | 'presetMarketingName'
+  | 'presetMarketingDescription'
   | 'inUse'
   | 'noDescription'
   | 'brokenBadge'
@@ -59,6 +67,18 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetCordisName: 'Creator mode',
   presetCordisDescription:
     'Customize DSH through conversation. Let the agent write plugins that add features or UI, or combine tools and prompts to create your own mode.',
+  presetChatName: 'Chat mode',
+  presetChatDescription:
+    'Everyday conversation: questions and answers, writing, summarizing, and presenting results. Can open web pages you provide.',
+  presetRisetName: 'Research mode',
+  presetRisetDescription:
+    'Web research: gathers and compares information, presents results with verifiable sources, and keeps facts, inference, and unverified claims separate.',
+  presetDataName: 'Data mode',
+  presetDataDescription:
+    'Data analysis: reads CSV/JSON/Excel files, inspects structure, cleans, computes, and presents results; file outputs can be downloaded when processing is available.',
+  presetMarketingName: 'Marketing mode',
+  presetMarketingDescription:
+    'Business and marketing analysis: positioning, strategy, campaign ideas, and evaluation from material you provide or web sources.',
 
   inUse: 'New task default',
 
@@ -100,6 +120,14 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetMinimalDescription: 'Agent 使用终端和图片读取工具，并支持上下文压缩，适合测试和对比其基础表现。',
   presetCordisName: '创造模式',
   presetCordisDescription: '用对话定制 DSH：让 Agent 编写插件，添加新功能或界面；也能组合工具和提示词，创建自己的模式。',
+  presetChatName: '对话模式',
+  presetChatDescription: '日常交流：问答、写作、总结和呈现结果，可打开你提供的网页。',
+  presetRisetName: '调研模式',
+  presetRisetDescription: '网络调研：收集并比较信息，以可核对的来源呈现结果，区分事实、推断和未经证实的说法。',
+  presetDataName: '数据模式',
+  presetDataDescription: '数据分析：读取 CSV/JSON/Excel 文件，检查结构、清洗、计算并呈现结果；具备处理能力时可下载文件结果。',
+  presetMarketingName: '营销模式',
+  presetMarketingDescription: '商业与营销分析：定位、策略、活动创意，基于你提供的材料或网络来源进行评估。',
 
   inUse: '新任务默认',
 
@@ -145,6 +173,14 @@ export const ja = {
   'presetMinimalDescription': 'エージェントはターミナルと画像読み取りを使用し、コンテキスト圧縮にも対応します。基本的な性能のテストや比較に役立ちます。',
   'presetCordisName': 'クリエイターモード',
   'presetCordisDescription': '会話を通じて DSH をカスタマイズします。機能や UI を追加するプラグインをエージェントに書かせたり、ツールとプロンプトを組み合わせて独自のモードを作成したりできます。',
+  'presetChatName': 'チャットモード',
+  'presetChatDescription': '日常の会話：質疑応答、文章作成、要約、結果の提示を行います。指定されたウェブページを開けます。',
+  'presetRisetName': 'リサーチモード',
+  'presetRisetDescription': 'ウェブ調査：情報を収集して比較し、検証可能な出典付きで結果をまとめ、事実・推論・未検証の主張を区別します。',
+  'presetDataName': 'データモード',
+  'presetDataDescription': 'データ分析：CSV/JSON/Excel ファイルを読み込み、構造の確認、クリーニング、計算、結果の提示を行います。処理環境があればファイル結果をダウンロードできます。',
+  'presetMarketingName': 'マーケティングモード',
+  'presetMarketingDescription': 'ビジネス・マーケティング分析：ポジショニング、戦略、キャンペーン案を、提供された資料やウェブ情報に基づいて評価します。',
   'inUse': '新しいタスクの既定',
   'noDescription': '説明はありません。',
   'brokenBadge': '読み込みに失敗',
@@ -184,6 +220,18 @@ export const es = {
   presetCordisName: 'Modo creador',
   presetCordisDescription:
     'Personaliza DSH a través de la conversación. Deje que el agente escriba complementos que agreguen funciones o interfaz de usuario, o combine herramientas e indicaciones para crear su propio modo.',
+  presetChatName: 'Modo chat',
+  presetChatDescription:
+    'Conversación diaria: preguntas y respuestas, escritura, resúmenes y presentación de resultados. Puede abrir páginas web que usted proporcione.',
+  presetRisetName: 'Modo de investigación',
+  presetRisetDescription:
+    'Investigación web: recopila y compara información, presenta resultados con fuentes verificables y distingue hechos, inferencias y afirmaciones no verificadas.',
+  presetDataName: 'Modo de datos',
+  presetDataDescription:
+    'Análisis de datos: lee archivos CSV/JSON/Excel, examina la estructura, limpia, calcula y presenta resultados; los archivos resultantes se pueden descargar cuando el procesamiento está disponible.',
+  presetMarketingName: 'Modo de marketing',
+  presetMarketingDescription:
+    'Análisis de negocios y marketing: posicionamiento, estrategia, ideas de campaña y evaluación a partir del material que usted proporcione o de fuentes web.',
 
   inUse: 'Nueva tarea predeterminada',
 
@@ -229,6 +277,18 @@ export const fr = {
   presetCordisName: 'Mode Créateur',
   presetCordisDescription:
     "Personnalisez DSH via la conversation. Laissez l'agent écrire des plugins qui ajoutent des fonctionnalités ou une interface utilisateur, ou combinez des outils et des invites pour créer votre propre mode.",
+  presetChatName: 'Mode conversation',
+  presetChatDescription:
+    'Conversation quotidienne : questions-réponses, rédaction, synthèse et présentation de résultats. Peut ouvrir les pages web que vous fournissez',
+  presetRisetName: 'Mode recherche',
+  presetRisetDescription:
+    'Recherche web : rassemble et compare des informations, présente les résultats avec des sources vérifiables et distingue les faits, les inférences et les affirmations non vérifiées.',
+  presetDataName: 'Mode données',
+  presetDataDescription:
+    'Analyse de données : lit les fichiers CSV/JSON/Excel, examine la structure, nettoie, calcule et présente les résultats ; les fichiers produits peuvent être téléchargés lorsque le traitement est disponible.',
+  presetMarketingName: 'Mode marketing',
+  presetMarketingDescription:
+    'Analyse business et marketing : positionnement, stratégie, idées de campagne et évaluation à partir du matériel que vous fournissez ou de sources web',
 
   inUse: 'Nouvelle tâche par défaut',
 
@@ -274,6 +334,18 @@ export const de = {
   presetCordisName: 'Erstellermodus',
   presetCordisDescription:
     'Passen Sie DSH durch Gespräche an. Lassen Sie den Agenten Plugins schreiben, die Funktionen oder Benutzeroberflächen hinzufügen, oder kombinieren Sie Tools und Eingabeaufforderungen, um Ihren eigenen Modus zu erstellen.',
+  presetChatName: 'Chatmodus',
+  presetChatDescription:
+    'Alltagsgespräche: Fragen und Antworten, Schreiben, Zusammenfassen und Präsentieren von Ergebnissen. Kann von Ihnen angegebene Webseiten öffnen.',
+  presetRisetName: 'Recherche-Modus',
+  presetRisetDescription:
+    'Webrecherche: sammelt und vergleicht Informationen, stellt Ergebnisse mit überprüfbaren Quellen dar und trennt Fakten, Schlussfolgerungen und unbelegte Aussagen.',
+  presetDataName: 'Datenmodus',
+  presetDataDescription:
+    'Datenanalyse: liest CSV/JSON/Excel-Dateien, prüft die Struktur, bereinigt, berechnet und stellt Ergebnisse dar; Dateiausgaben können heruntergeladen werden, wenn die Verarbeitung verfügbar ist.',
+  presetMarketingName: 'Marketingmodus',
+  presetMarketingDescription:
+    'Business- und Marketinganalyse: Positionierung, Strategie, Kampagnenideen und Bewertung anhand des von Ihnen bereitgestellten Materials oder aus Webquellen.',
 
   inUse: 'Neuer Aufgabenstandard',
 
@@ -319,6 +391,18 @@ export const ru = {
   presetCordisName: 'Режим автора',
   presetCordisDescription:
     'Настройте DSH через разговор. Позвольте агенту писать плагины, которые добавляют функции или пользовательский интерфейс, или комбинируйте инструменты и подсказки для создания собственного режима.',
+  presetChatName: 'Режим чата',
+  presetChatDescription:
+    'Повседневное общение: вопросы и ответы, написание текстов, краткие сводки и представление результатов. Может открывать указанные вами веб-страницы.',
+  presetRisetName: 'Режим исследования',
+  presetRisetDescription:
+    'Веб-исследование: собирает и сравнивает информацию, представляет результаты с проверяемыми источниками и разделяет факты, выводы и неподтверждённые утверждения.',
+  presetDataName: 'Режим данных',
+  presetDataDescription:
+    'Анализ данных: читает файлы CSV/JSON/Excel, проверяет структуру, очищает, вычисляет и представляет результаты; файлы можно скачать, когда обработка доступна.',
+  presetMarketingName: 'Режим маркетинга',
+  presetMarketingDescription:
+    'Бизнес- и маркетинговый анализ: позиционирование, стратегия, идеи кампаний и оценка на основе ваших материалов или веб-источников.',
 
   inUse: 'Новая задача по умолчанию',
 
@@ -364,6 +448,18 @@ export const pt = {
   presetCordisName: 'Modo criador',
   presetCordisDescription:
     'Personalize DSH por meio de conversa. Deixe o agente escrever plug-ins que adicionem recursos ou UI, ou combine ferramentas e prompts para criar seu próprio modo.',
+  presetChatName: 'Modo conversa',
+  presetChatDescription:
+    'Conversa do dia a dia: perguntas e respostas, escrita, resumos e apresentação de resultados. Pode abrir páginas web que você fornecer.',
+  presetRisetName: 'Modo de pesquisa',
+  presetRisetDescription:
+    'Pesquisa na web: reúne e compara informações, apresenta resultados com fontes verificáveis e distingue fatos, inferências e afirmações não verificadas.',
+  presetDataName: 'Modo de dados',
+  presetDataDescription:
+    'Análise de dados: lê arquivos CSV/JSON/Excel, examina a estrutura, limpa, calcula e apresenta resultados; arquivos resultantes podem ser baixados quando o processamento está disponível.',
+  presetMarketingName: 'Modo de marketing',
+  presetMarketingDescription:
+    'Análise de negócios e marketing: posicionamento, estratégia, ideias de campanha e avaliação a partir do material que você fornecer ou de fontes da web.',
 
   inUse: 'Novo padrão de tarefa',
 

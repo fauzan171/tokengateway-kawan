@@ -231,6 +231,11 @@
         # deployment values, for example: ['app.internal', ...ctx.webStartup.trustedHosts].
         # The listener's bind IP is accepted separately from this list.
         trustedHosts: !!js ctx.webStartup.trustedHosts
+        # Kawanku deployment login: `salt:hash` scrypt pair from the
+        # KAWANKU_LOGIN_SECRET environment variable (set in run-kawanku.sh).
+        # Absent when the variable is unset; the launch-token flow then
+        # remains the only authentication.
+        loginSecret: !!js process.env.KAWANKU_LOGIN_SECRET || undefined
 
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.

@@ -194,6 +194,11 @@ export class HostConnectionService extends Service implements HostConnectionHand
     return this.browserAuth.authorizeIndex(request, response, this.ctx.get('webServer')?.protocol === 'https:')
   }
 
+  /** Answer the Kawanku login route; a 401 when no login secret is set. */
+  authorizeLogin(request: ConnectionIndexRequest, response: ConnectionIndexResponse): void {
+    this.browserAuth.authorizeLogin(request, response, this.ctx.get('webServer')?.protocol === 'https:')
+  }
+
   /** Add this process's launch token to the clean application URL. */
   authenticatedUrl(baseUrl: string): string {
     return this.browserAuth.authenticatedUrl(baseUrl)

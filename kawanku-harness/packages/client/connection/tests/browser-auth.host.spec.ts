@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { PeerId } from '@deepseek-ai/dsh-typert-protocol'
-import { BrowserAuth } from '../src/browser-auth.ts'
+import { BrowserAuth, createBrowserLoginSecret, parseBrowserLoginSecret } from '../src/browser-auth.ts'
 import type { ConnectionIndexRequest, ConnectionIndexResponse } from '../src/rpc.ts'
 import { RecordCredentials } from './browser-credentials.ts'
 
@@ -56,8 +56,9 @@ function createAuth(
   store: RecordCredentials,
   maxAgeDays = 30,
   processOwner: object = {},
+  loginSecret: string | undefined = undefined,
 ): Promise<BrowserAuth> {
-  return BrowserAuth.create(processOwner, credentials(store), maxAgeDays)
+  return BrowserAuth.create(processOwner, credentials(store), maxAgeDays, loginSecret)
 }
 
 function request(url: string, authority = '127.0.0.1:3080', init?: {
@@ -366,5 +367,67 @@ describe('BrowserAuth', () => {
 
     await expect(createAuth(new RecordCredentials(), Number.MAX_SAFE_INTEGER))
       .rejects.toThrow(/safe timestamp range/u)
+  })
+})
+
+describe('BrowserAuth login', () => {
+  const secret = createBrowserLoginSecret('rahasia-kawanku')
+
+  it('rejects a malformed login secret at construction', async () => {
+    await expect(createAuth(new RecordCredentials(), 30, {}, 'not-a-pair'))
+      .rejects.toThrow(/salt:hash/u)
+  })
+
+  it('parses a generated secret and rejects malformed values', () => {
+    expect(parseBrowserLoginSecret(secret)).toBeDefined()
+    expect(parseBrowserLoginSecret('short:x')).toBeUndefined()
+    expect(parseBrowserLoginSecret('a:b:c')).toBeUndefined()
+  })
+
+  it('serves the login form to an unauthenticated GET and admits the index after login', async () => {
+    const auth = await createAuth(new RecordCredentials(), 30, {}, secret)
+    const form = response()
+    auth.authorizeLogin(request('/masuk', 'kawanku.tokengateway.ai.id'), form.value, false)
+    expect(form.state.status).toBe(200)
+    expect(String(form.state.body)).toContain('Masuk ke Kawanku')
+    expect(String(form.state.body)).toContain('action="/masuk"')
+
+    // A Fetch-style Request carries the urlencoded password.
+    const submit = response()
+    const fetchLike = new Request('http://kawanku.tokengateway.ai.id/masuk', {
+      method: 'POST',
+      headers: { host: 'kawanku.tokengateway.ai.id' },
+      body: 'password=rahasia-kawanku',
+    })
+    auth.authorizeLogin(fetchLike as unknown as ConnectionIndexRequest, submit.value, false)
+    await new Promise(resolve => { setTimeout(resolve, 50) })
+    expect(submit.state.status).toBe(303)
+    const cookie = submit.state.headers?.['set-cookie']?.split(';', 1)[0]
+    expect(cookie).toBeDefined()
+
+    // Signed-in visitors skip the form; the index cookie admits the index.
+    const skip = response()
+    auth.authorizeLogin(request('/masuk', 'kawanku.tokengateway.ai.id', { cookie: cookie! }), skip.value, false)
+    expect(skip.state.status).toBe(303)
+    const index = response()
+    expect(auth.authorizeIndex(request('/', 'kawanku.tokengateway.ai.id', { cookie: cookie! }), index.value, false)).toBe(true)
+  })
+
+  it('rejects a wrong password with the form and keeps the token path intact', async () => {
+    const auth = await createAuth(new RecordCredentials(), 30, {}, secret)
+    const submit = response()
+    const fetchLike = new Request('http://127.0.0.1:3080/masuk', {
+      method: 'POST',
+      headers: { host: '127.0.0.1:3080' },
+      body: 'password=salah',
+    })
+    auth.authorizeLogin(fetchLike as unknown as ConnectionIndexRequest, submit.value, false)
+    await new Promise(resolve => { setTimeout(resolve, 50) })
+    expect(submit.state.status).toBe(401)
+    expect(String(submit.state.body)).toContain('Kata sandi salah')
+    const plain = response()
+    expect(auth.authorizeIndex(request('/', '127.0.0.1:3080'), plain.value, false)).toBe(false)
+    expect(plain.state.status).toBe(303)
+    expect(plain.state.headers?.location).toBe('/masuk')
   })
 })

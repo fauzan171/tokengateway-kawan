@@ -1,6 +1,6 @@
 /** Browser-session authentication for the Host Connection carrier. */
 
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import type { PeerId } from '@deepseek-ai/dsh-typert-protocol'
 import { CONNECT_PATH, type ConnectionInteractions } from './connect-protocol.ts'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
@@ -19,7 +19,34 @@ const COOKIE_PREFIX = 'dsh-auth-'
 const COOKIE_PAYLOAD_VERSION = 1
 const STORED_SECRET_VERSION = 1
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]*$/
+const LOGIN_MAX_BODY_BYTES = 4 * 1024
+const LOGIN_SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 } as const
 const PROCESS_LAUNCH_TOKENS = new WeakMap<object, string>()
+
+/** Kawanku deployment login: scrypt(password, salt) encoded as `salt:hash`, both base64url. */
+export interface BrowserLoginSecret {
+  /** base64url salt bytes. */
+  readonly salt: string
+  /** base64url derived key bytes. */
+  readonly hash: string
+}
+
+/** Parse and validate a `salt:hash` browser-login secret. */
+export function parseBrowserLoginSecret(value: string): BrowserLoginSecret | undefined {
+  const at = value.indexOf(':')
+  if (at === -1) return undefined
+  const salt = value.slice(0, at)
+  const hash = value.slice(at + 1)
+  if (hash.length === 0 || hash.includes(':')) return undefined
+  if (salt.length < 22 || hash.length < 22 || !BASE64URL_PATTERN.test(salt) || !BASE64URL_PATTERN.test(hash)) return undefined
+  return { salt, hash }
+}
+
+/** Hash a password with a random salt for `browserLoginSecret`. */
+export function createBrowserLoginSecret(password: string): string {
+  const salt = randomBytes(16)
+  return `${encodeBase64Url(salt)}:${encodeBase64Url(scryptSync(password, salt, 32, LOGIN_SCRYPT_OPTIONS))}`
+}
 
 interface StoredSecretPayload {
   readonly version: typeof STORED_SECRET_VERSION
@@ -198,6 +225,41 @@ async function initializeSecret(credentials: CredentialProvider): Promise<Buffer
   return secret
 }
 
+/** Verify a submitted password against a parsed login secret, timing-safe. */
+function browserLoginMatches(password: string, secret: BrowserLoginSecret): boolean {
+  const salt = decodeBase64Url(secret.salt)
+  const expected = decodeBase64Url(secret.hash)
+  if (salt === undefined || expected === undefined) return false
+  const actual = scryptSync(password, salt, expected.byteLength, LOGIN_SCRYPT_OPTIONS)
+  return actual.byteLength === expected.byteLength && timingSafeEqual(actual, expected)
+}
+
+/** Extract the single `password` field from a urlencoded login body. */
+function readLoginFormPassword(body: Buffer): string | undefined {
+  let fields: URLSearchParams
+  try {
+    fields = new URLSearchParams(body.toString('utf8'))
+  } catch {
+    return undefined
+  }
+  const passwords = fields.getAll('password')
+  if (passwords.length !== 1 || passwords[0] === undefined || passwords[0].length === 0) return undefined
+  return passwords[0]
+}
+
+/** Minimal self-contained login form; the served index replaces it after login. */
+function loginFormHtml(rejected = false): string {
+  const notice = rejected ? '<p role="alert">Kata sandi salah.</p>' : ''
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Masuk · Kawanku</title><style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1117;color:#e6e6e6;font:16px/1.5 system-ui,-apple-system,sans-serif}
+main{width:min(360px,90vw);padding:32px;background:#171a23;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+h1{margin:0 0 8px;font-size:20px}p{margin:0 0 16px;color:#9aa0b0;font-size:14px}
+input{width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:16px;border:1px solid #2a2f3d;border-radius:8px;background:#0f1117;color:#e6e6e6;font:inherit}
+button{width:100%;padding:10px 12px;border:0;border-radius:8px;background:#e6e6e6;color:#0f1117;font:600 15px/1 inherit;cursor:pointer}
+[role=alert]{margin:0 0 16px;color:#ff7a7a;font-size:14px}
+</style></head><body><main><h1>Masuk ke Kawanku</h1>${notice}<form method="post" action="/masuk"><label for="password">Kata sandi</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus><button type="submit">Masuk</button></form></main></body></html>`
+}
+
 /**
  * Process launch-token exchange and persistent signed-cookie verification.
  * Connection loads the credential provider's signing secret during activation
@@ -206,14 +268,20 @@ async function initializeSecret(credentials: CredentialProvider): Promise<Buffer
 export class BrowserAuth {
   private readonly launchToken: string
   private readonly maxAgeMilliseconds: number
+  private readonly loginSecret: BrowserLoginSecret | undefined
 
   private constructor(
     processOwner: object,
     private readonly secret: Buffer,
     maxAgeDays: number,
+    loginSecret: string | undefined,
   ) {
     this.launchToken = processLaunchToken(processOwner)
     this.maxAgeMilliseconds = maxAgeDays * DAY_MILLISECONDS
+    this.loginSecret = loginSecret === undefined ? undefined : parseBrowserLoginSecret(loginSecret)
+    if (loginSecret !== undefined && this.loginSecret === undefined) {
+      throw new Error('client-connection: loginSecret must be a `salt:hash` pair of base64url values')
+    }
     if (!Number.isSafeInteger(this.maxAgeMilliseconds)
       || !Number.isSafeInteger(Date.now() + this.maxAgeMilliseconds)) {
       throw new Error('client-connection: cookieMaxAgeDays exceeds the safe timestamp range')
@@ -226,14 +294,16 @@ export class BrowserAuth {
    * @param processOwner - root application context retaining one token across Connection reloads.
    * @param credentials - persistent credential provider for the Web profile.
    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
+   * @param loginSecret - optional Kawanku deployment login secret (`salt:hash` scrypt pair).
    * @returns initialized authentication owner with the process owner's launch token.
    */
   static async create(
     processOwner: object,
     credentials: CredentialProvider,
     maxAgeDays: number,
+    loginSecret: string | undefined = undefined,
   ): Promise<BrowserAuth> {
-    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays)
+    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, loginSecret)
   }
 
   /**
@@ -251,7 +321,9 @@ export class BrowserAuth {
    * Authenticate an index request. A valid root query token mints the cookie
    * and redirects to the directory-relative clean `./`; a valid cookie lets
    * the caller serve the index; every other request receives the same minimal
-   * 401 response.
+   * 401 response. Kawanku deployments with a login secret additionally answer
+   * an unauthenticated GET with a login form and mint the cookie from a
+   * matching POSTed form password.
    * @param req - incoming root or configured-index request.
    * @param res - response owned when this method returns false.
    * @param secure - whether the listener receiving this request serves TLS; the
@@ -268,23 +340,7 @@ export class BrowserAuth {
       const authority = requestAudience(req.headers, secure)
       if (req.method === 'GET' && url.pathname === '/' && tokens.length === 1
         && authority !== undefined && tokenMatches(tokens.join(''), this.launchToken)) {
-        const issuedAt = Date.now()
-        const expiresAt = issuedAt + this.maxAgeMilliseconds
-        const value = encodeCookie({
-          version: COOKIE_PAYLOAD_VERSION,
-          authority,
-          issuedAt,
-          expiresAt,
-        }, this.secret)
-        res.writeHead(303, {
-          'cache-control': 'no-store',
-          'location': './',
-          'referrer-policy': 'no-referrer',
-          'set-cookie': sessionCookie(
-            cookieName(authority), value, expiresAt, Math.floor(this.maxAgeMilliseconds / 1000), secure,
-          ),
-        })
-        res.end()
+        this.mintIndexCookie(res, authority, secure)
         return false
       }
       if (req.method === 'GET' && url.pathname === '/' && this.isAuthenticated(req, secure)) {
@@ -300,8 +356,119 @@ export class BrowserAuth {
       return false
     }
     if (this.isAuthenticated(req, secure)) return true
+    if (this.loginSecret !== undefined && req.method === 'GET' && url.pathname === '/') {
+      res.writeHead(303, { 'cache-control': 'no-store', 'location': '/masuk', 'referrer-policy': 'no-referrer' })
+      res.end()
+      return false
+    }
     this.writeUnauthorized(req, res)
     return false
+  }
+
+  /**
+   * Answer the Kawanku login route: the form on GET/HEAD, the cookie mint on a
+   * matching POSTed password, and a redirect to the index when already signed
+   * in. Deployed only when a login secret is configured.
+   * @param req - incoming `/masuk` request (node:http handler route).
+   * @param res - response owned to completion.
+   * @param secure - whether the receiving listener serves TLS.
+   */
+  authorizeLogin(req: ConnectionIndexRequest, res: ConnectionIndexResponse, secure = false): void {
+    if (this.loginSecret === undefined) {
+      this.writeUnauthorized(req, res)
+      return
+    }
+    if (this.isAuthenticated(req, secure)) {
+      res.writeHead(303, { 'cache-control': 'no-store', 'location': '/', 'referrer-policy': 'no-referrer' })
+      res.end()
+      return
+    }
+    this.handleLoginRequest(req, res, secure)
+  }
+
+  /** Mint and set the index cookie, then redirect to the clean directory. */
+  private mintIndexCookie(res: ConnectionIndexResponse, authority: string, secure: boolean): void {
+    const issuedAt = Date.now()
+    const expiresAt = issuedAt + this.maxAgeMilliseconds
+    const value = encodeCookie({
+      version: COOKIE_PAYLOAD_VERSION,
+      authority,
+      issuedAt,
+      expiresAt,
+    }, this.secret)
+    res.writeHead(303, {
+      'cache-control': 'no-store',
+      'location': './',
+      'referrer-policy': 'no-referrer',
+      'set-cookie': sessionCookie(
+        cookieName(authority), value, expiresAt, Math.floor(this.maxAgeMilliseconds / 1000), secure,
+      ),
+    })
+    res.end()
+  }
+
+  /** Serve the login form, or mint the cookie for a matching form password. */
+  private handleLoginRequest(req: ConnectionIndexRequest, res: ConnectionIndexResponse, secure: boolean): void {
+    const authority = requestAudience(req.headers, secure)
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      res.writeHead(200, {
+        'cache-control': 'no-store',
+        'content-type': 'text/html; charset=utf-8',
+      })
+      res.end(req.method === 'HEAD' ? undefined : loginFormHtml())
+      return
+    }
+    if (req.method !== 'POST' || authority === undefined) {
+      this.writeUnauthorized(req, res)
+      return
+    }
+    // The real index path arrives as a Fetch Request (frontend-static); a
+    // node:http stream covers direct invocations. Either way, complete the
+    // response after the small form body is fully read.
+    void this.readLoginBody(req).then((body) => {
+      const password = body === undefined ? undefined : readLoginFormPassword(body)
+      if (this.loginSecret === undefined || password === undefined || !browserLoginMatches(password, this.loginSecret)) {
+        res.writeHead(401, {
+          'cache-control': 'no-store',
+          'content-type': 'text/html; charset=utf-8',
+        })
+        res.end(loginFormHtml(true))
+        return
+      }
+      this.mintIndexCookie(res, authority, secure)
+    }).catch(() => {
+      this.writeUnauthorized(req, res)
+    })
+  }
+
+  /** Read the bounded urlencoded login body from a Fetch or node:http request. */
+  private async readLoginBody(req: ConnectionIndexRequest): Promise<Buffer | undefined> {
+    if (typeof (req as { text?: unknown }).text === 'function') {
+      const text = await (req as unknown as { text(): Promise<string> }).text()
+      const bytes = Buffer.from(text, 'utf8')
+      return bytes.byteLength > LOGIN_MAX_BODY_BYTES ? undefined : bytes
+    }
+    return await new Promise<Buffer | undefined>((resolve) => {
+      const chunks: Buffer[] = []
+      let bytes = 0
+      const stream = req as unknown as {
+        on(event: 'data', listener: (chunk: Buffer) => void): unknown
+        on(event: 'end', listener: () => void): unknown
+        on(event: 'error', listener: (error: Error) => void): unknown
+        destroy?: () => void
+      }
+      stream.on('data', (chunk: Buffer) => {
+        bytes += chunk.byteLength
+        if (bytes > LOGIN_MAX_BODY_BYTES) {
+          stream.destroy?.()
+          resolve(undefined)
+          return
+        }
+        chunks.push(chunk)
+      })
+      stream.on('end', () => { resolve(Buffer.concat(chunks)) })
+      stream.on('error', () => { resolve(undefined) })
+    })
   }
 
   /**
