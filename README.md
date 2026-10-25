@@ -1,5 +1,23 @@
 # Kawan
 
+## Kawanku Harness — branch rebranding
+
+Source Kawanku dengan antarmuka Harness ada di [`kawanku-harness/`](kawanku-harness/README.md). Source ini berdiri sendiri; aplikasi Next.js di root tetap tersedia dengan alur sebelumnya.
+
+```bash
+git clone --branch feature/kawanku-rebrand https://github.com/fauzan171/tokengateway-kawan.git
+cd tokengateway-kawan/kawanku-harness
+# Gunakan Node.js >=24.9 dan pnpm 11.28.5.
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run build:artifacts
+pnpm run build:check
+pnpm dsh web --no-open --host 127.0.0.1 --port 3081
+```
+
+Buka URL autentikasi yang dicetak oleh launcher. Konfigurasi gateway dan kredensial runtime harus disiapkan masing-masing pengguna; file rahasia, dependency, dan output build tidak disertakan. Petunjuk tambahan ada di [`KAWANKU.md`](kawanku-harness/KAWANKU.md).
+
+
 Chat AI yang bisa di-self-host, ditujukan untuk pengguna nonteknis, memakai gateway
 [tokengateway.ai.id](https://tokengateway.ai.id). Kunci API milik pengguna sendiri
 (BYOK): default server mode menerima dan menyimpan key terenkripsi lalu meneruskan

@@ -17,6 +17,7 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      "kawanku-harness/**",
       "next-env.d.ts",
     ],
   },

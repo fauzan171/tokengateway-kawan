@@ -1,0 +1,79 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write apps/desktop/README.md
+/:
+  en: 0d36989eb614345d
+  zh: a0a1a18c07621393
+/kawanku-desktop:
+  en: ea79709c7ca3ce78
+  zh: 8c7950b23584a315
+/kawanku-desktop/summary:
+  en: 7bc8bf30de693222
+  zh: e85993d8852b6cab
+/kawanku-desktop/table-of-contents:
+  en: 05fd227f99ee535a
+  zh: 60d7d62bc0026973
+/kawanku-desktop/application-overview:
+  en: 9afe28395341273f
+  zh: 302620d341cba98b
+/kawanku-desktop/terminal-command:
+  en: 5f2d25a1d8472647
+  zh: 2acb5c5d7d1917e2
+/kawanku-desktop/closing-the-window-and-quitting:
+  en: 8d58512b77f4a2f1
+  zh: f91d71c03b246fcd
+/kawanku-desktop/key-technical-decisions:
+  en: 3724c53da4f7647b
+  zh: 76ae549d43c99bb4
+/kawanku-desktop/key-technical-decisions/bundled-workspace-dependencies:
+  en: 3368ff9b955ada69
+  zh: e9209ef6ad4fd305
+/kawanku-desktop/bundled-command-runtime:
+  en: 372297005b57a08b
+  zh: 074a635ac17e4362
+/kawanku-desktop/installation-ownership:
+  en: 160b500cdcd6a39a
+  zh: 6c267f1762ec3689
+/kawanku-desktop/installation-ownership/runtime-and-plugin-activation:
+  en: 511d8b11878dc84b
+  zh: 316df738b6738114
+/kawanku-desktop/installation-ownership/host-environment:
+  en: 98cf848762482d48
+  zh: 74f9100a39ec8c2f
+/kawanku-desktop/develop:
+  en: faf7676ba18bbf2f
+  zh: f1d7b75ad348c548
+/kawanku-desktop/develop/startup-onboarding:
+  en: 67dc7ef3e293236a
+  zh: 1b224db684a2d1d7
+/kawanku-desktop/develop/welcome-window-appearance:
+  en: 617a89aeb28131b9
+  zh: 4d84bd5d86501c86
+/kawanku-desktop/package:
+  en: ac31ebdd9de54f34
+  zh: 921e534d5c4b3a16
+/kawanku-desktop/windows-installer-interface:
+  en: 9b90a2651a6d2b52
+  zh: 86d4d9c4358aad80
+/kawanku-desktop/updates:
+  en: 67bf0a18faa7aa76
+  zh: 782e14ce62bb939f
+/kawanku-desktop/updates/local-desktop-settings:
+  en: 2e57457c44c85b5f
+  zh: 5b8510a3dc4c6c9d
+/kawanku-desktop/updates/mandatory-update-policy:
+  en: 182a9c6705213e13
+  zh: 681762f83490f4c6
+/kawanku-desktop/updates/local-updater-qualification:
+  en: 68ec2f8bd5763ea6
+  zh: 23b932dfe8503602
+/kawanku-desktop/low-level-development-overrides:
+  en: 8264b135871e8978
+  zh: 0939aafb1b2961fc
+/kawanku-desktop/known-limitations:
+  en: 949bcbe7ad119a23
+  zh: 06e3d5af44e54939
+/kawanku-desktop/dev-note:
+  en: 8e26b460ba31f21b
+  zh: fbcd0307b3867125

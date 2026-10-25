@@ -1,0 +1,13 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write README.md
+/kawanku:
+  en: d4cde6aa70e46197
+  zh: e1487d09e2950898
+/kawanku/run-locally:
+  en: 8eb492259e7d7f00
+  zh: f7b9b5558e6a1602
+/kawanku/license-and-origin:
+  en: 9840e9d5827f615b
+  zh: d06963a18fc21f30
