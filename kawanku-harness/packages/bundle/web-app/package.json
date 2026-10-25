@@ -35,6 +35,10 @@
     "lib/index.js",
     "lib/startup.js",
     "cordis.patch.yml",
+    "presets/chat.patch.yml",
+    "presets/riset.patch.yml",
+    "presets/data.patch.yml",
+    "presets/marketing.patch.yml",
     "presets/standard.patch.yml",
     "presets/ptc.patch.yml",
     "presets/minimal.patch.yml",
@@ -47,6 +51,10 @@
     "bundle": {
       "patch": [
         "./cordis.patch.yml",
+        "./presets/chat.patch.yml",
+        "./presets/riset.patch.yml",
+        "./presets/data.patch.yml",
+        "./presets/marketing.patch.yml",
         "./presets/standard.patch.yml",
         "./presets/ptc.patch.yml",
         "./presets/minimal.patch.yml",
