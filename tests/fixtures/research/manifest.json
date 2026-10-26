@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "kind": "research-eval-baseline",
+  "generatedAt": "2026-10-24T18:35:00Z",
+  "source": {
+    "plan": "docs/research-planning/kawan-next/IMPLEMENTATION-PLAN.md",
+    "decisions": "docs/research-planning/kawan-next/DECISIONS.md",
+    "acceptance": "docs/research-planning/kawan-next/ACCEPTANCE.md",
+    "prd": "docs/research-planning/kawan-next/PRD.md",
+    "sdd": "docs/research-planning/kawan-next/SDD.md",
+    "datasetDesign": "docs/research-planning/kawan-next/riset-data-evaluasi.md §9"
+  },
+  "status": "frozen-baseline",
+  "note": "Bekuan kontrak WP00 sebelum WP01. Menyatakan angka klaim, bukan capaian: seluruh test target T01–T16 berstatus not_run; provider/live blocked_external. File ini satu-satunya artifact WP00; tidak ada perubahan source lain.",
+  "baseline": {
+    "git": {
+      "rev-parse HEAD": "027e17d4ba9c8faaa75d749e0e30166f651a17f5",
+      "branch": "master",
+      "workingTree": "hanya untracked .agent-teams/ dan docs/research-planning/; tidak ada perubahan tracked saat pembekuan",
+      "diff --check": "bersih (exit 0)"
+    },
+    "commands": [
+      { "command": "git rev-parse HEAD", "exitCode": 0, "value": "027e17d4ba9c8faaa75d749e0e30166f651a17f5" },
+      { "command": "python3 tasks/agent-v1/check_docs.py", "exitCode": 0, "result": "LULUS (0 pelanggaran); dokumen 14, requirement 13, work order 23, acceptance 27" },
+      { "command": "python3 tasks/nontechnical-v1/tools/check_docs.py", "exitCode": 0, "result": "LULUS; dokumen 13, requirement 79, work package 94, coverage 64, 0 pelanggaran" },
+      { "command": "npx tsc --noEmit -p tsconfig.json", "exitCode": 0, "result": "tidak ada galat" },
+      { "command": "npm test", "exitCode": 0, "result": "vitest run: 119 file test lulus, 1306 test lulus, 0 gagal, 0 dilewati; durasi 297,31 detik (dijalankan 2026-10-24T18:37:24Z, node v22.23.4)" }
+    ],
+    "environment": {
+      "node": "v22.23.4",
+      "db": "SQLite dev (prisma/dev.db); klien Prisma dual (sqlite + postgresql) sudah tergenerate pada checkout ini",
+      "noSecrets": "manifest ini tidak memuat token, key, URL privat, atau data pengguna"
+    }
+  },
+  "requirements": {
+    "frozen": [
+      { "id": "R01", "text": "Task pertama dapat dibuat; submit berulang satu run; stop/reconnect/restart tidak menggandakan kerja atau teks", "design": ["D02", "D03", "D04"], "wp": ["WP01", "WP02"], "tests": ["T01", "T02"] },
+      { "id": "R02", "text": "Metode riset lima lapisan, ≤3 siklus total, primary reads, gap/conflict/abstention; bukan sekadar prompt panjang", "design": ["D05", "D06", "D08"], "wp": ["WP08"], "tests": ["T08", "T08-clarify", "T09"] },
+      { "id": "R03", "text": "Batas query/tool/token/byte/waktu/konkurensi ditegakkan server, tahan restart; konfigurasi agent/model dipin", "design": ["D02", "D03", "D05"], "wp": ["WP03", "WP04", "WP08"], "tests": ["T03", "T04", "T08"] },
+      { "id": "R04", "text": "Upload byte original menjadi Artifact input immutable, picker→artifactIds→binding task/message; lampiran owner-scoped dipersist; inspect CSV/JSON/XLSX/PDF bounded, locator/hash/completeness; file berbahaya ditolak", "design": ["D02", "D06", "D07"], "wp": ["WP03", "WP06A", "WP06B", "WP06C"], "tests": ["T03", "T03-upload", "T06a", "T06b", "T06c"] },
+      { "id": "R05", "text": "Angka dari tool deterministik; unit/null/precision/rounding eksplisit; total tidak berasal dari sampel", "design": ["D07", "D08"], "wp": ["WP07"], "tests": ["T07"] },
+      { "id": "R06", "text": "Klaim material terhubung sumber yang dibaca; kutipan dan locator dapat diperiksa; konflik/kekurangan tidak ditutupi", "design": ["D06", "D08", "D10"], "wp": ["WP05", "WP08", "WP10"], "tests": ["T05", "T08", "T11"] },
+      { "id": "R07", "text": "Tenant isolation, SSRF, injection, XSS, secrets dan resource limits diuji; unknown tools gagal tertutup", "design": ["D01", "D02", "D06", "D09"], "wp": ["WP01", "WP04", "WP05", "WP06A", "WP09", "WP10", "WP12", "WP13"], "tests": ["T01", "T04", "T05", "T06a", "T09", "T09-egress", "T10", "T11", "T13", "T14"] },
+      { "id": "R08", "text": "Task/chat memakai renderer Markdown existing; tabel bounded, Mermaid fallback, copy raw, progres faktual, keyboard/mobile", "design": ["D04", "D10"], "wp": ["WP02", "WP09", "WP10"], "tests": ["T02", "T10", "T11"] },
+      { "id": "R09", "text": "Artefak penuh tervalidasi, hash/lineage/retensi jelas; MD/CSV/JSON/XLSX dahulu; ekspor tidak menghilangkan konten diam-diam", "design": ["D02", "D08", "D10"], "wp": ["WP10", "WP11"], "tests": ["T11", "T12"] },
+      { "id": "R10", "text": "Python/JavaScript hanya dalam sandbox yang lolos live gate; unavailable tanpa fallback host; approval efek eksternal spesifik", "design": ["D03", "D09"], "wp": ["WP12", "WP13", "WP15"], "tests": ["T13", "T14", "T16"] },
+      { "id": "R11", "text": "Dataset fixture/model/live terpisah, migration parity dan rollback diuji sebelum klaim rilis", "design": ["D11"], "wp": ["WP00", "WP03", "WP14", "WP15"], "tests": ["T03", "T15", "T16"] }
+    ],
+    "methodLayers": ["framing", "discovery", "extraction", "validation", "synthesis"],
+    "status": "R01–R11 dibekukan dari PRD §Requirement stabil; perubahan berikutnya hanya lewat keputusan pemilik, bukan diam-diam saat WP berjalan"
+  },
+  "dataset": {
+    "total": 60,
+    "split": "40 development + 20 held-out total, stratified per keluarga, tanpa template leakage",
+    "familyCounts": [
+      { "family": "web-primer-multi-hop", "label": "Web primer/multi-hop", "development": 8, "heldOut": 4, "total": 12 },
+      { "family": "konflik-abstention", "label": "Konflik/abstention", "development": 5, "heldOut": 3, "total": 8 },
+      { "family": "data-file", "label": "Data file", "development": 8, "heldOut": 4, "total": 12 },
+      { "family": "matematika", "label": "Matematika", "development": 7, "heldOut": 3, "total": 10 },
+      { "family": "keamanan-isolasi", "label": "Keamanan/isolasi", "development": 8, "heldOut": 4, "total": 12 },
+      { "family": "lifecycle-budget", "label": "Lifecycle/budget", "development": 4, "heldOut": 2, "total": 6 }
+    ],
+    "validation": { "expectedDevelopment": 40, "expectedHeldOut": 20, "expectedTotal": 60 },
+    "fixtureConstraints": {
+      "sourcing": "sintetis atau sumber publik berlisensi dengan snapshot/hash/tanggal; tanpa file pribadi nyata",
+      "golden": "hasil angka dari oracle independen (Decimal/rational hand-check), bukan jawaban model yang diuji",
+      "scriptedModel": "fixture scripted model/fake search/HTTP/provider menguji state machine loop, bukan kemampuan model",
+      "realBytes": "parser/compute nyata diuji atas bytes fixture",
+      "perCaseFields": ["id", "kategori", "input", "fixtureHashes", "fixedClock", "capabilityProfile", "expectedToolConstraints", "expectedResult/units/tolerance", "evidenceSpans", "expectedAbstention/conflict", "forbiddenActions", "budgets"],
+      "caseFiles": "file kasus per keluarga (tests/fixtures/research/cases/…; baru pada WP14) mengacu manifest ini; manifest WP00 membekukan kontrak dan split, bukan 60 file kasus",
+      "repetitions": "≥3 pengulangan per model pada 60 kasus; laporkan per kasus/kategori/worst run",
+      "semantic": "dua penilai pada ≥20 kasus semantik + adjudikasi; model grader hanya bantuan terkalibrasi"
+    },
+    "thresholds": {
+      "answerableSuccess": ">=0.90",
+      "abstentionCorrect": ">=0.95",
+      "supportedClaimPrecision": ">=0.95",
+      "coverageKlaimUtama": ">=0.95",
+      "securityCapViolations": 0,
+      "note": "target evaluasi dengan penyebut dilaporkan, bukan hasil saat ini; satu kebocoran keamanan menghentikan release"
+    }
+  },
+  "modelProvider": {
+    "capability": {
+      "auth": "BYOK per pengguna via Connection (apiKeyEncrypted server-only, baseUrl gateway, revision FIX-05); model dipilih pengguna saat submit, dipin pada snapshot; tidak ada penggantian provider diam-diam",
+      "toolCallSupport": "syarat wajib untuk loop riset: provider/model harus mendukung OpenAI-style function tool calls; provider tanpa tool-calls hanya memakai jalur chat existing, bukan task riset; klaim tool dipanggil tanpa dukungan provider adalah gagal (SDD D06)",
+      "budgetEstimation": "model-budget per model: contextTokens/reserveTokens; sumber gateway → known-family → assumed (label budgetSource); cap server selalu menang terhadap limit model",
+      "pin": "model/provider/connection revision/system prompt hash/tool schema version/limits/estimator version dibekukan di TaskRun configJson; API key tidak pernah dipin",
+      "status": "tool-call compatibility provider belum diverifikasi live; model eval/provider/version pin = blocked_external sampai consent biaya + akses tersedia"
+    },
+    "limits": {
+      "cycles": 3,
+      "initialQueries": "2-4 bila multi-aspek; tambahan ≤2/siklus; total query ≤8",
+      "searchRead": "≤5 hasil/query, ≤40 hasil, ≤8 sumber unik, parallel fetch ≤2",
+      "toolInvocations": "≤24 termasuk retry; ≤1 retry transient per logical call; invalid/denied tidak retry",
+      "timeouts": "read-only 120s absolute; search 8s; read 10s; sandbox ≤15 menit terpisah",
+      "modelTokens": "input kumulatif ≤24000; output ≤6000; reserve final input 4000 + output 1000 (bagian dari jatah, bukan tambahan)",
+      "body": "search ≤512 KiB; read ≤2 MiB decompressed; extract ≤200.000 karakter; prompt excerpt ≤6000/sumber",
+      "concurrency": "≤2 run aktif/owner; 1 sandbox/run",
+      "upload": "≤10 MiB/file, ≤5 file, ≤25 MiB/run; orphan staging dibersihkan 24 jam; retensi 7 hari",
+      "parser": "parser 10s/256 MiB; ZIP expanded ≤50 MiB/1000 entries/100:1; JSON depth ≤50/nodes ≤100.000; XLSX ≤50 sheets/20.000 cells; CSV ≤100 kolom/20.000 cells; PDF ≤200 halaman; inspect preview 20×20, cell ≤500 karakter, total ≤8000 karakter; UI tabel 50×12 DOM (cap berbeda)",
+      "sandbox": "1 CPU, 1024 MiB RAM, disk 256 MiB, command 60s/run 15 menit, stdout+stderr masing-masing 256 KiB, ≤10 output/25 MiB, network none (termasuk DNS/IPv6/metadata/proxy)",
+      "lowerCapWins": "cap deployment/model lebih rendah selalu menang terhadap angka manifest"
+    }
+  },
+  "openOwnerDecisions": {
+    "items": ["O01", "O02", "O03", "O04", "O05", "O06", "O07"],
+    "status": "tercatat di DECISIONS.md §Pemilik perlu memutuskan; manifest ini membekukan rekomendasi dokumen, bukan menjawab O01–O07. O01 mempengaruhi prompt/loop; O03 mempengaruhi budget/model pilot; O06 sandbox; O07 deployment. Sebelum jawaban, capability tetap off.",
+    "reconciliationNotes": {
+      "C02": "pertahankan RUN_STATUSES existing (queued/running/waiting_input/waiting_approval/completed/failed/cancelled/indeterminate); cancelRequestedAt intent nonterminal; tidak menambah enum baru",
+      "C06": "maksimal 3 siklus durable termasuk awal; satu siklus = satu batch pengumpulan bukti + pemeriksaan gap, bukan model turn/call/retry",
+      "C07": "preview inspect 20×20 vs UI 50×12 adalah cap boundary berbeda; fixture UI 10k×20 generated canonical dataset, bukan klaim ingestion file sebesar itu"
+    }
+  },
+  "baselineObserved": {
+    "currentToolRegistry": ["compute.calculate", "compute.stats", "compute.count", "chart.render", "qr.make", "generate_file", "generate_document"],
+    "chatExposed": ["generate_file", "generate_document"],
+    "toolSchemaVersion": 1,
+    "taskRunToday": "model single pass tanpa tools; prompt khusus run.ts di luar prompt-builder; agent registry hanya default v1 (tools kosong, defaultModelId deepseek-v4.1-flash, limits maxSteps 40/maxTokensPerRun 50.000/deadline 15 menit)",
+    "gapVsTarget": "belum ada web.search/web.read/file.inspect/data.aggregate/code.execute di registry; belum ada loop/budget/snapshot cursor/egress consent; status masih tidak tersambung (C09). Ini alasan WP01–WP15; manifest bukan bukti kebalikan."
+  }
+}

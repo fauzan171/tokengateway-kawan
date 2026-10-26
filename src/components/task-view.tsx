@@ -16,7 +16,10 @@ type TaskRow = { id: string; title: string; status: string; activeRunId: string 
 // K7: agentId beku di run untuk label agent aktif.
 type RunRow = { id: string; status: string; segment: number; errorCode: string | null; agentId?: string };
 type MessageRow = { id: string; role: string; text: string };
-type Snapshot = { task: TaskRow; run: RunRow | null; messages: MessageRow[] };
+// T02: snapshotSeq = cursor event konsisten server; seluruh delta <= nilai itu
+// sudah tercermin pada messages/run snapshot ini. Boleh absen pada payload lama
+// → 0 (replay penuh, perilaku seperti sebelum cursor ada).
+type Snapshot = { task: TaskRow; run: RunRow | null; messages: MessageRow[]; snapshotSeq?: number };
 /** Metadata agent publik (K5 /agents) — UI hanya membaca, server tetap memvalidasi. */
 type AgentRow = { id: string; label: string; description: string; defaultModelId: string | null; audience: string };
 
@@ -36,6 +39,19 @@ export function TaskView({ taskId }: { taskId?: string }) {
   const [stalled, setStalled] = useState(false);
   const [live, setLive] = useState("");
   const seqRef = useRef(0);
+  // Kunci idempotensi submit aktif. Bertahan sampai respons diterima supaya
+  // klik ganda/jaringan ulang membawa KUNCI YANG SAMA (server mengembalikan
+  // admission yang sama, bukan membuat job kedua), lalu null → kirim berikutnya
+  // mendapat kunci baru.
+  const submitKeyRef = useRef<string | null>(null);
+  // Guard klik ganda di klien: satu kiriman dalam penerbangan; ulang setelah
+  // galat memakai kunci yang sama (bukan admission kedua).
+  const sendingRef = useRef(false);
+  // Cursor snapshot: seq terakhir yang SUDAH tercermin pada teks yang tampil.
+  // T02: replay hanya di-append bila seq lebih besar; dedup seq ≤ cursor.
+  const snapshotSeqRef = useRef(0);
+  // Dedup delta per (runId, seq): satu pesan, satu buffer teks.
+  const seenSeqRef = useRef(new Set<string>());
 
   const loadList = useCallback(async () => {
     try {
@@ -78,8 +94,14 @@ export function TaskView({ taskId }: { taskId?: string }) {
       const payload = (await response.json()) as Snapshot;
       setSnapshot(payload);
       setStalled(false);
-      seqRef.current = 0;
+      // T02: cursor konsisten dari server. Snapshot SUDAH memuat semua delta
+      // <= snapshotSeq, jadi stream berikutnya hanya meng-append seq yang
+      // lebih besar — teks snapshot tidak di-replay ulang, tidak di-concat.
+      // Payload lama tanpa snapshotSeq → 0 (replay penuh, aman).
+      snapshotSeqRef.current = payload.snapshotSeq ?? 0;
+      seqRef.current = payload.snapshotSeq ?? 0;
       setLive("");
+      seenSeqRef.current = new Set();
     } catch {
       setError(t("tasks.loadFailed"));
     }
@@ -117,7 +139,8 @@ export function TaskView({ taskId }: { taskId?: string }) {
             const idLine = frame.split("\n").find((line) => line.startsWith("id: "));
             const eventLine = frame.split("\n").find((line) => line.startsWith("event: "));
             const dataLine = frame.split("\n").find((line) => line.startsWith("data: "));
-            if (idLine) seqRef.current = Number.parseInt(idLine.slice(4), 10) || seqRef.current;
+            const seq = idLine ? Number.parseInt(idLine.slice(4), 10) || 0 : 0;
+            if (idLine && seq > 0) seqRef.current = seq;
             if (!eventLine || !dataLine) continue;
             const kind = eventLine.slice(7);
             let data: Record<string, unknown> = {};
@@ -127,7 +150,15 @@ export function TaskView({ taskId }: { taskId?: string }) {
               data = {};
             }
             if (kind === "message.delta" && typeof data["text"] === "string") {
-              setLive((current) => current + (data["text"] as string));
+              // T02 dedup: (runId, seq) hanya sekali; seq <= snapshotSeq sudah
+              // ada di snapshot. Out-of-order/gap → cursor maju, teks tidak
+              // digandakan; run.event lain tetap diproses.
+              const dedupKey = `${run.id}:${seq}`;
+              const alreadySeen = seq <= snapshotSeqRef.current || seenSeqRef.current.has(dedupKey);
+              if (!alreadySeen) {
+                seenSeqRef.current.add(dedupKey);
+                setLive((current) => current + (data["text"] as string));
+              }
             }
             if (kind.startsWith("run.") && kind !== "run.queued" && kind !== "run.started") {
               // Penutup: ambil kebenaran final dari server, bukan tafsir klien.
@@ -145,27 +176,50 @@ export function TaskView({ taskId }: { taskId?: string }) {
   }, [active, snapshot?.run, loadSnapshot, loadList]);
 
   const send = useCallback(async () => {
-    if (!active || draft.trim() === "") return;
+    if (draft.trim() === "" || sendingRef.current) return;
+    // T02: task pertama pun bisa dikirim tanpa task aktif (daftar kosong):
+    // POST /tasks membuat task + run; UI tidak lagi menahan submit.
+    const target = active;
+    if (!target && !draft.trim()) return;
+    sendingRef.current = true;
     setError(null);
     try {
       const run = snapshot?.run;
-      const resumable = run && TERMINAL.has(run.status);
+      const resumable = !!(target && run && TERMINAL.has(run.status));
+      // Kunci idempotensi submit ini. Tetap sama untuk percobaan ulang kiriman
+      // yang sama; dibuang setelah respons diterima (kirim berikutnya = kunci
+      // baru). Double-submit akibat klik ganda tergabung jadi satu admission
+      // di server lewat header Idempotency-Key (D04).
+      if (!submitKeyRef.current) {
+        submitKeyRef.current =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
       const response = await fetch(
-        resumable ? `/api/kawan/v1/tasks/${active}/messages` : "/api/kawan/v1/tasks",
+        resumable ? `/api/kawan/v1/tasks/${target}/messages` : "/api/kawan/v1/tasks",
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "Idempotency-Key": submitKeyRef.current },
           // K7: agent hanya ikut saat membuat task baru; run lanjutan memakai
           // agent beku task itu (server yang menolak id tidak sah).
           body: JSON.stringify({
             input: draft,
-            ...(resumable ? {} : { title: draft.slice(0, 80), ...(agentId ? { agentId } : {}) }),
+            ...(resumable
+              ? {}
+              : {
+                  title: draft.slice(0, 80),
+                  ...(agentId ? { agentId } : {}),
+                }),
           }),
         },
       );
       if (!response.ok) throw new Error("gagal");
+      // Kiriman diterima: kunci ini sudah terpakai, kirim berikutnya butuh baru.
+      submitKeyRef.current = null;
+      sendingRef.current = false;
       setDraft("");
-      if (resumable) await loadSnapshot(active);
+      if (resumable) await loadSnapshot(target!);
       else {
         const payload = (await response.json()) as { task: { id: string } };
         setActive(payload.task.id);
@@ -173,6 +227,10 @@ export function TaskView({ taskId }: { taskId?: string }) {
       }
     } catch {
       setError(t("tasks.sendFailed"));
+      // Kunci TIDAK dibuang: percobaan ulang kiriman ini memakai kunci yang
+      // sama agar server tidak membuat admission kedua. Guard dikalahkan agar
+      // pengguna bisa mencoba lagi.
+      sendingRef.current = false;
     }
   }, [active, draft, agentId, snapshot?.run, loadSnapshot, loadList, t]);
 
@@ -249,7 +307,7 @@ export function TaskView({ taskId }: { taskId?: string }) {
             </article>
           ))}
           {live !== "" ? (
-            <article className="rounded-lg border border-dashed p-3 text-sm">
+            <article className="rounded-lg border border-dashed p-3 text-sm" data-testid="task-live-block">
               <p className="whitespace-pre-wrap">{live}</p>
             </article>
           ) : null}

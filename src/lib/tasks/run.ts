@@ -1,12 +1,18 @@
 /**
- * Eksekutor satu run task (FIX-08, SDD-AG-3).
+ * Eksekutor satu run task (FIX-08, SDD-AG-3, D03/WP01).
  *
  * Versi ini menjalankan SATU putaran model: stream jawaban, tulis teks durable
  * ke `TaskMessage`, lalu tutup run. Tool loop/approval/handover/artifact
  * menyusul di FIX-09+; kontraknya sudah disiapkan (event, status, interaction).
  *
  * Lease Job memagari semua tulisan: lease hilang → berhenti tanpa menulis apa
- * pun, supaya worker lain yang mengambil alih tidak mendapat balapan.
+ * pun, supaya worker lain yang mengambil alih tidak mendapat balapan. Cek
+ * lease di luar transaksi TIDAK cukup (D02): setiap tulisan domain
+ * memeriksa ulang lease DI DALAM transaksi yang sama sebelum mutasi.
+ *
+ * Semua sinyal stop (cancel user, deadline, shutdown/abort worker) digabung
+ * satu AbortSignal yang dihubungkan ke `fetchOutbound`, jadi stream yang
+ * menggantung diputus aktif, bukan menunggu idle timeout.
  */
 
 import { logger } from "@/lib/api/logger";
@@ -49,6 +55,9 @@ const OUTPUT_RESERVE_TOKENS = 1024;
 /** Batas waktu idle antar potongan; bukan durasi total run. */
 const IDLE_MS = OUTBOUND_LIMITS.streamIdleTimeoutMs;
 
+/** Interval cek niat cancel dan deadline saat stream berjalan. */
+const STOP_POLL_MS = 1_000;
+
 type RunRow = {
   id: string;
   taskId: string;
@@ -70,12 +79,34 @@ async function held(fence: FenceChecker | undefined): Promise<void> {
   if (fence) await assertHeld(fence);
 }
 
+/**
+ * Transaksi terfence (D02/WP01): lease diperiksa DI DALAM transaksi, tepat
+ * sebelum mutasi dijalankan. Balapan "lease hilang antara check dan write"
+ * (T01) ditutup karena cek dan tulisan berbagi satu transaksi atomik: bila
+ * lease gagal, transaksi di-rollback sebelum ada baris yang ditulis.
+ */
+async function fenced<T>(
+  db: Db,
+  fence: FenceChecker | undefined,
+  fn: (tx: Parameters<Parameters<Db["$transaction"]>[0]>[0]) => Promise<T>,
+): Promise<T> {
+  return db.$transaction(async (tx) => {
+    await held(fence);
+    return fn(tx);
+  });
+}
+
 async function cancelRequested(db: Db, runId: string): Promise<boolean> {
   const row = await db.taskRun.findFirst({
     where: { id: runId },
     select: { cancelRequestedAt: true },
   });
   return row?.cancelRequestedAt !== null && row?.cancelRequestedAt !== undefined;
+}
+
+async function deadlinePassed(db: Db, runId: string): Promise<boolean> {
+  const row = await db.taskRun.findFirst({ where: { id: runId }, select: { deadlineAt: true } });
+  return row !== null && row.deadlineAt.getTime() <= Date.now();
 }
 
 /** Menutup run terminal: status, timestamp, revision, dan satu event penutup. */
@@ -227,11 +258,17 @@ export async function runTaskRun(
     return;
   }
 
-  await db.taskRun.update({
-    where: { id: run.id },
-    data: { status: "running", startedAt: new Date(), revision: { increment: 1 } },
-  });
-  await db.$transaction(async (tx) => {
+  // Transisi queued→running terfence: cek lease dan tulisan satu transaksi,
+  // dan hanya bila status masih benar-benar queued (takeover/cancel antara
+  // baca dan tulis tidak bisa lolos).
+  const started = await db.$transaction(async (tx) => {
+    await held(fence);
+    const fresh = await tx.taskRun.findUnique({ where: { id: run.id }, select: { status: true } });
+    if (!fresh || fresh.status !== "queued") return false;
+    await tx.taskRun.update({
+      where: { id: run.id },
+      data: { status: "running", startedAt: new Date(), revision: { increment: 1 } },
+    });
     await appendEvent(tx, run.id, "run.started", {
       status: "running",
       revision: run.revision + 1,
@@ -240,7 +277,16 @@ export async function runTaskRun(
       agentId: run.agentId,
       agentVersion: run.agentVersion,
     });
+    return true;
   });
+  if (!started) {
+    // Status berubah sebelum tulisan (cancel/takeover/terminal): diam saja,
+    // penutupnya sudah ditulis pemilik baru status itu.
+    if (await cancelRequested(db, run.id)) {
+      await finish(db, run, "cancelled", { messageId: run.assistantMessageId, reason: "user" });
+    }
+    return;
+  }
 
   const { baseUrl, apiKey } = await openApiKey(db, config, active.id, task.userId);
 
@@ -258,6 +304,10 @@ export async function runTaskRun(
     return;
   }
 
+  // Kombinasi SEMUA sinyal stop (D03): abort worker (shutdown/lease), idle
+  // timeout antar potongan, niat cancel user, dan deadline. Sinyal gabungan
+  // ini diteruskan ke `fetchOutbound` supaya stream yang menggantung benar
+  // DIBATALKAN di soketnya, bukan menunggu potongan berikutnya.
   const idle = new AbortController();
   let idleTimer = setTimeout(() => idle.abort(), IDLE_MS);
   const bumpIdle = () => {
@@ -265,15 +315,37 @@ export async function runTaskRun(
     idleTimer = setTimeout(() => idle.abort(), IDLE_MS);
   };
 
-  const stopSignal = new AbortController();
+  const stop = new AbortController();
+  const stopReasons = { user: false, deadline: false, shutdown: false };
+  const onAbort = () => {
+    if (!stopReasons.shutdown) stopReasons.shutdown = true;
+    stop.abort();
+  };
+  if (signal.aborted) onAbort();
+  else signal.addEventListener("abort", onAbort, { once: true });
+
   const stopPoll = setInterval(() => {
     void cancelRequested(db, run.id).then(
-      (stop) => {
-        if (stop) stopSignal.abort();
+      (requested) => {
+        if (requested) {
+          stopReasons.user = true;
+          stop.abort();
+        }
       },
       () => {},
     );
-  }, 1000);
+    void deadlinePassed(db, run.id).then(
+      (passed) => {
+        if (passed) {
+          stopReasons.deadline = true;
+          stop.abort();
+        }
+      },
+      () => {},
+    );
+  }, STOP_POLL_MS);
+
+  const abortFetch = AbortSignal.any([signal, idle.signal, stop.signal]);
 
   const parser = createStreamParser();
 
@@ -312,6 +384,8 @@ export async function runTaskRun(
             ...history,
           ],
         }),
+        // Stream yang menggantung diputus lewat sini, bukan ditunggu.
+        signal: abortFetch,
       },
       { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
       // Stream panjang: redirect tidak diikuti supaya body tidak dibaca ulang.
@@ -329,26 +403,29 @@ export async function runTaskRun(
         const { done, value } = await reader.read();
         if (done) break;
         bumpIdle();
+        if (stop.signal.aborted) {
+          // Stop tercatat: putus reader supaya soket tidak menahan proses.
+          await reader.cancel().catch(() => {});
+          break;
+        }
         await held(fence);
 
         for (const delta of parser.push(value)) {
           if (delta.kind === "usage" && delta.usage) usage = delta.usage;
           if (delta.kind !== "text" || !delta.text) continue;
           text += delta.text;
-          await db.$transaction((tx) =>
+          // Delta event terfence: lease dicek di dalam transaksi yang sama
+          // dengan tulisan event + proyeksi teks.
+          await fenced(db, fence, (tx) =>
             appendEvent(tx, run.id, "message.delta", {
               messageId: run.assistantMessageId,
               text: delta.text,
-            }),
+            }).then(() =>
+              run.assistantMessageId
+                ? tx.taskMessage.update({ where: { id: run.assistantMessageId }, data: { text } })
+                : Promise.resolve(null),
+            ),
           );
-          // shortcut: teks durable ditulis utuh tiap potongan (satu UPDATE per
-          // delta). Pindahkan ke buffer+flush saat volume delta tinggi.
-          if (run.assistantMessageId) {
-            await db.taskMessage.update({
-              where: { id: run.assistantMessageId },
-              data: { text },
-            });
-          }
         }
       }
       for (const delta of parser.flush()) {
@@ -357,9 +434,12 @@ export async function runTaskRun(
     }
   } catch (err) {
     if (err instanceof LeaseLost) throw err;
-    if (idle.signal.aborted) {
+    if (stopReasons.user || stop.signal.aborted) {
+      failure = null;
+    } else if (idle.signal.aborted && !signal.aborted) {
       failure = { code: "UPSTREAM_TIMEOUT", message: "Gateway berhenti mengirim data." };
-    } else if (stopSignal.signal.aborted) {
+    } else if (signal.aborted || stopReasons.shutdown) {
+      // Shutdown/abort eksternal D03: stop ambigu → indeterminate.
       failure = null;
     } else {
       failure = { code: "UPSTREAM_ERROR", message: "Panggilan ke gateway gagal." };
@@ -371,11 +451,30 @@ export async function runTaskRun(
   } finally {
     clearTimeout(idleTimer);
     clearInterval(stopPoll);
+    signal.removeEventListener("abort", onAbort);
   }
 
   await held(fence);
 
-  if (stopSignal.signal.aborted && (await cancelRequested(db, run.id))) {
+  if (stopReasons.shutdown || (signal.aborted && !stopReasons.user && !stopReasons.deadline)) {
+    // Abort eksternal (SIGTERM/lease hilang): efek model tidak diketahui
+    // lengkap → indeterminate, bukan failed (D03). Terminal tetap sekali.
+    await finish(db, run, "indeterminate", {
+      messageId: run.assistantMessageId,
+      error: { code: "RUN_ABORTED", message: "Run dihentikan sebelum selesai.", retryable: true },
+    });
+    return;
+  }
+
+  if (stopReasons.deadline) {
+    await finish(db, run, "failed", {
+      messageId: run.assistantMessageId,
+      error: { code: "RUN_TIMEOUT", message: "Run melewati batas waktu saat berjalan.", retryable: false },
+    });
+    return;
+  }
+
+  if (stop.signal.aborted && (await cancelRequested(db, run.id))) {
     if (run.assistantMessageId) {
       await db.taskMessage.update({ where: { id: run.assistantMessageId }, data: { text } });
     }
@@ -391,19 +490,15 @@ export async function runTaskRun(
     return;
   }
 
-  await db.$transaction(async (tx) => {
-    await appendEvent(tx, run.id, "usage.updated", {
+  await fenced(db, fence, (tx) =>
+    appendEvent(tx, run.id, "usage.updated", {
       reported: usage !== null && usage.totalTokens !== null,
       promptTokens: usage?.promptTokens ?? null,
       completionTokens: usage?.completionTokens ?? null,
       totalTokens: usage?.totalTokens ?? null,
       estimatedReservedTokens: OUTPUT_RESERVE_TOKENS,
-    });
-    await tx.taskRun.update({
-      where: { id: run.id },
-      data: { stepCount: { increment: 1 } },
-    });
-  });
+    }).then(() => tx.taskRun.update({ where: { id: run.id }, data: { stepCount: { increment: 1 } } })),
+  );
 
   if (run.assistantMessageId) {
     await db.taskMessage.update({ where: { id: run.assistantMessageId }, data: { text } });

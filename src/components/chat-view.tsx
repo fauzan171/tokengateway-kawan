@@ -21,6 +21,8 @@ import {
   ImagePlus,
   Globe,
   Sparkles,
+  FileText,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +33,8 @@ import {
 import { IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/chat/content";
 import { applyVariables } from "@/lib/prompts/variables";
 import { useT, type Translate } from "@/lib/i18n/context";
+import { ThinkingDots, PhaseTimeline, type PhaseView } from "@/components/thinking-indicator";
+import { FilePreviewDrawer, type PreviewTarget } from "@/components/file-preview-drawer";
 
 interface ErrorState {
   message: string;
@@ -209,7 +213,10 @@ export function ChatView({
   const [activeGenId, setActiveGenId] = useState<string | null>(null);
   // Progres yang terlihat (bukan animasi): fase nyata dari server, mis.
   // "Mencari di web", "Membaca 2 halaman sumber", "Menjalankan 1 tool".
-  const [phases, setPhases] = useState<{ phase: string; label: string }[]>([]);
+  const [phases, setPhases] = useState<PhaseView[]>([]);
+  // Panel kanan pratinjau berkas: artefak dari jawaban dibuka geser di sini.
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   // UX-1: indikator pemuatan saat pindah chat, supaya layar tidak terlihat
   // seperti chat kosong sebelum riwayatnya tiba.
   const [loadingChat, setLoadingChat] = useState(false);
@@ -320,8 +327,18 @@ export function ChatView({
     };
   }, []);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Autoscroll hanya saat pengguna memang di dasar. `smooth` per frame
+  // membuat dua animasi saling tarik-menarik (streaming terasa tersendat),
+  // jadi saat streaming lompat langsung seperti perilaku chat pada umumnya.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const scrollToBottom = useCallback((smooth = true) => {
+    const el = scrollContainerRef.current;
+    if (el && stickToBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   }, []);
 
   const refreshChat = useCallback(async (id: string, preferredLeaf?: string | null) => {
@@ -386,6 +403,19 @@ export function ChatView({
   useEffect(() => {
     scrollToBottom();
   }, [messages, activeLeafId, isStreaming, scrollToBottom]);
+  useEffect(() => {
+    // Ganti chat → pulihkan tempel-dasar agar jawaban baru selalu terlihat.
+    stickToBottomRef.current = true;
+  }, [chatId]);
+
+  // Tombol "kirim": lompat ke dasar tanpa animasi, lalu izinkan scroll halus
+  // mengikuti jawaban masuk.
+  useEffect(() => {
+    if (!isStreaming) return;
+    stickToBottomRef.current = true;
+    scrollToBottom(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGenId]);
 
   async function ensureChat(): Promise<string> {
     if (chatId) return chatId;
@@ -423,6 +453,31 @@ export function ChatView({
     // dibuang, jadi sambung-ulang tidak menggandakan teks.
     let cursor = 0;
     let attempt = 0;
+    // Penampung delta teks antar-frame (lihat batching di bawah).
+    let pendingText = "";
+    let flushHandle: number | null = null;
+    const flushPending = () => {
+      if (!pendingText) return;
+      const chunk = pendingText;
+      pendingText = "";
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== assistantMessageId) return msg;
+          const prevText = parseText(msg.contentJson);
+          return {
+            ...msg,
+            contentJson: JSON.stringify({ parts: [{ kind: "text", text: prevText + chunk }] }),
+          };
+        })
+      );
+    };
+    const flushNow = () => {
+      if (flushHandle !== null) {
+        cancelAnimationFrame(flushHandle);
+        flushHandle = null;
+      }
+      flushPending();
+    };
 
     try {
       while (true) {
@@ -470,24 +525,35 @@ export function ChatView({
                   cursor = seq;
                 }
                 if (payload.kind === "text" && payload.text) {
-                  setMessages((prev) =>
-                    prev.map((msg) => {
-                      if (msg.id !== assistantMessageId) return msg;
-                      const prevText = parseText(msg.contentJson);
-                      const nextText = prevText + payload.text;
-                      return {
-                        ...msg,
-                        contentJson: JSON.stringify({ parts: [{ kind: "text", text: nextText }] }),
-                      };
-                    })
-                  );
+                  // Delta ditampung lalu ditulis sekali per frame: satu setState
+                  // per token membuat markdown re-parse puluhan kali/detik dan
+                  // scroll tersendat. Batching = streaming yang halus.
+                  pendingText += payload.text as string;
+                  if (flushHandle === null) {
+                    flushHandle = requestAnimationFrame(() => {
+                      flushHandle = null;
+                      flushPending();
+                    });
+                  }
                 }
               } catch {}
             } else if (eventType === "phase" && dataStr) {
               try {
-                const payload = JSON.parse(dataStr) as { phase?: string; label?: string };
+                const payload = JSON.parse(dataStr) as {
+                  phase?: string;
+                  label?: string;
+                  data?: { urls?: unknown };
+                };
                 if (typeof payload.phase === "string" && typeof payload.label === "string") {
-                  setPhases((prev) => [...prev, { phase: payload.phase!, label: payload.label! }]);
+                  // URL sumber ikut disimpan: timeline menampilkan halaman mana
+                  // yang sedang dibuka, bukan hanya angka.
+                  const urls = Array.isArray(payload.data?.urls)
+                    ? payload.data.urls.filter((u): u is string => typeof u === "string")
+                    : undefined;
+                  setPhases((prev) => [
+                    ...prev,
+                    { phase: payload.phase!, label: payload.label!, ...(urls ? { urls } : {}) },
+                  ]);
                 }
               } catch {}
             } else if (eventType === "done") {
@@ -508,7 +574,11 @@ export function ChatView({
           if (finished) break;
         }
 
-        if (finished) return;
+        if (finished) {
+          // Delta yang masih di rAF jangan hilang saat stream ditutup.
+          flushNow();
+          return;
+        }
         // Server menutup stream tanpa `done`: sambung ulang dari cursor, dengan
         // backoff supaya tidak membanjiri server saat koneksi benar-benar mati.
         attempt += 1;
@@ -522,6 +592,7 @@ export function ChatView({
       const mapped = mapProviderError(t, undefined, msg);
       setErrorState({ ...mapped, assistantId: assistantMessageId });
     } finally {
+      flushNow();
       if (streamAbortRef.current === controller) streamAbortRef.current = null;
       if (chatIdRef.current === activeId) {
         setIsStreaming(false);
@@ -855,7 +926,18 @@ export function ChatView({
     <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col max-sm:px-0 p-4">
       {/* Area Pesan */}
       {/* Pesan baru diumumkan pembaca layar tanpa memindahkan fokus (WCAG 4.1.3). */}
-      <div role="log" aria-live="polite" aria-relevant="additions" className="kawan-thin-scroll flex-1 space-y-5 overflow-y-auto pb-4">
+      <div
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        ref={scrollContainerRef}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          // Toleransi 32px: pengguna dianggap "menempel dasar" meski sedikit naik.
+          stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
+        }}
+        className="kawan-thin-scroll flex-1 space-y-5 overflow-y-auto pb-4"
+      >
         {activeMessages.length === 0 ? (
           loadingChat && messages.length === 0 ? (
             <div className="space-y-3" aria-hidden data-testid="chat-loading-skeleton">
@@ -937,17 +1019,34 @@ export function ChatView({
                 {artifacts.length > 0 && !isEditing && (
                   <ul className="mb-1 space-y-1">
                     {artifacts.map((a) => (
-                      <li key={a.artifactId}>
-                        <a
-                          href={`/api/kawan/v1/artifacts/${encodeURIComponent(a.artifactId)}`}
-                          download={a.displayName}
-                          className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-xs shadow-xs hover:bg-accent"
+                      <li key={a.artifactId} className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPreviewTarget({
+                              artifactId: a.artifactId,
+                              displayName: a.displayName,
+                              format: a.format,
+                              sizeBytes: a.sizeBytes,
+                            });
+                            setPreviewOpen(true);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-xs shadow-xs transition-colors hover:bg-accent"
+                          title={t("chat.previewOpen")}
                         >
+                          <FileText className="size-3.5 text-primary" aria-hidden />
                           <span className="font-medium">{a.displayName}</span>
                           <span className="text-muted-foreground">
                             {a.format.toUpperCase()} · {formatBytes(a.sizeBytes)}
                           </span>
-                          <span className="text-primary">{t("chat.artifactDownload")}</span>
+                        </button>
+                        <a
+                          href={`/api/kawan/v1/artifacts/${encodeURIComponent(a.artifactId)}`}
+                          download={a.displayName}
+                          className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                          title={t("chat.artifactDownload")}
+                        >
+                          <Download className="size-3.5" />
                         </a>
                       </li>
                     ))}
@@ -1016,23 +1115,14 @@ export function ChatView({
                         <p className="whitespace-pre-wrap break-words">{text}</p>
                       )
                     ) : images.length > 0 ? null : m.status === "streaming" ? (
-                      // Progres nyata: label fase terakhir dari server. Bila belum
-                      // ada fase (mis. tepat setelah kirim), jatuh ke "berpikir".
-                      <span className="inline-flex items-center gap-1.5 text-muted-foreground italic">
-                        <KawanMascot mood="thinking" size={18} />
-                        {phases.length > 0 ? phases[phases.length - 1]!.label : t("chat.thinking")}
-                      </span>
+                      // Progres nyata: tiga titik bergelombang + label fase
+                      // terakhir dari server (ala Gemini), bukan teks statis.
+                      <ThinkingDots label={phases.length > 0 ? phases[phases.length - 1]!.label : t("chat.thinking")} />
                     ) : (
                       <span className="text-muted-foreground italic">{t("chat.noReply")}</span>
                     )}
                     {m.status === "streaming" && phases.length > 0 && (
-                      <div
-                        className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"
-                        data-testid="stream-phase"
-                      >
-                        <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-                        {phases[phases.length - 1]!.label}
-                      </div>
+                      <PhaseTimeline phases={phases} active={!text} />
                     )}
                   </div>
                 )}
@@ -1360,6 +1450,14 @@ export function ChatView({
       <p className="mt-2 select-none text-center text-[11px] text-neutral-400 dark:text-neutral-500">
         {t("chat.disclaimer")}
       </p>
+      <FilePreviewDrawer
+        target={previewTarget}
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) setPreviewTarget(null);
+        }}
+      />
     </div>
   );
 }

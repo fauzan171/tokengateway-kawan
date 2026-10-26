@@ -111,6 +111,159 @@ describe("K7 pemilih agent", () => {
   });
 });
 
+describe("T02: task pertama + idempotensi + replay dedup", () => {
+  /** Kiriman POST /tasks dengan delay supaya klik kedua jatuh saat penerbangan. */
+  function stubCreate(delayMs = 20): { posts: { url: string; key: string | null }[] } {
+    const posts: { url: string; key: string | null }[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/kawan/v1/agents") return json({ agents: [] });
+      if (url === "/api/kawan/v1/tasks") {
+        if (init?.method === "POST") {
+          const headers = (init?.headers ?? {}) as Record<string, string>;
+          posts.push({ url, key: headers["Idempotency-Key"] ?? null });
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          return json(
+            { task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" } },
+            202,
+          );
+        }
+        return json(TASKS);
+      }
+      if (url === "/api/kawan/v1/tasks/task_1") {
+        return json({
+          task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" },
+          run: { id: "run_1", status: "running", segment: 1, errorCode: null, agentId: null },
+          messages: [],
+          snapshotSeq: 0,
+        });
+      }
+      if (url.includes("/events")) return json({}, 500);
+      return json({}, 404);
+    });
+    return { posts };
+  }
+
+  function typeDraft(text: string): void {
+    const textarea = container.querySelector("textarea")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    act(() => {
+      setValue.call(textarea, text);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  async function clickSend(): Promise<void> {
+    const buttons = [...container.querySelectorAll("button")];
+    const send = buttons.find((button) => button.textContent === "Kirim")!;
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    });
+  }
+
+  it("daftar kosong: submit memanggil POST /tasks (task pertama bisa dibuat lewat UI)", async () => {
+    const { posts } = stubCreate(0);
+    await render();
+    typeDraft("Riset pertama saya");
+    await clickSend();
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.url).toBe("/api/kawan/v1/tasks");
+  });
+
+  it("double submit → satu POST dengan satu Idempotency-Key yang sama", async () => {
+    const { posts } = stubCreate(20);
+    await render();
+    typeDraft("Riset pertama saya");
+    // Dua klik cepat: kedua masuk sebelum respons pertama pulang.
+    const buttons = [...container.querySelectorAll("button")];
+    const send = buttons.find((button) => button.textContent === "Kirim")!;
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.key).toBeTruthy();
+  });
+
+  it("replay seq ≤ snapshotSeq tidak ditambahkan lagi (tanpa concat replay)", async () => {
+    // Snapshot memuat teks "Halo" (delta seq 1..3 sudah tercakup, snapshotSeq=3),
+    // lalu SSE menyetel ulang delta seq 1..3 → live tetap kosong; delta seq 4
+    // baru di-append.
+    let sendCount = 0;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/kawan/v1/agents") return json({ agents: [] });
+      if (url === "/api/kawan/v1/tasks") {
+        if (init?.method === "POST") return json({}, 404);
+        return json(TASKS);
+      }
+      if (url === "/api/kawan/v1/tasks/task_1") {
+        return json({
+          task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" },
+          run: { id: "run_1", status: "running", segment: 1, errorCode: null, agentId: null },
+          messages: [],
+          snapshotSeq: 3,
+        });
+      }
+      if (url.includes("/events")) {
+        if (sendCount > 0) return json({}, 500);
+        sendCount += 1;
+        return new Response(
+          "id: 1\nevent: message.delta\ndata: {\"text\":\"Ha\"}\n\n" +
+            "id: 2\nevent: message.delta\ndata: {\"text\":\"lo\"}\n\n" +
+            "id: 3\nevent: message.delta\ndata: {\"text\":\"!\"}\n\n" +
+            "id: 4\nevent: message.delta\ndata: {\"text\":\" baru\"}\n\n",
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        );
+      }
+      return json({}, 404);
+    });
+    await render("task_1");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    const live = container.querySelector('[data-testid="task-live-block"]');
+    // Delta seq 1..3 = replay snapshot → tidak muncul; hanya seq 4 (teks " baru").
+    expect(live?.textContent).toBe(" baru");
+  });
+
+  it("replay dengan seq sama dua kali (duplicate) tidak menggandakan teks", async () => {
+    let sendCount = 0;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/kawan/v1/agents") return json({ agents: [] });
+      if (url === "/api/kawan/v1/tasks") {
+        if (init?.method === "POST") return json({}, 404);
+        return json(TASKS);
+      }
+      if (url === "/api/kawan/v1/tasks/task_1") {
+        return json({
+          task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" },
+          run: { id: "run_1", status: "running", segment: 1, errorCode: null, agentId: null },
+          messages: [],
+          snapshotSeq: 0,
+        });
+      }
+      if (url.includes("/events")) {
+        if (sendCount > 0) return json({}, 500);
+        sendCount += 1;
+        return new Response(
+          "id: 1\nevent: message.delta\ndata: {\"text\":\"A\"}\n\n" +
+            "id: 1\nevent: message.delta\ndata: {\"text\":\"A\"}\n\n" +
+            "id: 2\nevent: message.delta\ndata: {\"text\":\"B\"}\n\n",
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        );
+      }
+      return json({}, 404);
+    });
+    await render("task_1");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    const live = container.querySelector('[data-testid="task-live-block"]');
+    expect(live?.textContent).toBe("AB");
+  });
+});
+
 describe("UX-1: banner sambung ulang saat SSE putus", () => {
   it("fetch events ditolak → banner stalled + tombol sambung ulang tampil", async () => {
     stub(true);

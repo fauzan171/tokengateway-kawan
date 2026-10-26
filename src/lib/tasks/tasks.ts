@@ -534,33 +534,49 @@ export type TaskSnapshot = {
   task: TaskDto;
   run: RunDto | null;
   messages: Array<{ id: string; role: string; text: string; createdAt: string }>;
+  /**
+   * Cursor event konsisten (T02/D04): seluruh event run aktif dengan
+   * `seq <= snapshotSeq` sudah tercermin pada `run`/`messages` snapshot ini.
+   * Klien membuka SSE dengan `afterSeq=snapshotSeq` supaya replay tidak
+   * menimpa teks yang sudah dimuat snapshot (tanpa concat replay).
+   */
+  snapshotSeq: number;
 };
 
 export async function getTaskSnapshot(db: Db, userId: string, taskId: string): Promise<TaskSnapshot> {
-  const task = await findOwnedTask(db, userId, taskId);
-  if (!task) throw notFound();
+  // Satu transaksi: cursor (lastEventSeq run aktif) dan teks pesan dibaca
+  // bersamaan, jadi snapshot tidak memuat prefix teks yang lebih baru daripada
+  // cursornya — prasyarat "dedup runId+seq, append hanya seq lebih besar".
+  return db.$transaction(async (tx) => {
+    const task = await tx.task.findFirst({
+      where: { id: taskId, userId, deletedAt: null },
+      select: TASK_FIELDS,
+    });
+    if (!task) throw notFound();
 
-  const messages = await db.taskMessage.findMany({
-    where: { taskId },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    take: 200,
-    select: { id: true, role: true, text: true, createdAt: true },
+    const messages = await tx.taskMessage.findMany({
+      where: { taskId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 200,
+      select: { id: true, role: true, text: true, createdAt: true },
+    });
+
+    const run = task.activeRunId
+      ? await tx.taskRun.findFirst({ where: { id: task.activeRunId, taskId }, select: RUN_FIELDS })
+      : null;
+
+    return {
+      task: toTaskDto(task),
+      run: run ? toRunDto(run) : null,
+      messages: messages.map((row) => ({
+        id: row.id,
+        role: row.role,
+        text: row.text,
+        createdAt: row.createdAt.toISOString(),
+      })),
+      snapshotSeq: run?.lastEventSeq ?? 0,
+    };
   });
-
-  const run = task.activeRunId
-    ? await db.taskRun.findFirst({ where: { id: task.activeRunId, taskId }, select: RUN_FIELDS })
-    : null;
-
-  return {
-    task: toTaskDto(task),
-    run: run ? toRunDto(run) : null,
-    messages: messages.map((row) => ({
-      id: row.id,
-      role: row.role,
-      text: row.text,
-      createdAt: row.createdAt.toISOString(),
-    })),
-  };
 }
 
 /**
@@ -749,6 +765,10 @@ export async function followUp(db: Db, input: CreateTaskInput & { taskId: string
 /**
  * Menandai niat cancel segera; hasil terminal ditulis worker setelah
  * tool/model benar-benar berhenti. Cancel berulang tidak menambah efek baru.
+ *
+ * Run yang masih `queued` (belum di-dispatch worker) langsung ditutup
+ * `cancelled` dalam transaksi yang sama: tidak ada efek yang perlu
+ * dikonfirmasi, menunggu worker hanya membiarkan run menggantung.
  */
 export async function cancelRun(
   db: Db,
@@ -769,12 +789,42 @@ export async function cancelRun(
 
     if (isTerminalRun(run.status)) return toRunDto(run);
 
+    const expectedRevision = run.revision;
     const already = run.cancelRequestedAt !== null;
+
+    if (run.status === "queued" && !already) {
+      // T01/D03: run `queued` belum di-dispatch worker dan belum punya efek,
+      // jadi tidak ada yang perlu dikonfirmasi penutupannya. Niat cancel
+      // tetap tercatat `cancel.requested` (kontrak event yang sudah ada),
+      // lalu run langsung terminal `cancelled` — sekali saja, memakai CAS
+      // `revision` supaya balapan dengan worker/takeover kalah tanpa efek.
+      const closed = await tx.taskRun.updateMany({
+        where: { id: run.id, status: "queued", revision: expectedRevision },
+        data: {
+          status: "cancelled",
+          cancelRequestedAt: new Date(),
+          finishedAt: new Date(),
+          revision: { increment: 1 },
+        },
+      });
+      if (closed.count > 0) {
+        await appendEvent(tx, run.id, "cancel.requested", {});
+        await appendEvent(tx, run.id, "run.cancelled", {
+          status: "cancelled",
+          revision: expectedRevision + 1,
+          reason: "user",
+        });
+        const final = await tx.taskRun.findUniqueOrThrow({ where: { id: run.id }, select: RUN_FIELDS });
+        return toRunDto(final);
+      }
+      // Kalah balapan CAS (worker mengambil run di tengah): jatuh ke jalur
+      // intent di bawah; worker menutup lewat abort signal.
+    }
+
     const updated = await tx.taskRun.update({
       where: { id: run.id },
       data: {
         cancelRequestedAt: run.cancelRequestedAt ?? new Date(),
-        status: "running",
         revision: { increment: 1 },
       },
       select: RUN_FIELDS,

@@ -20,6 +20,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { engineEnabled, runEngine, renderEngineTask } from "@/lib/engine/harness-bridge";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import { logger } from "@/lib/api/logger";
 import { getActiveConnection } from "@/lib/connections/connections";
@@ -1004,7 +1005,9 @@ export async function runGeneration(
       await publishEvent(db, generationId, "phase", {
         phase: "reading",
         label: `Membaca ${Math.min(sources.length, 2)} halaman sumber`,
-        data: { sources: sources.length },
+        // Nama sumber ikut dikirim supaya UI bisa menunjukkan SEDANG membuka
+        // halaman mana, bukan sekadar "membaca".
+        data: { sources: sources.length, urls: sources.slice(0, 2).map((s) => s.url) },
       });
       enriched = await enrichSources(sources, {
         limit: 2,
@@ -1013,7 +1016,9 @@ export async function runGeneration(
       await publishEvent(db, generationId, "phase", {
         phase: "search-done",
         label: `${sources.length} sumber ditemukan, ${enriched.length} halaman terbaca`,
-        data: { sources: sources.length, read: enriched.length },
+        // Host sumber ditampilkan sebagai chip: pengguna melihat dari mana
+        // jawaban diambil, bukan hanya jumlahnya.
+        data: { sources: sources.length, read: enriched.length, urls: sources.slice(0, 4).map((s) => s.url) },
       });
     } catch {
       // Isi query tidak dicatat: hanya penanda bahwa pencarian gagal.
@@ -1126,6 +1131,64 @@ export async function runGeneration(
   let usage: StreamUsage | null;
   let finishReason: string | null;
   try {
+    if (engineEnabled()) {
+      // Engine kawanku-harness menggantikan gateway OpenAI-compatible: seluruh
+      // history di-render jadi satu task (session harness per turn), potongan
+      // text final di-stream dengan jalur onDelta yang sama.
+      ({ usage, finishReason } = await runEngine({
+        userId: chat.userId,
+        sessionId: null,
+        task: renderEngineTask([
+          {
+            role: "system",
+            content: composeSystemPrompt({
+              tools: toolsEnabled ? chatToolNames() : [],
+              webSearch: searchSystem !== null,
+              canSeeImages: history.messages.some((message) => Array.isArray(message.content)),
+              canRunCode: false,
+              ...(userSystem ? { userSystemPrompt: userSystem } : {}),
+              runtimeContext: buildRuntimeContext({
+                now: new Date(),
+                // shortcut: preferensi zona waktu per pengguna belum ada kolomnya
+                // (`UserSetting.timezone`); tambahkan saat kolom itu menyusul.
+                timezone: DEFAULT_TIMEZONE,
+                chatTitle: chat.title,
+                model,
+              }),
+              untrusted: [
+                ...(memorySystem ? [{ source: "memori", content: memorySystem }] : []),
+                ...(contextSystem ? [{ source: "dokumen", content: contextSystem }] : []),
+                ...(searchSystem ? [{ source: "web", content: searchSystem }] : []),
+              ],
+            }).content,
+          },
+          ...history.messages,
+        ]),
+        apiKey,
+        baseUrl: baseUrl.replace(/\/+$/, ""),
+        model,
+        signal,
+        shouldStop: () => stopIfRequested(db, generationId),
+        onDelta: async (delta) => {
+          await held();
+          if (delta.kind === "text" && delta.text) {
+            text += delta.text;
+            await db.chatMessagePart.create({
+              data: {
+                id: randomUUID(),
+                messageId: generation.assistantMessageId,
+                kind: "text",
+                payloadJson: JSON.stringify({ text: delta.text }),
+                ordinal: ordinal++,
+              },
+            });
+            await publishEvent(db, generationId, "part", { kind: "text", text: delta.text });
+          } else if (delta.kind === "usage" && delta.usage) {
+            await publishEvent(db, generationId, "usage", delta.usage);
+          }
+        },
+      }));
+    } else {
     ({ usage, finishReason } = await streamGateway({
       generationId,
       url: `${baseUrl.replace(/\/+$/, "")}${CHAT_COMPLETIONS_PATH}`,
@@ -1199,6 +1262,7 @@ export async function runGeneration(
         }
       },
     }));
+    }
   } catch (err) {
     // Worker berhenti: bukan galat generasi; penanganan stop menutupnya nanti.
     if (signal.aborted) return;

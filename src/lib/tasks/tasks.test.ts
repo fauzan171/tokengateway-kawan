@@ -207,6 +207,29 @@ describe("follow-up dan cancel", () => {
     expect(events).toHaveLength(1);
   });
 
+  it("cancel run queued: intent lalu terminal cancelled sekali, idempoten", async () => {
+    const { taskId, runId } = await admission();
+    const first = await cancelRun(temp.db, { userId: "uA", taskId, runId });
+    // T01/D03: niat tercatat dulu, run ditutup sekali di transaksi yang sama.
+    expect(first.cancelRequestedAt).not.toBeNull();
+    expect(first.status).toBe("cancelled");
+    expect(first.finishedAt).not.toBeNull();
+
+    const intents = await temp.db.taskEvent.findMany({ where: { runId, kind: "cancel.requested" } });
+    expect(intents).toHaveLength(1);
+    const terminals = await temp.db.taskEvent.findMany({ where: { runId, kind: "run.cancelled" } });
+    expect(terminals).toHaveLength(1);
+    // Urutan sekuens: intent sebelum terminal.
+    expect(intents[0]!.seq).toBeLessThan(terminals[0]!.seq);
+
+    // Idempoten: cancel ulang tidak menambah event atau mengubah status.
+    const before = await temp.db.taskEvent.count({ where: { runId } });
+    const second = await cancelRun(temp.db, { userId: "uA", taskId, runId });
+    expect(second.cancelRequestedAt).toBe(first.cancelRequestedAt);
+    expect(second.status).toBe("cancelled");
+    expect(await temp.db.taskEvent.count({ where: { runId } })).toBe(before);
+  });
+
   it("cancel pada run terminal tidak menambah efek", async () => {
     const { taskId, runId } = await admission();
     await updateTerminal(runId);

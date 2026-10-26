@@ -6,7 +6,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import {
   UNICODE_TEXT,
@@ -196,6 +196,131 @@ describe("runTaskRun", () => {
     expect(body).toContain("Pertanyaan satu");
     expect(body).toContain("Pertanyaan dua");
     expect((await db.taskRun.findUniqueOrThrow({ where: { id: run.id } })).status).toBe("completed");
+  });
+});
+
+describe("lifecycle cancel/fencing (WP01)", () => {
+  async function waitForEvent(runId: string, kind: string, timeout = 5_000): Promise<void> {
+    await vi.waitFor(
+      async () => {
+        expect(
+          await db.taskEvent.findFirst({ where: { runId, kind } }),
+        ).not.toBeNull();
+      },
+      { timeout },
+    );
+  }
+
+  async function lastEvent(runId: string) {
+    const rows = await db.taskEvent.findMany({ where: { runId }, orderBy: { seq: "desc" }, take: 1 });
+    return rows[0]!;
+  }
+
+  it("cancel di tengah stream menggantung → run.cancelled cepat, teks parsial durable", async () => {
+    const { runId, taskId } = await admission("Halo", modelFor("timeout"));
+    const running = runTaskRun(db, config(), runId, new AbortController().signal);
+    await waitForEvent(runId, "message.delta");
+
+    const t0 = Date.now();
+    await cancelRun(db, { userId, taskId, runId });
+    await running;
+
+    // T01: fixture selesai ≤2 detik setelah signal cancel.
+    expect(Date.now() - t0).toBeLessThan(2_000);
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("cancelled");
+    expect((await lastEvent(runId)).kind).toBe("run.cancelled");
+    // Terminal sekali: tepat satu event terminal.
+    const terminal = await db.taskEvent.findMany({ where: { runId, kind: "run.cancelled" } });
+    expect(terminal).toHaveLength(1);
+    // Teks parsial tetap durable, bukan dibuang.
+    const assistant = await db.taskMessage.findUniqueOrThrow({
+      where: { id: run.assistantMessageId! },
+    });
+    expect(assistant.text).toBe("mulai ");
+  });
+
+  it("deadline tercapai di tengah stream → run.failed RUN_TIMEOUT tanpa menunggu idle", async () => {
+    const { runId } = await admission("Halo", modelFor("timeout"));
+    await db.taskRun.update({
+      where: { id: runId },
+      data: { deadlineAt: new Date(Date.now() + 400) },
+    });
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("failed");
+    expect(run.errorCode).toBe("RUN_TIMEOUT");
+    expect((await lastEvent(runId)).kind).toBe("run.failed");
+  });
+
+  it("abort eksternal (shutdown) di tengah stream → indeterminate, bukan menggantung", async () => {
+    const { runId } = await admission("Halo", modelFor("timeout"));
+    const controller = new AbortController();
+    const running = runTaskRun(db, config(), runId, controller.signal);
+    await waitForEvent(runId, "message.delta");
+
+    const t0 = Date.now();
+    controller.abort();
+    await running;
+
+    expect(Date.now() - t0).toBeLessThan(2_000);
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    // D03: shutdown = stop ambigu → indeterminate, tetap terminal sekali.
+    expect(run.status).toBe("indeterminate");
+    expect(run.errorCode).toBe("RUN_ABORTED");
+    expect((await lastEvent(runId)).kind).toBe("run.indeterminate");
+    expect(await db.taskEvent.count({ where: { runId, kind: "run.indeterminate" } })).toBe(1);
+  });
+
+  it("lease hilang tepat antara check dan write → mutasi ditolak dalam transaksi", async () => {
+    const { runId } = await admission("Halo", modelFor("unicode-split"));
+    let stale = false;
+    const fence = {
+      held: async () => !stale,
+      heldFresh: async () => !stale,
+    };
+    // Proxy menyimulasikan takeover tepat saat transaksi tulisan dibuka:
+    // check `held()` luar sudah lolos (stale=false), lease hilang SEBELUM
+    // tulisan dijalankan. Mutasi harus ditolak di dalam transaksi yang sama.
+    const guarded = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === "$transaction") {
+          return (arg: unknown) => {
+            if (typeof arg === "function") {
+              return target.$transaction(async (tx: unknown) => {
+                stale = true;
+                return (arg as (tx: unknown) => unknown)(tx);
+              });
+            }
+            return target.$transaction(arg as never);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as Db;
+
+    await expect(
+      runTaskRun(guarded, config(), runId, new AbortController().signal, fence),
+    ).rejects.toThrow();
+
+    // Tidak ada tulisan stale: run tetap queued, tanpa run.started.
+    expect(await db.taskEvent.count({ where: { runId, kind: "run.started" } })).toBe(0);
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("queued");
+  });
+
+  it("cancel run queued → langsung cancelled terminal sekali, idempotent", async () => {
+    const { runId, taskId } = await admission("Halo", modelFor("unicode-split"));
+    const first = await cancelRun(db, { userId, taskId, runId });
+    expect(first.status).toBe("cancelled");
+
+    const rows = await db.taskEvent.findMany({ where: { runId }, orderBy: { seq: "asc" } });
+    expect(rows[rows.length - 1]!.kind).toBe("run.cancelled");
+    expect(rows.filter((row) => row.kind === "run.cancelled")).toHaveLength(1);
+
+    // Berulang tidak menambah event baru (idempotent intent + terminal sekali).
+    await cancelRun(db, { userId, taskId, runId });
+    expect(await db.taskEvent.count({ where: { runId } })).toBe(rows.length);
   });
 });
 
