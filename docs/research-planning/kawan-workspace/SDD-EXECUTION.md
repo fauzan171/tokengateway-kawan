@@ -76,7 +76,14 @@ Tabel status hidup di file ini (koordinator update tiap perubahan state):
 
 | WO | Status | Worktree | Bukti (gate+QA) | Iterasi |
 |---|---|---|---|---|
-| WO-0 | belum | — | — | 0 |
+| WO-0 | done | — (commit di branch integrasi) | `GATE-WO0.md`: tsc 0, eslint 0 error, test 1325 lulus/122 file, build 0. Commit `e2330686` (WP01/WP02) + `3641dfa2` (docs) | 1 |
+
+**Catatan basis (26 Okt, koreksi SDD):** SDD menjanjikan basis `main` `9c2f5320`.
+Verifikasi: `main` hanya punya schema 84 baris (4 model: User/Credential/Job/Session) —
+**tanpa** `Task`/`TaskRun`/`TaskEvent`/`Artifact`. State 849-baris ada di
+`merge/main-into-feat-nt-p1` (181 commit di depan `main`), turunan `9c2f5320`.
+Branch integrasi `feat/kawan-workspace` dibuat dari `027e17d4` (puncak branch itu),
+bukan dari `main`.
 
 (Satu baris per WO saat eksekusi dimulai; status: belum/draft/testing/qa/ready/done/blocked.)
 
