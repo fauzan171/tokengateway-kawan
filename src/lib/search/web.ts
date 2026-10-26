@@ -35,7 +35,7 @@ export type SearchResult = {
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 10;
 const TIMEOUT_MS = 8_000;
-const SNIPPET_MAX = 300;
+export const SNIPPET_MAX = 300;
 
 /** Galat pencarian. `retryable` menandai galat yang layak diulang apa adanya. */
 export class SearchError extends Error {
