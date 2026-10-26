@@ -140,19 +140,28 @@ di atas form; sudah terisi → kartu tidak tampil.
 
 ### Kontrak yang diandalkan frontend (dari SDD kawan-next D04)
 
+> **KOREKSI S1-1 (26 Okt, sumber kebenaran = SDD-BACKEND §D1 §3).** Blok di bawah
+> yang memakai `status:"ok"|"failed"|"denied"` **DIGANTIKAN**. Kontrak final:
+> `status` memakai enum TaskStep `"pending"|"running"|"succeeded"|"failed"|"cancelled"|"indeterminate"`;
+> `kind` step adalah `"model"|"tool"|"phase"` (bukan `search|read|tool|synthesize` — itu
+> nilai `phase`); tidak ada `preview` di payload. Frontend **JANGAN** memakai `"ok"`/`"denied"`.
+> `phase` opsional (`framing|discovery|extraction|validation|synthesis`), `toolName` opsional.
+
 Backend menambah kind TaskEvent additive; payload berlabel aman (bukan raw args/CoT):
 
 ```
-event: step.started   data: {schemaVersion:1, stepId, kind:"search"|"read"|"tool"|"synthesize", label, ordinal, cycle?, count?, total?}
-event: step.completed data: {schemaVersion:1, stepId, label, status:"ok"|"failed"|"denied"}
+event: step.started   data: {schemaVersion:1, stepId, ordinal, kind:"model"|"tool"|"phase", phase?, cycle?, toolName?, label, count?, total?}
+event: step.completed data: {schemaVersion:1, stepId, status:"succeeded"|"failed"|"cancelled"|"indeterminate", errorCode?, label?, count?, total?}
 ```
 
 - Label sudah final dalam bahasa Indonesia dari server ("mencari…", "membaca sumber 2/3",
-  "menyusun jawaban") — frontend TIDAK menyusun kalimat dari field terpisah; ini
-  meniadakan duplikasi grammar di klien. Frontend hanya memilih key i18n fallback bila
-  `label` absen.
+  "menyusun jawaban", ≤80 char) — frontend TIDAK menyusun kalimat dari field terpisah;
+  frontend hanya memilih key i18n fallback bila `label` absen.
 - `count`/`total` opsional untuk "membaca sumber 2/3".
-- Unknown kind diabaikan, `seq` tetap maju (aturan existing, SDD D04).
+- **Tanpa `preview`**: data hasil tool tak tepercaya tidak pernah masuk TaskEvent/SSE.
+- Unknown kind diabaikan, `seq` tetap maju (aturan existing, SDD D04). Fallback i18n
+  lama (`tasks.activity.search|read|tool|synthesize`) tetap sah dipakai HANYA bila
+  `label` absen, dipilih dari `phase`/`kind`.
 
 ### (1) Komponen
 
@@ -268,21 +277,26 @@ Pola fetch/SSE mock mengikuti test existing task-view.
 
 ### Kontrak yang diandalkan frontend (dari SDD kawan-next D04/D05)
 
+> **KOREKSI S2-2 (26 Okt, sumber kebenaran = SDD-BACKEND §D6 "Kontrak DTO metering").**
+> Bentuk `metering` di bawah **DIGANTIKAN**. DTO final (backend = sumber kebenaran):
+> `{usage:{reported,promptTokens,completionTokens,totalTokens}, consumed, sourcesRead}`.
+> `estimatedCostUsd` **TIDAK diproduksi** (aturan non-goal billing) → UI tidak pernah
+> menampilkan biaya; `stopReason` dibaca dari field run level, bukan dari metering.
+> `RunMeteringSummary` menerima `metering` berbentuk ini.
+
 `GET /api/kawan/v1/tasks/[taskId]` snapshot run DTO ditambah additive:
 
 ```
 run: { ..., metering?: {
-  schemaVersion: 1,
-  inputTokens?: number,      // estimasi, tercatat di budgetJson
-  outputTokens?: number,
-  estimatedCostUsd?: number, // hanya bila tarif tepercaya ada; absen = tidak tampil
-  sourcesRead?: number,      // jumlah sumber unik dibaca
-  stopReason?: string
-} }
+  usage: { reported: boolean, promptTokens: number, completionTokens: number, totalTokens: number },
+  consumed: { promptTokens: number, completionTokens: number, searches: number, reads: number, toolCalls: number },
+  sourcesRead: number
+}, stopReason?: string }
 ```
 
 Field absen/nullable = run lama atau metering belum tersedia → blok tidak dirender
-(additive, klien lama aman). Frontend tidak menghitung token sendiri.
+(additive, klien lama aman). Frontend tidak menghitung token sendiri. Tanpa
+`estimatedCostUsd` → tidak ada baris biaya; format angka `Intl.NumberFormat("id-ID")`.
 
 ### (1) Komponen
 
