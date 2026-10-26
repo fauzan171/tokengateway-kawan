@@ -77,6 +77,10 @@ Tabel status hidup di file ini (koordinator update tiap perubahan state):
 | WO | Status | Worktree | Bukti (gate+QA) | Iterasi |
 |---|---|---|---|---|
 | WO-0 | done | — (commit di branch integrasi) | `GATE-WO0.md`: tsc 0, eslint 0 error, test 1325 lulus/122 file, build 0. Commit `e2330686` (WP01/WP02) + `3641dfa2` (docs) | 1 |
+| WO-B1 | done | — (squash `90ec7d71`) | `gates/GATE-WO-B1.md`: check-migrations OK, db:generate 0, tsc 0, test 122 file/1326 lulus, build 0. QA APPROVED (S3 erasure SearchUsageDaily + S3 TIMESTAMP(3) diperbaiki iterasi 2) | 2 |
+| WO-F1 | done | — (squash `3f0f28dc`) | `gates/GATE-WO-F1.md`: tsc 0, eslint 0, tes fokus 7 lulus, test 123 file/1332 lulus, build 0. QA S2 (controlled) diperbaiki iterasi 2 | 2 |
+| WO-B2 | draft | `worktrees/wo-b2` (`wo/b2`) | chain.ts + chain.test.ts; worker berjalan | 1 |
+| WO-B4 | draft | `worktrees/wo-b4` (`wo/b4`) | file-tool enum+parser + registry xlsx/docx + file-gen.test.ts; worker berjalan | 1 |
 
 **Catatan basis (26 Okt, koreksi SDD):** SDD menjanjikan basis `main` `9c2f5320`.
 Verifikasi: `main` hanya punya schema 84 baris (4 model: User/Credential/Job/Session) —
