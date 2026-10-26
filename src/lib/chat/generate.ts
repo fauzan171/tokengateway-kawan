@@ -58,6 +58,7 @@ import {
   assembleToolCalls,
   parseGenerateDocumentArgs,
   parseGenerateFileArgs,
+  toArtifactInput,
 } from "./file-tool";
 // P3: daftar tool chat berasal dari registry, bukan konstanta lokal. Parser di
 // atas tetap dipakai di loop supaya perilakunya tidak berubah.
@@ -1333,17 +1334,17 @@ export async function runGeneration(
     if (call.name !== GENERATE_FILE_TOOL_NAME) continue;
     try {
       const args = parseGenerateFileArgs(call.arguments);
+      // R5/FIX-19: cermin jalur generate_document — dokumen docx yang dipotong wajib terlihat.
+      if (args.format === "docx") {
+        if (args.truncated) docTruncated = true;
+        docUnknownBlocks += args.unknownBlocks;
+      }
       const artifact = await createArtifact(db, {
         userId: chat.userId,
         chatId: chat.id,
         messageId: generation.assistantMessageId,
         displayName: args.displayName,
-        input:
-          args.format === "csv"
-            ? { format: "csv", rows: args.rows ?? [] }
-            : args.format === "json"
-              ? { format: "json", content: JSON.parse(args.content ?? "null") }
-              : { format: args.format, content: args.content ?? "" },
+        input: toArtifactInput(args),
       });
       if (artifact.status === "ready") {
         artifactParts.push({

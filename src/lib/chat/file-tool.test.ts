@@ -51,7 +51,8 @@ describe("parseGenerateFileArgs", () => {
     expect(() => parseGenerateFileArgs({ format: "csv", displayName: "a" })).toThrowError(/rows/);
     const ok = parseGenerateFileArgs({ format: "csv", displayName: "a", rows: [["h"], [1]] });
     expect(ok.format).toBe("csv");
-    expect((ok as { rows?: unknown[][] }).rows).toEqual([["h"], [1]]);
+    // D2: sel dinormalkan ke teks (`rows: string[][]`); renderer CSV sudah stringify.
+    expect((ok as { rows?: string[][] }).rows).toEqual([["h"], ["1"]]);
   });
 
   it("json tanpa content ditolak", () => {

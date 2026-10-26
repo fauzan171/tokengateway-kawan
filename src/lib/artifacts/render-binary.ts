@@ -329,6 +329,27 @@ export async function renderXlsxBytes(doc: DocSchema, resolveImage: ImageResolve
   return Buffer.from(arrayBuffer as ArrayBuffer);
 }
 
+/** XLSX: satu worksheet per `sheets` (D2). `renderXlsxBytes` menurunkan satu sheet dari DocSchema; ini jalur `generate_file format:xlsx`. */
+export async function renderXlsxSheetsBytes(
+  sheets: readonly { name: string; rows: readonly (readonly string[])[] }[],
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  // Excel menolak nama sheet duplikat; dedupe setelah sanitasi, bukan melempar.
+  const used = new Set<string>();
+  for (const sheet of sheets) {
+    let name = safeSheetName(sheet.name);
+    for (let suffix = 2; used.has(name.toLowerCase()); suffix += 1) {
+      const tail = ` (${suffix})`;
+      name = safeSheetName(sheet.name).slice(0, 31 - tail.length) + tail;
+    }
+    used.add(name.toLowerCase());
+    const worksheet = workbook.addWorksheet(name);
+    for (const row of sheet.rows) worksheet.addRow([...row]);
+  }
+  const arrayBuffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(arrayBuffer as ArrayBuffer);
+}
+
 /**
  * PPTX (D6): tata letak berbasis tinggi terhitung, bukan rumus tetap.
  *

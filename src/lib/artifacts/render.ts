@@ -3,7 +3,7 @@
  * renderArtifactBytesAsync di bawah; renderer biner ada di render-binary.ts.
  */
 
-import { renderDocxBytes, renderPdfBytes, renderPptxBytes, renderXlsxBytes, type ImageResolver } from "./render-binary";
+import { renderDocxBytes, renderPdfBytes, renderPptxBytes, renderXlsxBytes, renderXlsxSheetsBytes, type ImageResolver } from "./render-binary";
 import { writeZip, type ZipInputEntry } from "./zip";
 import type { DocSchema } from "./document";
 
@@ -23,12 +23,15 @@ export type ArtifactInput =
   | { format: "json"; content: unknown }
   | { format: "csv"; rows: unknown[][] }
   | { format: "pdf" | "docx" | "xlsx"; doc: DocSchema }
+  // D2: xlsx dari beberapa lembar bernama (generate_file format:xlsx).
+  | { format: "xlsx"; sheets: { name: string; rows: string[][] }[] }
   | { format: "pptx"; doc: DocSchema }
   | { format: "zip"; files: ZipInputEntry[] };
 
 /** Varian biner: format dokumen, bukan konten teks dari tool model. */
 export type BinaryArtifactInput =
   | Extract<ArtifactInput, { doc: DocSchema }>
+  | Extract<ArtifactInput, { sheets: { name: string; rows: string[][] }[] }>
   | Extract<ArtifactInput, { files: ZipInputEntry[] }>
   | Extract<ArtifactInput, { bytes: Uint8Array }>;
 export type TextArtifactInput = Extract<ArtifactInput, { content: unknown } | { rows: unknown[][] }>;
@@ -47,7 +50,10 @@ export async function renderArtifactBytesAsync(input: ArtifactInput, resolveImag
     case "docx":
       return renderDocxBytes(asDoc(input), resolveImage);
     case "xlsx":
-      return renderXlsxBytes(asDoc(input), resolveImage);
+      // D2: varian `sheets` (generate_file) menang bila ada; selain itu DocSchema.
+      return "sheets" in input
+        ? renderXlsxSheetsBytes(input.sheets)
+        : renderXlsxBytes(asDoc(input), resolveImage);
     case "pptx":
       return renderPptxBytes(asDoc(input), resolveImage);
     case "zip":

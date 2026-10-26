@@ -443,12 +443,11 @@ function stopReason(ctx: ToolContext): ToolResult | null {
 
 /** Galat tak terduga jadi failed, bukan pengecualian yang mematikan run. */
 function resultOf(err: unknown): ToolResult {
-  if (
-    err instanceof CalcError ||
-    err instanceof ChartError ||
-    err instanceof QrError ||
-    err instanceof ArtifactError
-  ) {
+  if (err instanceof ArtifactError) {
+    // Kode stabil (INVALID_TOOL_ARGS/QUOTA_EXCEEDED/TOO_LARGE) untuk step failed (D2).
+    return { ...invalid(err.message), errorCode: err.code };
+  }
+  if (err instanceof CalcError || err instanceof ChartError || err instanceof QrError) {
     return invalid(err.message);
   }
   return failed(err instanceof Error ? err.message : "Tool gagal tanpa keterangan.");
