@@ -242,6 +242,10 @@ describe("peta dependensi dan retensi", () => {
     }
   });
 
+  it("memuat searchUsageDaily (tanpa relasi User, jadi harus dihapus eksplisit)", () => {
+    expect(USER_DATA_MAP.map((entry) => entry.model)).toContain("searchUsageDaily");
+  });
+
   it("retensi masuk akal dan tidak negatif", () => {
     for (const days of Object.values(RETENTION)) expect(days).toBeGreaterThan(0);
     expect(RETENTION.taskEventDays).toBeGreaterThan(RETENTION.artifactDays);

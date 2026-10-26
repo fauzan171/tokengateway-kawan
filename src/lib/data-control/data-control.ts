@@ -32,6 +32,7 @@ export const USER_DATA_MAP = [
   { model: "memoryItem", via: "userId" },
   { model: "prompt", via: "userId" },
   { model: "usageRecord", via: "userId" },
+  { model: "searchUsageDaily", via: "userId" },
   { model: "task", via: "userId" },
   { model: "connectorCredential", via: "userId" },
   { model: "schedule", via: "userId" },
@@ -65,12 +66,14 @@ const EXPORT_SELECT: Record<string, readonly string[]> = {
   chat: ["id", "title", "createdAt", "updatedAt", "folderId", "pinned", "archived"],
   message: ["id", "chatId", "parentId", "role", "contentJson", "status", "seq", "createdAt"],
   folder: ["id", "name", "createdAt"],
-  artifact: ["id", "format", "displayName", "mime", "sizeBytes", "sha256", "status", "createdAt", "expiresAt", "version", "parentArtifactId"],
+  artifact: [/* taskId sengaja tidak ikut: provenance internal, bukan data pengguna. */ "id", "format", "displayName", "mime", "sizeBytes", "sha256", "status", "createdAt", "expiresAt", "version", "parentArtifactId"],
   memoryItem: ["id", "scope", "chatId", "category", "text", "status", "consent", "version", "createdAt", "updatedAt", "expiresAt"],
   prompt: ["id", "title", "body", "createdAt", "updatedAt"],
   task: ["id", "title", "status", "createdAt", "updatedAt"],
   schedule: ["id", "title", "prompt", "localTime", "timezone", "recurrence", "enabled", "nextRunAt", "createdAt"],
   notification: ["id", "kind", "title", "body", "sensitive", "readAt", "createdAt"],
+  // Kolom URL/query mentah sengaja TIDAK ikut; hanya agregat aman.
+  searchUsageDaily: ["id", "provider", "day", "count"],
   userSetting: ["theme", "locale", "fontScale", "sendOnEnter", "updatedAt"],
 };
 
@@ -169,6 +172,10 @@ export async function exportUserData(
   const notifications = await db.notification.findMany({ where: { userId } });
   data["notifications"] = notifications.map((row) => projectAllowlist(row as unknown as Record<string, unknown>, "notification"));
   counts["notifications"] = notifications.length;
+
+  const searchUsage = await db.searchUsageDaily.findMany({ where: { userId } });
+  data["searchUsageDaily"] = searchUsage.map((row) => projectAllowlist(row as unknown as Record<string, unknown>, "searchUsageDaily"));
+  counts["searchUsageDaily"] = searchUsage.length;
 
   const settings = await db.userSetting.findUnique({ where: { userId } });
   data["settings"] = settings ? [projectAllowlist(settings as unknown as Record<string, unknown>, "userSetting")] : [];

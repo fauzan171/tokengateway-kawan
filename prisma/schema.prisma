@@ -269,6 +269,9 @@ model Artifact {
   version     Int      @default(1)
   /// JSON provenance: { schemaVersion, source, notes }
   provenance  String?
+  /// D2: run task yang menghasilkan artefak; null untuk artefak chat/upload.
+  /// Sengaja polos tanpa relasi FK agar tidak menyentuh relasi Artifact existing.
+  taskId      String?
   downloadCount Int    @default(0)
   createdAt   DateTime @default(now())
   expiresAt   DateTime?
@@ -279,6 +282,7 @@ model Artifact {
   @@index([userId, createdAt])
   @@index([chatId])
   @@index([status])
+  @@index([taskId])
 }
 
 /// Folder satu tingkat untuk mengelompokkan chat (REQ-NT-35, SDD-2.2).
@@ -556,6 +560,9 @@ model UserSetting {
   locale       String   @default("id")     // id | en
   fontScale    Int      @default(100)      // 90..130
   sendOnEnter  Int      @default(1)        // 1 = Enter kirim, 0 = Shift+Enter kirim
+  /// D4: jawaban onboarding. Kosong = belum dijawab; nilai valid
+  /// `riset|data|tulis|campur` atau `custom:<teks>`; divalidasi server.
+  onboarding   String   @default("")
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -647,6 +654,18 @@ model TaskRun {
   /// run lama tetap terbaca; agent asing ditolak di lapisan atas, bukan di DB.
   agentId            String    @default("default")
   agentVersion       Int       @default(1)
+  /// D1: jumlah siklus riset yang sudah dimulai (increment atomik sebelum dispatch).
+  researchCycle      Int       @default(0)
+  /// D1/D6: konfigurasi beku run (policyRevision, limits, tool schema versions).
+  configJson         String?
+  /// D1/D6: budget { max, consumed: {promptTokens, completionTokens, searches,
+  /// reads, toolCalls}, estimatorVersion }
+  budgetJson         String?
+  /// D6: usage final { reported, promptTokens, completionTokens, totalTokens, estimated }
+  usageJson          String?
+  /// D1: sufficient_evidence | no_new_evidence | cycle_limit | budget_limit |
+  ///     user_cancel | deadline | provider_error | clarification_required
+  stopReason         String?
   deadlineAt         DateTime
   waitingExpiresAt   DateTime?
   cancelRequestedAt  DateTime?
@@ -659,6 +678,8 @@ model TaskRun {
   events   TaskEvent[]
   messages TaskMessage[]
   interactions TaskInteraction[]
+  steps    TaskStep[]
+  sources  TaskSource[]
 
   @@index([taskId, createdAt, id])
   @@index([parentRunId, status])
@@ -846,4 +867,71 @@ model TaskInteraction {
 
   @@index([runId, status])
   @@index([expiresAt, status])
+}
+
+/// D1: satu langkah eksekusi run (model call / tool call / fase).
+model TaskStep {
+  id           String    @id
+  runId        String
+  ordinal      Int
+  /// model | tool | phase
+  kind         String
+  /// framing | discovery | extraction | validation | synthesis (D1)
+  phase        String?
+  cycle        Int       @default(0)
+  toolName     String?
+  toolCallId   String?
+  /// sha256 argumen kanonik; kunci reuse saat resume
+  argsDigest   String?
+  status       String    @default("pending") // pending | running | succeeded | failed | cancelled | indeterminate
+  /// sha256 ringkasan hasil; detail tidak disimpan mentah
+  resultDigest String?
+  errorCode    String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  run TaskRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, ordinal])
+  @@index([runId, status])
+}
+
+/// D1/D3/D6: sumber web yang dibaca run (provenance + metering).
+model TaskSource {
+  id           String   @id
+  runId        String
+  stepId       String?
+  /// search_result | page_read
+  kind         String
+  provider     String?  /// tavily | jina | direct
+  requestedUrl String
+  finalUrl     String?
+  title        String?
+  /// terpotong ≤300 char, hasil provider
+  snippet      String?
+  textChars    Int?
+  /// sha256 teks ter-ekstrak
+  textHash     String?
+  accessedAt   DateTime
+  createdAt    DateTime @default(now())
+
+  run TaskRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, kind])
+}
+
+/// D3: hitung pencarian per user per provider per hari (rate-limit + metering).
+/// Hitungan di DB, bukan memori proses, agar bertahan restart dan lintas worker.
+model SearchUsageDaily {
+  id       String @id
+  userId   String
+  /// tavily | jina | direct
+  provider String
+  /// UTC "YYYY-MM-DD"
+  day      String
+  count    Int    @default(0)
+
+  @@unique([userId, provider, day])
+  @@index([day])
 }

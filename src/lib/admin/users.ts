@@ -133,6 +133,9 @@ export async function deleteUserData(
     await tx.chat.deleteMany({ where: { userId: input.userId } });
     await tx.connection.deleteMany({ where: { userId: input.userId } });
     await tx.idempotencyKey.deleteMany({ where: { userId: input.userId } });
+    // Riwayat aktivitas pencarian (URL/query); tanpa relasi User, jadi tidak
+    // ikut cascade dan harus dihapus eksplisit.
+    await tx.searchUsageDaily.deleteMany({ where: { userId: input.userId } });
     await tx.passwordResetToken.deleteMany({ where: { userId: input.userId } });
     // Kunci pembatas laju memuat email, bukan userId; tanpa ini percobaan
     // login lama tetap bisa mengunci alamat yang sama setelah akun dihapus.
