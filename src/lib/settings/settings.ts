@@ -23,6 +23,13 @@ export type UserSettings = {
   /** Persen, 90..130. */
   fontScale: number;
   sendOnEnter: boolean;
+  /**
+   * D4: jawaban onboarding fokus. Kosong string = belum dijawab; nilai
+   * tersimpan apa adanya (sudah dinormalisasi) — `riset|data|tulis|campur`
+   * atau `custom:<teks>`. Konsumen (admission task) memperlakukan "" sebagai
+   * `null`.
+   */
+  onboarding: string;
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -30,7 +37,12 @@ export const DEFAULT_SETTINGS: UserSettings = {
   locale: "id",
   fontScale: 100,
   sendOnEnter: true,
+  onboarding: "",
 };
+
+/** D4: pilihan fokus non-custom yang diterima onboarding. */
+export const ONBOARDING_OPTIONS = ["riset", "data", "tulis", "campur"] as const;
+const ONBOARDING_CUSTOM_MAX = 200;
 
 const THEMES: readonly Theme[] = ["system", "light", "dark"];
 const LOCALES: readonly Locale[] = ["id", "en"];
@@ -49,6 +61,35 @@ function clampScale(value: number): number {
   return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, Math.round(value)));
 }
 
+/**
+ * D4: normalisasi jawaban onboarding. `""` (belum dijawab) sah; salah satu
+ * `ONBOARDING_OPTIONS`; atau `custom:<teks>` dengan teks non-kosong ≤200 char
+ * setelah trim. Karakter kontrol dibuang dari teks custom supaya tidak
+ * merusak prompt/UI. Nilai lain ditolak 400 INVALID_SETTING.
+ */
+export function normalizeOnboarding(value: unknown): string {
+  if (typeof value !== "string") {
+    throw invalid("onboarding", "harus berupa teks.");
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") return "";
+  if ((ONBOARDING_OPTIONS as readonly string[]).includes(trimmed)) return trimmed;
+  if (trimmed.startsWith("custom:")) {
+    const text = trimmed.slice("custom:".length).replace(/[\u0000-\u001f\u007f]/g, "").trim();
+    if (text === "") {
+      throw invalid("onboarding", "teks custom tidak boleh kosong.");
+    }
+    if (text.length > ONBOARDING_CUSTOM_MAX) {
+      throw invalid("onboarding", `teks custom maksimal ${ONBOARDING_CUSTOM_MAX} karakter.`);
+    }
+    return `custom:${text}`;
+  }
+  throw invalid(
+    "onboarding",
+    `harus salah satu dari ${ONBOARDING_OPTIONS.join(", ")}, "custom:<teks>", atau kosong.`,
+  );
+}
+
 /** Preferensi tersimpan; baris tidak ada → bawaan (tanpa menulis apa pun). */
 export async function readSettings(db: Db, userId: string): Promise<UserSettings> {
   const row = await db.userSetting.findUnique({ where: { userId } });
@@ -58,6 +99,7 @@ export async function readSettings(db: Db, userId: string): Promise<UserSettings
     locale: LOCALES.includes(row.locale as Locale) ? (row.locale as Locale) : DEFAULT_SETTINGS.locale,
     fontScale: clampScale(row.fontScale),
     sendOnEnter: row.sendOnEnter === 1,
+    onboarding: typeof row.onboarding === "string" ? row.onboarding : "",
   };
 }
 
@@ -97,12 +139,16 @@ export async function writeSettings(
     }
     next.sendOnEnter = value;
   }
+  if ("onboarding" in patch) {
+    next.onboarding = normalizeOnboarding(patch["onboarding"]);
+  }
 
   const data = {
     theme: next.theme,
     locale: next.locale,
     fontScale: next.fontScale,
     sendOnEnter: next.sendOnEnter ? 1 : 0,
+    onboarding: next.onboarding,
   };
   await db.userSetting.upsert({
     where: { userId },

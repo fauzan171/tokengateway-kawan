@@ -320,6 +320,16 @@ function deadlineFrom(agent: AgentDefinition): Date {
 }
 
 /**
+ * D4: bentuk kanonik snapshot config run. `schemaVersion` memberi ruang WO-B2c
+ * menambah kunci lain tanpa migrasi bentuk. `onboarding` "" (belum dijawab) →
+ * `focus: null`. Nilai sudah dinormalisasi di `writeSettings` (trust boundary).
+ */
+function focusConfigJson(onboarding: string | null | undefined): string {
+  const focus = onboarding && onboarding.trim() !== "" ? onboarding : null;
+  return JSON.stringify({ schemaVersion: 1, focus });
+}
+
+/**
  * Menambah event run dengan alokasi `lastEventSeq` di dalam transaksi yang
  * sama. Pemanggil wajib memegang transaksi; `max(seq)+1` di luar transaksi
  * adalah balapan yang menghasilkan dua event bernomor sama.
@@ -427,6 +437,15 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Admiss
     const inputMessageId = randomUUID();
     const assistantMessageId = randomUUID();
 
+    // D4: fokus onboarding dibekukan ke run. Dibaca DI DALAM transaksi yang
+    // sama dengan `taskRun.create`, jadi perubahan setting setelah commit tidak
+    // mengubah configJson run ini (run record immutable per-run).
+    const focusRow = await tx.userSetting.findUnique({
+      where: { userId: input.userId },
+      select: { onboarding: true },
+    });
+    const configJson = focusConfigJson(focusRow?.onboarding);
+
     await tx.task.create({
       data: {
         id: taskId,
@@ -457,6 +476,7 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Admiss
         inputMessageId,
         assistantMessageId,
         currentJobId: jobId,
+        configJson,
         // Agent dibekukan di baris run: definisi yang dipakai saat admission,
         // bukan definisi terbaru saat worker menjalankan.
         agentId: agent.id,
@@ -723,6 +743,13 @@ export async function followUp(db: Db, input: CreateTaskInput & { taskId: string
     const inputMessageId = randomUUID();
     const assistantMessageId = randomUUID();
 
+    // D4: follow-up juga membawa snapshot fokus saat itu (bukan nilai run lama);
+    // dibaca di dalam transaksi yang sama dengan `taskRun.create`.
+    const focusRow = await tx.userSetting.findUnique({
+      where: { userId: input.userId },
+      select: { onboarding: true },
+    });
+
     const jobId = await enqueue(tx as Db, {
       kind: JOB_KIND_AGENT_RUN,
       payload: { runId, segment },
@@ -741,6 +768,7 @@ export async function followUp(db: Db, input: CreateTaskInput & { taskId: string
         inputMessageId,
         assistantMessageId,
         currentJobId: jobId,
+        configJson: focusConfigJson(focusRow?.onboarding),
         agentId: agent.id,
         agentVersion: agent.version,
         deadlineAt: deadlineFrom(agent),

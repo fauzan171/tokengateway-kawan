@@ -50,7 +50,13 @@ describe("writeSettings", () => {
     await writeSettings(db, userId, { theme: "dark", locale: "en", fontScale: 120 });
     const after = await writeSettings(db, userId, { sendOnEnter: false });
 
-    expect(after).toEqual({ theme: "dark", locale: "en", fontScale: 120, sendOnEnter: false });
+    expect(after).toEqual({
+      theme: "dark",
+      locale: "en",
+      fontScale: 120,
+      sendOnEnter: false,
+      onboarding: "",
+    });
     expect(await readSettings(db, userId)).toEqual(after);
   });
 
