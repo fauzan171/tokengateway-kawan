@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { TaskView } from "./task-view";
+import { TaskView, appendActivity } from "./task-view";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -282,5 +282,123 @@ describe("UX-1: banner sambung ulang saat SSE putus", () => {
     await render("task_1");
     await act(async () => {});
     expect(container.querySelector('[data-testid="sse-stalled-banner"]')).not.toBeNull();
+  });
+});
+
+describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
+  /** Frame SSE dengan id (seq) dan nama event. */
+  function step(id: number, event: string, data: unknown): string {
+    return `id: ${id}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  }
+
+  /** Snapshot + satu batch SSE; run.id/status menyesuaikan kasus uji. */
+  function stubActivity(
+    events: string,
+    opts: { snapshotSeq?: number; runStatus?: string; snapshotRunId?: string } = {},
+  ): void {
+    let sendCount = 0;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/agents") return json({ agents: [] });
+      if (url === "/api/kawan/v1/tasks") return json(TASKS);
+      if (url === "/api/kawan/v1/tasks/task_1") {
+        return json({
+          task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" },
+          run: {
+            id: opts.snapshotRunId ?? "run_1",
+            status: opts.runStatus ?? "running",
+            segment: 1,
+            errorCode: null,
+            agentId: null,
+          },
+          messages: [],
+          snapshotSeq: opts.snapshotSeq ?? 0,
+        });
+      }
+      if (url.includes("/events")) {
+        if (sendCount > 0) return json({}, 500);
+        sendCount += 1;
+        return new Response(events, { status: 200, headers: { "content-type": "text/event-stream" } });
+      }
+      return json({}, 404);
+    });
+  }
+
+  /** Flush efek + microtask SSE. */
+  async function flushSse(ms = 60): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  it("step.started menampilkan label server di timeline", async () => {
+    stubActivity(step(1, "step.started", { schemaVersion: 1, stepId: "s1", ordinal: 1, kind: "phase", phase: "discovery", label: "mencari…" }));
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[data-testid="task-activity"]')?.textContent).toContain("mencari…");
+  });
+
+  it("replay seq sama muncul sekali (dedup)", async () => {
+    const frame = step(5, "step.started", { schemaVersion: 1, stepId: "s5", ordinal: 5, kind: "tool", toolName: "read", label: "membaca 2/3" });
+    stubActivity(frame + frame);
+    await render("task_1");
+    await flushSse();
+    const text = container.querySelector('[data-testid="task-activity"]')?.textContent ?? "";
+    expect(text.match(/membaca 2\/3/g)).toHaveLength(1);
+  });
+
+  it("step.completed status failed menandai langkah gagal", async () => {
+    stubActivity(
+      step(1, "step.started", { schemaVersion: 1, stepId: "s1", ordinal: 1, kind: "model", label: "menyusun" }) +
+        step(2, "step.completed", { schemaVersion: 1, stepId: "s1", status: "failed", label: "menyusun" }),
+    );
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[data-testid="task-activity"]')?.textContent).toContain("Langkah gagal");
+  });
+
+  it("kind tak dikenal diabaikan, tidak crash", async () => {
+    stubActivity(step(1, "step.hohoho", { schemaVersion: 1, stepId: "s1", label: "x" }));
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[data-testid="task-activity"]')).toBeNull();
+  });
+
+  it("snapshot seq menutupi event replay → timeline dari event tak ditambah", async () => {
+    stubActivity(step(2, "step.started", { schemaVersion: 1, stepId: "s2", ordinal: 2, kind: "phase", phase: "discovery", label: "mencari…" }), {
+      snapshotSeq: 5,
+    });
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[data-testid="task-activity"]')).toBeNull();
+  });
+
+  it("run terminal: ThinkingDots hilang, tidak ada stream", async () => {
+    stubActivity(
+      step(1, "step.started", { schemaVersion: 1, stepId: "s1", ordinal: 1, kind: "phase", phase: "discovery", label: "mencari…" }),
+      { runStatus: "completed" },
+    );
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.querySelector('[data-testid="task-activity"]')).toBeNull();
+  });
+});
+
+describe("D5: appendActivity murni", () => {
+  const t = ((key: string) => key) as never;
+  it("step.started menambah; step.completed failed menandai; kind asing tetap", () => {
+    const started = [
+      { schemaVersion: 1, stepId: "a", kind: "phase", phase: "discovery", label: "mencari…" },
+      { schemaVersion: 1, stepId: "b", kind: "phase", phase: "synthesis", label: "menyusun" },
+    ];
+    let out = appendActivity([], "step.started", started[0] as never, t);
+    out = appendActivity(out, "step.started", started[1] as never, t);
+    expect(out.map((x) => x.label)).toEqual(["mencari…", "menyusun"]);
+    out = appendActivity(out, "step.completed", { stepId: "a", status: "failed" } as never, t);
+    expect(out[0]!.failed).toBe(true);
+    expect(out[1]!.failed).toBeUndefined();
+    // kind asing / stepId kosong → apa adanya.
+    expect(appendActivity(out, "nope", { stepId: "a" } as never, t)).toBe(out);
+    expect(appendActivity(out, "step.started", { label: "x" } as never, t)).toBe(out);
   });
 });

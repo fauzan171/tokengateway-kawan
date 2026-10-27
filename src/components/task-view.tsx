@@ -10,7 +10,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useT } from "@/lib/i18n/context";
+import { useT, type Translate } from "@/lib/i18n/context";
+import { PhaseTimeline, ThinkingDots, type PhaseView } from "@/components/thinking-indicator";
 
 type TaskRow = { id: string; title: string; status: string; activeRunId: string | null; updatedAt: string };
 // K7: agentId beku di run untuk label agent aktif.
@@ -26,6 +27,67 @@ type AgentRow = { id: string; label: string; description: string; defaultModelId
 /** Status yang berarti worker sudah tidak menulis lagi untuk run ini. */
 const TERMINAL = new Set(["completed", "failed", "cancelled", "indeterminate"]);
 
+/**
+ * Satu langkah timeline aktivitas (D5). `phase` = stepId dari server supaya
+ * item stabil saat di-update; `synthesis`/`failed` hanya penanda render.
+ */
+export type ActivityStep = PhaseView & { synthesis?: boolean; failed?: boolean };
+
+/** Fase → kunci i18n fallback. Dipakai HANYA bila server tidak mengirim label. */
+const PHASE_LABEL_KEY: Record<string, string> = {
+  framing: "tasks.activity.thinking",
+  discovery: "tasks.activity.searching",
+  extraction: "tasks.activity.reading",
+  validation: "tasks.activity.tool",
+  synthesis: "tasks.activity.synthesize",
+};
+
+function fallbackLabel(data: Record<string, unknown>, t: Translate): string {
+  if (data["kind"] === "tool") return t("tasks.activity.tool");
+  const key = typeof data["phase"] === "string" ? PHASE_LABEL_KEY[data["phase"]] : undefined;
+  return t((key ?? "tasks.activity.thinking") as never);
+}
+
+/**
+ * Terapkan satu event step ke timeline aktivitas. Murni: hanya membaca `prev`,
+ * mengembalikan array baru. Kind tak dikenal → `prev` apa adanya.
+ * `step.started` menambah langkah; `step.completed` menandai langkah itu
+ * selesai (label server) atau gagal (failed/cancelled/indeterminate).
+ */
+export function appendActivity(
+  prev: ActivityStep[],
+  kind: string,
+  data: Record<string, unknown>,
+  t: Translate,
+): ActivityStep[] {
+  const stepId = typeof data["stepId"] === "string" ? data["stepId"] : "";
+  if (stepId === "") return prev;
+  const label = typeof data["label"] === "string" && data["label"] !== "" ? data["label"] : null;
+  if (kind === "step.started") {
+    return [
+      ...prev,
+      {
+        phase: stepId,
+        label: label ?? fallbackLabel(data, t),
+        ...(data["phase"] === "synthesis" ? { synthesis: true } : {}),
+      },
+    ];
+  }
+  if (kind !== "step.completed") return prev;
+  const status = data["status"];
+  const failed = status === "failed" || status === "cancelled" || status === "indeterminate";
+  const index = prev.findIndex((item) => item.phase === stepId);
+  const base: ActivityStep =
+    index >= 0 ? prev[index]! : { phase: stepId, label: label ?? fallbackLabel(data, t) };
+  const settled: ActivityStep = failed
+    ? { ...base, label: `${base.label} — ${t("tasks.activity.failed")}`, failed: true }
+    : { ...base, label: label ?? base.label };
+  if (index < 0) return [...prev, settled];
+  const next = prev.slice();
+  next[index] = settled;
+  return next;
+}
+
 export function TaskView({ taskId }: { taskId?: string }) {
   const t = useT();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
@@ -38,6 +100,11 @@ export function TaskView({ taskId }: { taskId?: string }) {
   // UX-1: stream SSE terputus — tampilkan sambung ulang, jangan diam.
   const [stalled, setStalled] = useState(false);
   const [live, setLive] = useState("");
+  // D5: aktivitas per langkah dari step.started/step.completed. Timeline
+  // terakhir dibiarkan tampil setelah run terminal sampai snapshot baru.
+  const [activity, setActivity] = useState<ActivityStep[]>([]);
+  // Run pemilik `activity`: snapshot run berbeda mengosongkan timeline.
+  const prevRunIdRef = useRef<string | null>(null);
   const seqRef = useRef(0);
   // Kunci idempotensi submit aktif. Bertahan sampai respons diterima supaya
   // klik ganda/jaringan ulang membawa KUNCI YANG SAMA (server mengembalikan
@@ -101,6 +168,11 @@ export function TaskView({ taskId }: { taskId?: string }) {
       snapshotSeqRef.current = payload.snapshotSeq ?? 0;
       seqRef.current = payload.snapshotSeq ?? 0;
       setLive("");
+      // D5: aktivitas milik SATU run. Snapshot run lain → kosongkan supaya
+      // langkah run lama tidak menumpuk; muat ulang run yang sama (mis. penutup
+      // run.completed) → biarkan timeline terakhir tampil.
+      if (payload.run?.id !== prevRunIdRef.current) setActivity([]);
+      prevRunIdRef.current = payload.run?.id ?? null;
       seenSeqRef.current = new Set();
     } catch {
       setError(t("tasks.loadFailed"));
@@ -160,6 +232,16 @@ export function TaskView({ taskId }: { taskId?: string }) {
                 setLive((current) => current + (data["text"] as string));
               }
             }
+            if (kind === "step.started" || kind === "step.completed") {
+              // D5 dedup sama seperti delta: (runId, seq) sekali; seq ≤
+              // snapshotSeq sudah tercakup snapshot. Kind tak dikenal tetap
+              // memajukan cursor di luar sini.
+              const dedupKey = `${run.id}:${seq}`;
+              if (seq > snapshotSeqRef.current && !seenSeqRef.current.has(dedupKey)) {
+                seenSeqRef.current.add(dedupKey);
+                setActivity((prev) => appendActivity(prev, kind, data, t));
+              }
+            }
             if (kind.startsWith("run.") && kind !== "run.queued" && kind !== "run.started") {
               // Penutup: ambil kebenaran final dari server, bukan tafsir klien.
               void loadSnapshot(active);
@@ -173,7 +255,7 @@ export function TaskView({ taskId }: { taskId?: string }) {
       }
     })();
     return () => controller.abort();
-  }, [active, snapshot?.run, loadSnapshot, loadList]);
+  }, [active, snapshot?.run, loadSnapshot, loadList, t]);
 
   const send = useCallback(async () => {
     if (draft.trim() === "" || sendingRef.current) return;
@@ -248,6 +330,9 @@ export function TaskView({ taskId }: { taskId?: string }) {
     }
   }, [active, snapshot?.run, loadSnapshot, t]);
 
+  // Run aktif: stream belum terminal. Nama sejalur dengan gate SSE di atas.
+  const runActive = !!snapshot?.run && !TERMINAL.has(snapshot.run.status);
+
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
       <section aria-label={t("tasks.list")} className="lg:w-72 lg:shrink-0">
@@ -306,6 +391,20 @@ export function TaskView({ taskId }: { taskId?: string }) {
               <p className="whitespace-pre-wrap">{row.text}</p>
             </article>
           ))}
+          {/* D5: aktivitas per langkah. Label final dari server; timeline
+              dibiarkan tampil setelah run terminal (tak ada stream lagi). */}
+          {activity.length > 0 ? (
+            <div data-testid="task-activity" aria-label={t("tasks.activity")}>
+              <PhaseTimeline phases={activity} active={runActive} />
+            </div>
+          ) : null}
+          {/* Titik berpikir hanya sampai langkah synthesis tiba: setelah itu
+              timeline sendiri yang jadi bukti proses. */}
+          {runActive && !activity.some((item) => item.synthesis) ? (
+            <ThinkingDots
+              label={activity.length > 0 ? activity[activity.length - 1]!.label : t("tasks.activity.thinking")}
+            />
+          ) : null}
           {live !== "" ? (
             <article className="rounded-lg border border-dashed p-3 text-sm" data-testid="task-live-block">
               <p className="whitespace-pre-wrap">{live}</p>
