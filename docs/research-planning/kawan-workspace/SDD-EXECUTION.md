@@ -82,8 +82,10 @@ Tabel status hidup di file ini (koordinator update tiap perubahan state):
 | WO-B2 | done | — (squash `8b161bbd`) | `gates/GATE-WO-B2.md`: vitest fokus 8 lulus, tsc 0, test 124 file/1341 lulus, build 0. QA APPROVED; S3 (cakupan `direct`, assert attempts, orderBy) diperbaiki iterasi 2. Gap: penulis BYOK tavily/jina belum ada | 2 |
 | WO-B2b | done | — (squash `ea5b2d78`) | `gates/GATE-WO-B2b.md`: tsc 0, eslint 0, test 125 file/1351 lulus, build 0. QA APPROVED; S3 (klausa tes "prompt tanpa kalimat fokus") dipindah ke WO-B3 — bagian injeksi prompt ada di `research.ts`, bukan scope B2b | 1 |
 | WO-B4 | done | — (squash `5ab5e3c6`) | `gates/GATE-WO-B4.md`: tsc 0, eslint 0, test 124 file/1342 lulus, build 0. QA APPROVED; S3 docx truncation senyap diperbaiki iterasi 2. Flake FIX-05 run-1 terbukti load-dependent (2 run serial bersih + wo-b2b tanpa kode B4 bersih) | 2 |
-| WO-B2c | draft | `worktrees/wo-b2c` (`wo/b2c`) | egress query gate: sanitasi PII/minimisasi `egress.ts` di choke-point `chain.ts`, fail-closed bila kosong; tanpa migrasi/taint (v1 tak punya ingest privat) | 1 |
-| WO-F4 | draft | `worktrees/wo-f4` (`wo/f4`) | `RunMeteringSummary` + i18n + tes (fixture; kontrak D6 dikoreksi S2-2, tanpa `estimatedCostUsd`) | 1 |
+| WO-B2c | done | — (squash `80ac9889`) | `gates/GATE-WO-B2c.md`: tsc 0, eslint 0, test 127 file/1371 lulus, build 0. QA APPROVED; S2 (jalur `webSearch` di `generate.ts:1000` bypass gate) ditutup iterasi 2. Scope: taint/grant REV-03 penuh ditunda (v1 tak punya ingest privat) | 2 |
+| WO-F4 | done | — (squash `11a464cf`) | `gates/GATE-WO-F4.md`: tsc 0, eslint 0, test 127 file/1365 lulus, build 0. QA APPROVED. Tanpa baris biaya (S2-2); integrasi TaskView = WO-F5 | 1 |
+| WO-B3 | draft | `worktrees/wo-b3` (`wo/b3`) | loop riset `research.ts` (framing→discovery→extraction→validation→synthesis, ≤3 siklus), registry `web_search`/`web_read`, dispatch agent "research" | 1 |
+| WO-F3 | draft | `worktrees/wo-f3` (`wo/f3`) | aktivitas per langkah: `appendActivity` + render `PhaseTimeline` (kontrak D5 dikoreksi S1-1: enum TaskStep, kind model/tool/phase, tanpa preview) | 1 |
 
 **Catatan basis (26 Okt, koreksi SDD):** SDD menjanjikan basis `main` `9c2f5320`.
 Verifikasi: `main` hanya punya schema 84 baris (4 model: User/Credential/Job/Session) —
