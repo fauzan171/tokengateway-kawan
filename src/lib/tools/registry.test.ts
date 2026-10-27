@@ -47,6 +47,9 @@ describe("listTools", () => {
       "qr.make",
       "generate_file",
       "generate_document",
+      // D1: tool riset. TIDAK `chatExposed` — hanya loop riset yang memakainya.
+      "web_search",
+      "web_read",
     ]);
   });
 

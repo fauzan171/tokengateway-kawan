@@ -241,6 +241,62 @@ export const TOOL_CATALOG: readonly ToolDoc[] = [
     ],
     hasil: "SVG QR terverifikasi.",
   },
+  {
+    id: "web_search",
+    version: 1,
+    ringkas: "Mencari di web (Tavily/Jina/direct); hasilnya snippet + URL, bukan jawaban.",
+    kapanDipakai: [
+      "Butuh sumber terbaru di luar pengetahuan model.",
+      "Perlu URL kandidat sebelum membaca satu halaman penuh.",
+    ],
+    kapanJangan: [
+      "Pertanyaan murni penalaran/perhitungan — tool lain lebih tepat.",
+      "Sudah punya URL pasti dari pengguna — langsung web_read.",
+    ],
+    argumen: [
+      { nama: "query", tipe: "string", wajib: true, batas: "1..400 char", keterangan: "Kata kunci pencarian." },
+      { nama: "limit", tipe: "integer", wajib: false, batas: "1..5", keterangan: "Jumlah hasil maksimum." },
+    ],
+    contoh: { valid: '{"query":"harga kopi arabika 2026"}', tidakValid: '{"query":""}' },
+    efek: "read",
+    approval: false,
+    batas: { jumlah: "8 query per run riset", waktu: "8 detik", bytes: "512 KiB" },
+    kegagalan: [
+      { kode: "SEARCH_UNAVAILABLE", arti: "Semua penyedia gagal / kuota habis / query murni-PII.", tindakanModel: "Catat gap bukti; jangan mengarang hasil, lanjutkan dengan bukti yang ada." },
+      { kode: "UNKNOWN_ARGUMENT", arti: "Ada argumen di luar skema.", tindakanModel: "Kirim hanya kunci query/limit." },
+    ],
+    hasil: "Daftar hasil {title, url, snippet} + provider yang dipakai.",
+  },
+  {
+    id: "web_read",
+    version: 1,
+    ringkas: "Membaca satu URL publik dan mengembalikan teks ter-ekstrak yang dipotong.",
+    kapanDipakai: [
+      "Perlu isi halaman yang sudah ditemukan lewat web_search.",
+      "Pengguna menyebut URL yang harus dibaca utuh.",
+    ],
+    kapanJangan: [
+      "Hanya perlu ringkasan kandidat — cukup snippet dari web_search.",
+      "URL bukan http/https atau menunjuk alamat internal.",
+    ],
+    argumen: [
+      { nama: "url", tipe: "string", wajib: true, batas: "maks 2.048 char", keterangan: "URL publik yang dibaca." },
+      { nama: "maxChars", tipe: "integer", wajib: false, batas: "1.000..6.000", keterangan: "Panjang teks yang diambil." },
+    ],
+    contoh: { valid: '{"url":"https://contoh.id/artikel"}', tidakValid: '{"url":""}' },
+    efek: "read",
+    approval: false,
+    batas: { jumlah: "8 halaman per run riset", waktu: "10 detik", bytes: "2 MiB" },
+    kegagalan: [
+      { kode: "BLOCKED", arti: "Situs menolak akses (401/402/403).", tindakanModel: "Jangan ulangi URL ini; catat sebagai gap." },
+      { kode: "PAYWALL", arti: "Halaman di balik login/paywall.", tindakanModel: "Pakai sumber lain; jangan mengarang isinya." },
+      { kode: "UNSUPPORTED_TYPE", arti: "Tipe konten tidak didukung.", tindakanModel: "Pilih sumber bertipe teks/HTML." },
+      { kode: "TOO_LARGE", arti: "Halaman melebihi batas ukuran.", tindakanModel: "Gunakan snippet web_search untuk halaman ini." },
+      { kode: "NO_TEXT", arti: "Tidak ada teks yang bisa diekstrak.", tindakanModel: "Pakai sumber lain." },
+      { kode: "UNREACHABLE", arti: "Situs tidak dapat dihubungi.", tindakanModel: "Coba URL lain; jangan mengulang berkali-kali." },
+    ],
+    hasil: "Teks ter-ekstrak terpotong + judul + URL final.",
+  },
 ];
 
 /**

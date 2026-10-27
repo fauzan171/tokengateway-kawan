@@ -58,7 +58,7 @@ const IDLE_MS = OUTBOUND_LIMITS.streamIdleTimeoutMs;
 /** Interval cek niat cancel dan deadline saat stream berjalan. */
 const STOP_POLL_MS = 1_000;
 
-type RunRow = {
+export type RunRow = {
   id: string;
   taskId: string;
   status: string;
@@ -75,7 +75,7 @@ type RunRow = {
 };
 
 /** Melempar `LeaseLost` bila lease sudah hilang. */
-async function held(fence: FenceChecker | undefined): Promise<void> {
+export async function held(fence: FenceChecker | undefined): Promise<void> {
   if (fence) await assertHeld(fence);
 }
 
@@ -85,7 +85,7 @@ async function held(fence: FenceChecker | undefined): Promise<void> {
  * (T01) ditutup karena cek dan tulisan berbagi satu transaksi atomik: bila
  * lease gagal, transaksi di-rollback sebelum ada baris yang ditulis.
  */
-async function fenced<T>(
+export async function fenced<T>(
   db: Db,
   fence: FenceChecker | undefined,
   fn: (tx: Parameters<Parameters<Db["$transaction"]>[0]>[0]) => Promise<T>,
@@ -96,7 +96,7 @@ async function fenced<T>(
   });
 }
 
-async function cancelRequested(db: Db, runId: string): Promise<boolean> {
+export async function cancelRequested(db: Db, runId: string): Promise<boolean> {
   const row = await db.taskRun.findFirst({
     where: { id: runId },
     select: { cancelRequestedAt: true },
@@ -104,13 +104,13 @@ async function cancelRequested(db: Db, runId: string): Promise<boolean> {
   return row?.cancelRequestedAt !== null && row?.cancelRequestedAt !== undefined;
 }
 
-async function deadlinePassed(db: Db, runId: string): Promise<boolean> {
+export async function deadlinePassed(db: Db, runId: string): Promise<boolean> {
   const row = await db.taskRun.findFirst({ where: { id: runId }, select: { deadlineAt: true } });
   return row !== null && row.deadlineAt.getTime() <= Date.now();
 }
 
 /** Menutup run terminal: status, timestamp, revision, dan satu event penutup. */
-async function finish(
+export async function finish(
   db: Db,
   run: RunRow,
   status: "completed" | "failed" | "cancelled" | "indeterminate",
@@ -136,6 +136,9 @@ async function finish(
         status,
         finishedAt: new Date(),
         revision: { increment: 1 },
+        // D1: penyebab terminal (user_cancel/provider_error/deadline/...) ikut
+        // durable; tanpa ini kolomnya tetap null untuk semua terminal non-sukses.
+        stopReason: (data["stopReason"] as string | undefined) ?? null,
         // Kode galat ikut durable supaya klien tak perlu memutar event penutup.
         errorCode:
           status === "failed" || status === "indeterminate"
@@ -224,6 +227,18 @@ export async function runTaskRun(
       messageId: run.assistantMessageId,
       error: { code: "AGENT_UNKNOWN", message: "Agent run ini tidak dikenal lagi.", retryable: false },
     });
+    return;
+  }
+
+  // D1: agent riset punya loop sendiri (fase + tool). Satu cabang dispatch di
+  // awal; jalur agen umum di bawah TIDAK disentuh. Sisa pra-syarat (koneksi,
+  // model, deadline) diperiksa ulang di dalam `runResearchRun`.
+  if (run.agentId === "research") {
+    // Impor malas: `research.ts` memakai helper dari berkas ini, jadi impor
+    // nilai di level modul membentuk siklus. Siklus ESM aman, tapi impor malas
+    // membuat ketergantungan eksplisit satu arah saat runtime.
+    const { runResearchRun } = await import("./research");
+    await runResearchRun(db, config, runId, signal, fence);
     return;
   }
 

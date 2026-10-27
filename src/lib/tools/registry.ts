@@ -32,6 +32,11 @@ import {
 import { CHART_LIMITS, ChartError, renderChart, type ChartRequest } from "./chart";
 import { QR_LIMITS, QrError, makeQr } from "./qr";
 import { ArtifactError } from "@/lib/artifacts/render";
+import type { Db } from "@/lib/db";
+import type { OutboundPolicyOptions } from "@/lib/net";
+import { chainSearch } from "@/lib/search/chain";
+import { SearchError } from "@/lib/search/web";
+import { readSource, ReadError } from "@/lib/sources/read";
 import {
   GENERATE_DOCUMENT_TOOL,
   GENERATE_DOCUMENT_TOOL_NAME,
@@ -76,6 +81,13 @@ export type ToolContext = {
   policyRevision: number;
   /** Digest approval satu-pakai bila tool write butuh persetujuan (SDD-AG-4). */
   approvedDigest: string | null;
+  /**
+   * D1: klien DB + kebijakan egress untuk tool jaringan (`web_search`/`web_read`).
+   * Opsional karena tool non-jaringan tidak membutuhkannya; handler jaringan
+   * menolak (`denied`) bila tidak diisi, bukan menebak.
+   */
+  db?: Db;
+  outbound?: OutboundPolicyOptions;
 };
 
 export type ToolInputErrorCode =
@@ -414,6 +426,64 @@ function validateGenerateDocument(args: unknown) {
   }
 }
 
+/** D1: batas argumen tool jaringan; angka juga dipakai schema JSON. */
+export const WEB_TOOL_LIMITS = {
+  maxQueryChars: 400,
+  maxUrlChars: 2_048,
+  maxResults: 5,
+  minExcerptChars: 1_000,
+  maxExcerptChars: 6_000,
+  searchTimeoutMs: 8_000,
+  readTimeoutMs: 10_000,
+  /** Cap body: search ≤512 KiB, read ≤2 MiB (SDD §D1(5)). */
+  searchByteCap: 512 * 1024,
+  readByteCap: 2 * 1024 * 1024,
+} as const;
+
+function validateWebSearch(args: unknown): { query: string; limit?: number } {
+  const record = asRecord(args);
+  onlyKeys(record, ["query", "limit"]);
+  const query = nonEmptyText(record, "query", WEB_TOOL_LIMITS.maxQueryChars);
+  const rawLimit = record["limit"];
+  if (rawLimit === undefined) return { query };
+  if (
+    typeof rawLimit !== "number" ||
+    !Number.isInteger(rawLimit) ||
+    rawLimit < 1 ||
+    rawLimit > WEB_TOOL_LIMITS.maxResults
+  ) {
+    throw new ToolInputError(
+      "VALUE_REJECTED",
+      "'limit' harus bilangan bulat 1.." + WEB_TOOL_LIMITS.maxResults + ".",
+    );
+  }
+  return { query, limit: rawLimit };
+}
+
+function validateWebRead(args: unknown): { url: string; maxChars?: number } {
+  const record = asRecord(args);
+  onlyKeys(record, ["url", "maxChars"]);
+  const url = nonEmptyText(record, "url", WEB_TOOL_LIMITS.maxUrlChars);
+  const rawMax = record["maxChars"];
+  if (rawMax === undefined) return { url };
+  if (
+    typeof rawMax !== "number" ||
+    !Number.isInteger(rawMax) ||
+    rawMax < WEB_TOOL_LIMITS.minExcerptChars ||
+    rawMax > WEB_TOOL_LIMITS.maxExcerptChars
+  ) {
+    throw new ToolInputError(
+      "VALUE_REJECTED",
+      "'maxChars' harus bilangan bulat " +
+        WEB_TOOL_LIMITS.minExcerptChars +
+        ".." +
+        WEB_TOOL_LIMITS.maxExcerptChars +
+        ".",
+    );
+  }
+  return { url, maxChars: rawMax };
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -500,6 +570,63 @@ async function handleQr(ctx: ToolContext, args: unknown): Promise<ToolResult> {
   try {
     return ok(makeQr(args as string));
   } catch (err) {
+    return resultOf(err);
+  }
+}
+
+/**
+ * D1 `web_search`: chain D3 (Tavily → Jina → direct). Hasil adalah
+ * snippet + URL, BUKAN jawaban; tanpa satu pun hasil valid chain melempar
+ * fail-closed, jadi loop mencatat gap, bukan mengarang bukti.
+ */
+async function handleWebSearch(ctx: ToolContext, args: unknown): Promise<ToolResult> {
+  const stop = stopReason(ctx);
+  if (stop) return stop;
+  if (!ctx.db) return denied("Konteks pencarian tidak lengkap.");
+  const request = args as { query: string; limit?: number };
+  try {
+    const found = await chainSearch(ctx.db, ctx.userId, request.query, {
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+      signal: ctx.signal,
+      ...(ctx.outbound === undefined ? {} : { outbound: ctx.outbound }),
+    });
+    return {
+      ...ok({ results: found.results, provider: found.provider }),
+      sourceRefs: found.results.map((hit) => ({ id: hit.url, url: hit.url })),
+    };
+  } catch (err) {
+    // SearchError = penyedia tak tersedia (fail-closed), bukan kerusakan server.
+    if (err instanceof SearchError) {
+      return { ...failed(err.message), errorCode: err.message };
+    }
+    return resultOf(err);
+  }
+}
+
+/**
+ * D1 `web_read`: baca satu URL lewat kebijakan egress, kembalikan teks
+ * ter-ekstrak terpotong. Kegagalan baca (paywall/blokir/tipe) jadi `failed`
+ * berkode stabil — tidak pernah disamarkan sebagai halaman kosong.
+ */
+async function handleWebRead(ctx: ToolContext, args: unknown): Promise<ToolResult> {
+  const stop = stopReason(ctx);
+  if (stop) return stop;
+  const request = args as { url: string; maxChars?: number };
+  try {
+    const read = await readSource(request.url, {
+      ...(ctx.outbound === undefined ? {} : { outbound: ctx.outbound }),
+      signal: ctx.signal,
+    });
+    const capped = request.maxChars ?? WEB_TOOL_LIMITS.maxExcerptChars;
+    const text = read.text.slice(0, capped);
+    return {
+      ...ok({ url: read.source.url, title: read.source.title, text }),
+      sourceRefs: [{ id: read.source.url, url: read.source.url }],
+    };
+  } catch (err) {
+    if (err instanceof ReadError) {
+      return { ...failed(err.message), errorCode: err.code };
+    }
     return resultOf(err);
   }
 }
@@ -679,6 +806,48 @@ const TOOLS: readonly ToolEntry[] = Object.freeze(
     handler: handleGenerateDocument,
     timeoutMs: TOOL_LIMITS.artifactTimeoutMs,
     byteCap: TOOL_LIMITS.artifactByteCap,
+  },
+  // D1: tool riset. `effect: "read"`, TIDAK `chatExposed` — hanya loop riset
+  // (`tasks/research.ts`) yang boleh memanggilnya, bukan chat umum.
+  {
+    name: "web_search",
+    description: "Cari web; hasil adalah snippet+sumber, bukan jawaban.",
+    effect: "read",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", minLength: 1, maxLength: WEB_TOOL_LIMITS.maxQueryChars },
+        limit: { type: "integer", minimum: 1, maximum: WEB_TOOL_LIMITS.maxResults },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    validate: validateWebSearch,
+    handler: handleWebSearch,
+    timeoutMs: WEB_TOOL_LIMITS.searchTimeoutMs,
+    byteCap: WEB_TOOL_LIMITS.searchByteCap,
+  },
+  {
+    name: "web_read",
+    description: "Baca satu URL publik; kembalikan teks ter-ekstrak terpotong.",
+    effect: "read",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", maxLength: WEB_TOOL_LIMITS.maxUrlChars },
+        maxChars: {
+          type: "integer",
+          minimum: WEB_TOOL_LIMITS.minExcerptChars,
+          maximum: WEB_TOOL_LIMITS.maxExcerptChars,
+        },
+      },
+      required: ["url"],
+      additionalProperties: false,
+    },
+    validate: validateWebRead,
+    handler: handleWebRead,
+    timeoutMs: WEB_TOOL_LIMITS.readTimeoutMs,
+    byteCap: WEB_TOOL_LIMITS.readByteCap,
   },
   // Setiap entri dibekukan: `Object.freeze` pada array saja tidak mencegah
   // `tool.handler = ...` menimpa perilaku saat runtime.

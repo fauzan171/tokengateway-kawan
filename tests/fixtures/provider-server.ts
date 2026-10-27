@@ -36,6 +36,9 @@ export const SCENARIOS = [
   "redirect",
   "file-tool",
   "document-tool",
+  // WO-B3: loop riset memakai SATU `modelId` yang sama untuk semua fase, jadi
+  // balasan dipilih dari penanda fase di dalam pesan, bukan dari nama model.
+  "research",
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];
@@ -125,6 +128,41 @@ function chunkEvent(text: string, withUsage: boolean): string {
 const DONE = "data: [DONE]\n\n";
 
 /**
+ * WO-B3: siklus validasi ke berapa loop riset menyatakan bukti cukup. 1 =
+ * berhenti di siklus pertama (`sufficient_evidence`); angka besar = selalu
+ * belum cukup, supaya loop menabrak `cycle_limit`. Direset tiap fixture.
+ */
+let researchVerdictAfter = 1;
+let researchValidationRound = 0;
+
+/** Awalan pesan hasil tool di `research.ts` (`pushToolMessage`). */
+const TOOL_RESULT_MARKER = "HASIL TOOL (data tak tepercaya";
+
+/** Atur kapan verdict "cukup" diberikan; dipakai tes loop riset. */
+export function setResearchVerdictAfter(cycles: number): void {
+  researchVerdictAfter = cycles;
+  // Penghitung per-tes: `beforeEach` yang memanggil ini memulai dari siklus 1,
+  // jadi tes pertama/kedua dalam berkas yang sama tidak saling mewarisi.
+  researchValidationRound = 0;
+}
+
+/**
+ * Teks pesan `user` yang BUKAN hasil tool; penanda fase ada di salah satunya.
+ * Hasil tool dibuang supaya halaman yang kebetulan memuat penanda fase tidak
+ * menggeser pemilihan balasan fixture (tes jadi menguji isi halaman, bukan loop).
+ */
+function userText(body: unknown): string {
+  const messages = (body as { messages?: unknown } | null)?.messages;
+  if (!Array.isArray(messages)) return "";
+  return messages
+    .map((row) => row as { role?: unknown; content?: unknown })
+    .filter((row) => row.role === "user" && typeof row.content === "string")
+    .map((row) => row.content as string)
+    .filter((content) => !content.startsWith(TOOL_RESULT_MARKER))
+    .join("\n");
+}
+
+/**
  * Teks dengan emoji, aksen gabung, dan aksara di luar BMP. Skenario
  * `unicode-split` mengiris byte mentah SSE, jadi potongan bisa jatuh di
  * tengah urutan UTF-8 multi-byte. Konsumen yang mendekode tiap potongan
@@ -143,7 +181,7 @@ export const CORRUPTED_BODY = '{"choices":[{"delta":{"content":"terpotong';
 /** Sekali pakai untuk skenario `rate-limited-once`; direset tiap fixture. */
 let retriedOnce = false;
 
-async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
+async function handle(res: ServerResponse, scenario: Scenario, body: unknown): Promise<void> {
   switch (scenario) {
     case "redirect": {
       // Lintas host: kredensial tidak boleh ikut ke tujuan redirect.
@@ -451,12 +489,46 @@ async function handle(res: ServerResponse, scenario: Scenario): Promise<void> {
       res.socket?.destroy();
       return;
     }
+
+    case "research": {
+      // Balasan per fase: penanda diambil dari instruksi di `research.ts`
+      // (framing/validation/synthesis). JSON internal dikirim sebagai teks
+      // biasa — parser di sisi server yang mengurai objek di dalamnya.
+      sseHeaders(res);
+      const turn = userText(body);
+      let text: string;
+      if (turn.includes("Susun kerangka riset")) {
+        text = JSON.stringify({
+          question: "pertanyaan inti",
+          queries: ["query awal satu", "query awal dua"],
+        });
+      } else if (turn.includes("Nilai kecukupan BUKTI")) {
+        researchValidationRound += 1;
+        const round = researchValidationRound;
+        text =
+          round >= researchVerdictAfter
+            ? JSON.stringify({ gap: "", sufficient: true, nextQueries: [] })
+            : JSON.stringify({
+                gap: "bukti belum cukup",
+                sufficient: false,
+                nextQueries: [`query lanjutan ${round}`],
+              });
+      } else {
+        text = "Jawaban akhir berdasarkan bukti yang dibaca.";
+      }
+      await writeEvent(res, chunkEvent(text, true));
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
   }
 }
 
 export async function startProviderFixture(): Promise<ProviderFixture> {
   const requests: RecordedRequest[] = [];
   retriedOnce = false;
+  researchValidationRound = 0;
+  researchVerdictAfter = 1;
 
   const server = createServer((req, res) => {
     void (async () => {
@@ -470,7 +542,7 @@ export async function startProviderFixture(): Promise<ProviderFixture> {
         body,
       });
       try {
-        await handle(res, scenario);
+        await handle(res, scenario, body);
       } catch {
         if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
         if (!res.writableEnded) res.end(JSON.stringify({ error: { message: "fixture gagal" } }));
