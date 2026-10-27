@@ -90,6 +90,25 @@ describe("webSearch", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("PII murni menghasilkan [] tanpa jaringan (egress gate)", async () => {
+    process.env["WEBSEARCH_BASE_URL"] = "https://searx.test";
+    expect(await webSearch("budi@example.com")).toEqual([]);
+    expect(await webSearch("081234567890")).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("email/token dibuang dari URL request", async () => {
+    process.env["WEBSEARCH_BASE_URL"] = "https://searx.test";
+    fetchMock.mockResolvedValue(jsonResponse({ results: [] }));
+
+    await webSearch("harga kopi budi@example.com sk-abcdefgh12345678");
+
+    const q = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get("q") ?? "";
+    expect(q).not.toContain("budi@example.com");
+    expect(q).not.toContain("sk-abcdefgh12345678");
+    expect(q).toContain("harga kopi");
+  });
+
   it("memetakan hasil dan memotong snippet", async () => {
     process.env["WEBSEARCH_BASE_URL"] = "https://searx.test";
     fetchMock.mockResolvedValue(

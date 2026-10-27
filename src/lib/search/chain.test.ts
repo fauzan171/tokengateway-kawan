@@ -151,6 +151,31 @@ it("key tidak bocor ke pesan galat maupun attempts", async () => {
   expect(dump).not.toContain(KEY_JINA);
 });
 
+it("query murni-PII → fail-closed, TIDAK ada request keluar sama sekali", async () => {
+  const error = await chainSearch(db, "u1", "budi@example.com", { signal: signal() }).catch(
+    (e: unknown) => e,
+  );
+  expect(error).toBeInstanceOf(SearchError);
+  expect(error).toMatchObject({ message: "SEARCH_UNAVAILABLE", retryable: false });
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(readSourceMock).not.toHaveBeenCalled();
+});
+
+it("PII di antara kata lain dibuang sebelum dikirim ke provider", async () => {
+  fetchMock.mockResolvedValueOnce(
+    jsonResponse({ results: [{ title: "T", url: "https://t.test/1", content: "isi" }] }),
+  );
+
+  await chainSearch(db, "u1", "info harga budi@example.com kopi", { signal: signal() });
+
+  // tavily kirim query lewat body POST, bukan URL — periksa badan permintaan.
+  const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+  const body = String(init.body);
+  expect(body).not.toContain("budi@example.com");
+  expect(body).toContain("harga");
+  expect(body).toContain("kopi");
+});
+
 it("countSearch idempotent lintas restart — upsert naik 1, bukan baris ganda", async () => {
   await countSearch(db, "u1", "tavily");
   await countSearch(db, "u1", "tavily"); // "restart" memanggil ulang

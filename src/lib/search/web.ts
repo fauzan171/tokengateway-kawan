@@ -16,6 +16,7 @@ import {
   DEFAULT_OUTBOUND_OPTIONS,
   type OutboundPolicyOptions,
 } from "@/lib/net";
+import { sanitizeSearchQuery } from "./egress";
 
 export type WebSearchConfig = {
   baseUrl: string;
@@ -89,7 +90,10 @@ export async function webSearch(
   query: string,
   options: { limit?: number; signal?: AbortSignal; outbound?: OutboundPolicyOptions } = {},
 ): Promise<SearchResult[]> {
-  const trimmed = normalizeSearchQuery(query);
+  // Egress gate (WO-B2c): webSearch dipanggil langsung dari generate.ts, bukan
+  // lewat chainSearch — sanitasi PII WAJIB di sini juga. PII murni → [] tanpa
+  // jaringan (kontrak "query kosong = tanpa jaringan").
+  const trimmed = sanitizeSearchQuery(normalizeSearchQuery(query)).query;
   if (!trimmed) return [];
 
   const config = readWebSearchConfig();

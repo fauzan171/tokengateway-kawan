@@ -21,6 +21,7 @@ import { decryptSecret } from "@/lib/secrets";
 import { readSource } from "@/lib/sources/read";
 import type { Db } from "@/lib/db";
 import { SearchError, SNIPPET_MAX, type SearchResult } from "./web";
+import { sanitizeSearchQuery } from "./egress";
 
 export type SearchProviderName = "tavily" | "jina" | "direct";
 
@@ -250,8 +251,10 @@ export async function chainSearch(
   provider: SearchProviderName;
   attempts: { provider: SearchProviderName; error?: string }[];
 }> {
-  const trimmed = query.trim();
-  if (!trimmed) throw new SearchError("SEARCH_UNAVAILABLE", false);
+  // Egress gate: sanitasi SEBELUM hitung kuota dan sebelum request provider mana
+  // pun. Kosong/murni-PII → fail-closed, tidak ada fetch keluar sama sekali.
+  const { query: safeQuery } = sanitizeSearchQuery(query);
+  if (!safeQuery) throw new SearchError("SEARCH_UNAVAILABLE", false);
 
   const limit = opts.limit ?? DEFAULT_LIMIT;
   const outbound = opts.outbound ?? DEFAULT_OUTBOUND_OPTIONS;
@@ -264,7 +267,7 @@ export async function chainSearch(
     // Dihitung sebelum request keluar: percobaan gagal tetap memakai jatah.
     await countSearch(db, userId, p.name);
     try {
-      const results = await p.search(trimmed, limit, opts.signal);
+      const results = await p.search(safeQuery, limit, opts.signal);
       if (results.length > 0) return { results, provider: p.name, attempts };
       attempts.push({ provider: p.name, error: "EMPTY_RESULT" });
     } catch (err) {
