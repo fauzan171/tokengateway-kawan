@@ -13,15 +13,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useT, type Translate } from "@/lib/i18n/context";
 import { PhaseTimeline, ThinkingDots, type PhaseView } from "@/components/thinking-indicator";
 import { OnboardingFocusCard } from "@/components/onboarding-focus-card";
+import { SourceList } from "@/components/source-list";
 
 type TaskRow = { id: string; title: string; status: string; activeRunId: string | null; updatedAt: string };
 // K7: agentId beku di run untuk label agent aktif.
-type RunRow = { id: string; status: string; segment: number; errorCode: string | null; agentId?: string };
+type RunRow = {
+  id: string;
+  status: string;
+  segment: number;
+  errorCode: string | null;
+  agentId?: string;
+  // B2d: sumber yang dibaca run ini (hanya ada di snapshot, bukan daftar run).
+  sources?: { title: string; url: string }[];
+};
 type MessageRow = { id: string; role: string; text: string };
 // T02: snapshotSeq = cursor event konsisten server; seluruh delta <= nilai itu
 // sudah tercermin pada messages/run snapshot ini. Boleh absen pada payload lama
 // → 0 (replay penuh, perilaku seperti sebelum cursor ada).
-type Snapshot = { task: TaskRow; run: RunRow | null; messages: MessageRow[]; snapshotSeq?: number };
+type Snapshot = {
+  task: TaskRow;
+  run: RunRow | null;
+  messages: MessageRow[];
+  snapshotSeq?: number;
+};
 /** Metadata agent publik (K5 /agents) — UI hanya membaca, server tetap memvalidasi. */
 type AgentRow = { id: string; label: string; description: string; defaultModelId: string | null; audience: string };
 
@@ -439,6 +453,17 @@ export function TaskView({ taskId }: { taskId?: string }) {
               <p className="whitespace-pre-wrap">{row.text}</p>
             </article>
           ))}
+          {/* B2d: sumber jawaban run aktif. Ditempel setelah daftar pesan
+              (bukan per balasan) karena jawaban assistant milik run ini selalu
+              yang terakhir dan riwayat task bisa memuat beberapa run. */}
+          {snapshot?.run?.sources?.length ? (
+            <div data-testid="task-sources">
+              <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t("tasks.sources")}
+              </h2>
+              <SourceList sources={snapshot.run.sources} />
+            </div>
+          ) : null}
           {/* D5: aktivitas per langkah. Label final dari server; timeline
               dibiarkan tampil setelah run terminal (tak ada stream lagi). */}
           {activity.length > 0 ? (

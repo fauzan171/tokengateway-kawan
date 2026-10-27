@@ -72,6 +72,8 @@ export type RunDto = {
   researchCycle: number;
   /** D6: hanya diisi snapshot task; daftar run tidak memuatnya (additive). */
   metering?: RunMetering | null;
+  /** B2d: sumber yang benar-benar dibaca run riset; hanya di snapshot. */
+  sources?: RunSource[];
   startedAt: string | null;
   finishedAt: string | null;
 };
@@ -119,6 +121,32 @@ export function toTaskDto(row: TaskRow): TaskDto {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** B2d: satu sumber yang dikutip jawaban. `url` sudah final (redirect diikuti). */
+export type RunSource = { title: string; url: string };
+
+/**
+ * Proyeksi `TaskSource` → daftar sumber jawaban. Hanya `page_read` (halaman yang
+ * benar-benar dibaca), dedupe per URL karena `SourceList` memakai URL sebagai key.
+ * Tanpa `textHash`/snippet: isi halaman tidak boleh masuk DTO.
+ *
+ * Judul dipotong: `extractTitle` mengambil `<title>` utuh (halaman boleh 2 MB),
+ * jadi tanpa batas satu run bisa mengirim judul raksasa ke klien.
+ */
+export function toRunSources(
+  rows: { kind: string; title: string | null; requestedUrl: string; finalUrl: string | null }[],
+): RunSource[] {
+  const seen = new Set<string>();
+  const out: RunSource[] = [];
+  for (const row of rows) {
+    if (row.kind !== "page_read") continue;
+    const url = row.finalUrl ?? row.requestedUrl;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push({ title: (row.title ?? url).slice(0, 300), url });
+  }
+  return out;
 }
 
 export function toRunDto(row: RunRow): RunDto {
@@ -607,14 +635,21 @@ export async function getTaskSnapshot(db: Db, userId: string, taskId: string): P
     const sources = run
       ? await tx.taskSource.findMany({
           where: { runId: run.id },
-          select: { kind: true, finalUrl: true, requestedUrl: true, textHash: true },
+          // Urutan stabil: PostgreSQL tidak menjamin urutan heap, dan judul
+          // pemenang dedupe bergantung pada urutan masukan.
+          orderBy: [{ accessedAt: "asc" }, { id: "asc" }],
+          select: { kind: true, title: true, finalUrl: true, requestedUrl: true, textHash: true },
         })
       : [];
 
     return {
       task: toTaskDto(task),
       run: run
-        ? { ...toRunDto(run), metering: toRunMetering(run, sources) }
+        ? {
+            ...toRunDto(run),
+            metering: toRunMetering(run, sources),
+            sources: toRunSources(sources),
+          }
         : null,
       messages: messages.map((row) => ({
         id: row.id,

@@ -370,7 +370,12 @@ describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
   /** Snapshot + satu batch SSE; run.id/status menyesuaikan kasus uji. */
   function stubActivity(
     events: string,
-    opts: { snapshotSeq?: number; runStatus?: string; snapshotRunId?: string } = {},
+    opts: {
+      snapshotSeq?: number;
+      runStatus?: string;
+      snapshotRunId?: string;
+      sources?: { title: string; url: string }[];
+    } = {},
   ): void {
     let sendCount = 0;
     fetchMock.mockImplementation(async (url: string) => {
@@ -385,6 +390,7 @@ describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
             segment: 1,
             errorCode: null,
             agentId: null,
+            ...(opts.sources ? { sources: opts.sources } : {}),
           },
           messages: [],
           snapshotSeq: opts.snapshotSeq ?? 0,
@@ -446,6 +452,26 @@ describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
     await render("task_1");
     await flushSse();
     expect(container.querySelector('[data-testid="task-activity"]')).toBeNull();
+  });
+
+  it("B2d: sumber jawaban dirender sebagai tautan aman; tanpa sumber tidak ada blok", async () => {
+    stubActivity(step(1, "step.started", { schemaVersion: 1, stepId: "s1", ordinal: 1, kind: "phase", phase: "synthesis", label: "menyusun" }), {
+      runStatus: "completed",
+      sources: [{ title: "Halaman A", url: "https://a.test/a" }],
+    });
+    await render("task_1");
+    await flushSse();
+    const link = container.querySelector('[data-testid="task-sources"] a');
+    expect(link?.getAttribute("href")).toBe("https://a.test/a");
+    expect(link?.getAttribute("rel")).toContain("noopener");
+    expect(link?.textContent).toBe("Halaman A");
+  });
+
+  it("B2d: run tanpa sumber tidak merender blok sumber", async () => {
+    stubActivity("", { runStatus: "completed" });
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[data-testid="task-sources"]')).toBeNull();
   });
 
   it("run terminal: ThinkingDots hilang, tidak ada stream", async () => {

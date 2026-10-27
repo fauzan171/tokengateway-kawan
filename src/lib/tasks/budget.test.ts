@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import type { Db } from "@/lib/db";
 import { readStoredBudget, settleUsage, toRunMetering } from "./budget";
-import { getTaskSnapshot } from "./tasks";
+import { getTaskSnapshot, toRunSources } from "./tasks";
 
 let temp: TempDb;
 let db: Db;
@@ -164,8 +164,7 @@ describe("metering run (D6)", () => {
     expect(toRunMetering(run, sources)?.sourcesRead ?? -1).toBe(2);
   });
 
-  it("snapshot API mengekspos metering; run lama (kolom null) tetap valid", async () => {
-    await db.task.update({ where: { id: taskId }, data: { activeRunId: runId } });
+  it("snapshot API mengekspos metering; run lama (kolom null) tetap valid", async () => {    await db.task.update({ where: { id: taskId }, data: { activeRunId: runId } });
 
     // Run pra-D6: metering absen (bukan nol) — UI tak merender blok apa pun.
     const lama = await getTaskSnapshot(db, userId, taskId);
@@ -208,5 +207,72 @@ describe("metering run (D6)", () => {
     );
     expect(rusak.max).toBe(24_000);
     expect(rusak.consumed.promptTokens).toBe(0);
+  });
+  it("sumber jawaban: hanya page_read, dedupe per URL final, judul jatuh ke URL", () => {
+    const rows = [
+      { kind: "search_result", title: "Hasil", requestedUrl: "https://s.test/1", finalUrl: null },
+      {
+        kind: "page_read",
+        title: "Halaman A",
+        requestedUrl: "https://a.test/x",
+        finalUrl: "https://a.test/a",
+      },
+      // URL final sama (redirect) → satu entri, yang pertama menang.
+      {
+        kind: "page_read",
+        title: "Halaman A lagi",
+        requestedUrl: "https://b.test/y",
+        finalUrl: "https://a.test/a",
+      },
+      { kind: "page_read", title: null, requestedUrl: "https://c.test/c", finalUrl: null },
+    ];
+    expect(toRunSources(rows)).toEqual([
+      { title: "Halaman A", url: "https://a.test/a" },
+      { title: "https://c.test/c", url: "https://c.test/c" },
+    ]);
+    expect(toRunSources([])).toEqual([]);
+    // Judul halaman bisa sepanjang `<title>` utuh (halaman ≤2 MB) → dipotong.
+    expect(
+      toRunSources([
+        { kind: "page_read", title: "x".repeat(1000), requestedUrl: "https://d.test/d", finalUrl: null },
+      ])[0]!.title,
+    ).toHaveLength(300);
+  });
+
+  it("snapshot API mengekspos sumber run; run tanpa TaskSource tetap array kosong", async () => {
+    await db.task.update({ where: { id: taskId }, data: { activeRunId: runId } });
+    expect((await getTaskSnapshot(db, userId, taskId)).run?.sources).toEqual([]);
+
+    await db.taskSource.create({
+      data: {
+        id: `src_${randomUUID()}`,
+        runId,
+        kind: "page_read",
+        requestedUrl: "https://a.test/x",
+        finalUrl: "https://a.test/a",
+        title: "Halaman A",
+        accessedAt: new Date(),
+      },
+    });
+    expect((await getTaskSnapshot(db, userId, taskId)).run?.sources).toEqual([
+      { title: "Halaman A", url: "https://a.test/a" },
+    ]);
+
+    // Urutan mengikuti `accessedAt` (bukan urutan insert), jadi stabil di
+    // PostgreSQL yang tidak menjamin urutan heap.
+    await db.taskSource.create({
+      data: {
+        id: `src_${randomUUID()}`,
+        runId,
+        kind: "page_read",
+        requestedUrl: "https://z.test/z",
+        title: "Halaman Z",
+        accessedAt: new Date(Date.now() - 60_000),
+      },
+    });
+    expect((await getTaskSnapshot(db, userId, taskId)).run?.sources?.map((row) => row.title)).toEqual([
+      "Halaman Z",
+      "Halaman A",
+    ]);
   });
 });
