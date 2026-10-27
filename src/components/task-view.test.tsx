@@ -375,6 +375,7 @@ describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
       runStatus?: string;
       snapshotRunId?: string;
       sources?: { title: string; url: string }[];
+      metering?: unknown;
     } = {},
   ): void {
     let sendCount = 0;
@@ -391,6 +392,7 @@ describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
             errorCode: null,
             agentId: null,
             ...(opts.sources ? { sources: opts.sources } : {}),
+            ...(opts.metering !== undefined ? { metering: opts.metering } : {}),
           },
           messages: [],
           snapshotSeq: opts.snapshotSeq ?? 0,
@@ -472,6 +474,88 @@ describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
     await render("task_1");
     await flushSse();
     expect(container.querySelector('[data-testid="task-sources"]')).toBeNull();
+  });
+
+  it("F5: run terminal tanpa metering (pra-D6) tidak merender blok", async () => {
+    stubActivity("", { runStatus: "completed", metering: null });
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[data-testid="task-metering"]')).toBeNull();
+  });
+
+  it("F5: run.completed via SSE memuat snapshot baru dan memunculkan metering", async () => {
+    let snapshots = 0;
+    const terminalMetering = {
+      usage: { reported: true, promptTokens: 1200, completionTokens: 340, totalTokens: 1540 },
+      consumed: { promptTokens: 1200, completionTokens: 340, searches: 2, reads: 5, toolCalls: 7 },
+      sourcesRead: 5,
+    };
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/agents") return json({ agents: [] });
+      if (url === "/api/kawan/v1/tasks") return json(TASKS);
+      if (url === "/api/kawan/v1/tasks/task_1") {
+        snapshots += 1;
+        const done = snapshots > 1;
+        return json({
+          task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" },
+          run: {
+            id: "run_1",
+            status: done ? "completed" : "running",
+            segment: 1,
+            errorCode: null,
+            agentId: null,
+            ...(done ? { metering: terminalMetering } : {}),
+          },
+          messages: [],
+          snapshotSeq: done ? 2 : 0,
+        });
+      }
+      if (url.includes("/events")) {
+        return new Response(step(2, "run.completed", { status: "completed" }), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+      return json({}, 404);
+    });
+    await render("task_1");
+    // `render` sudah mem-flush efek, dan SSE di stub ini tiba seketika; yang
+    // diuji adalah hasil setelah `run.completed` memicu snapshot kedua.
+    await flushSse(120);
+    expect(container.querySelector('[data-testid="task-metering"]')?.textContent).toContain("1.200");
+    // Efek dibersihkan setelah run terminal (controller.abort) bukan koneksi
+    // putus: banner "sambung ulang" tidak boleh menyala palsu di samping metering.
+    expect(container.querySelector('[data-testid="sse-stalled-banner"]')).toBeNull();
+  });
+
+  it("F5: metering tampil setelah run terminal", async () => {
+    stubActivity("", {
+      runStatus: "completed",
+      metering: {
+        usage: { reported: true, promptTokens: 1200, completionTokens: 340, totalTokens: 1540 },
+        consumed: { promptTokens: 1200, completionTokens: 340, searches: 2, reads: 5, toolCalls: 7 },
+        sourcesRead: 5,
+      },
+    });
+    await render("task_1");
+    await flushSse();
+    const text = container.querySelector('[data-testid="task-metering"]')?.textContent ?? "";
+    expect(text).toContain("1.200");
+    expect(text).toContain("5 sumber dibaca");
+  });
+
+  it("F5: run berjalan tidak menampilkan metering", async () => {
+    stubActivity("", {
+      runStatus: "running",
+      metering: {
+        usage: { reported: true, promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        consumed: { promptTokens: 10, completionTokens: 5, searches: 0, reads: 0, toolCalls: 0 },
+        sourcesRead: 0,
+      },
+    });
+    await render("task_1");
+    await flushSse();
+    expect(container.querySelector('[data-testid="task-metering"]')).toBeNull();
   });
 
   it("run terminal: ThinkingDots hilang, tidak ada stream", async () => {

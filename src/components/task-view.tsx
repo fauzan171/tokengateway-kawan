@@ -14,6 +14,7 @@ import { useT, type Translate } from "@/lib/i18n/context";
 import { PhaseTimeline, ThinkingDots, type PhaseView } from "@/components/thinking-indicator";
 import { OnboardingFocusCard } from "@/components/onboarding-focus-card";
 import { SourceList } from "@/components/source-list";
+import { RunMeteringSummary, type RunMetering } from "@/components/run-metering-summary";
 
 type TaskRow = { id: string; title: string; status: string; activeRunId: string | null; updatedAt: string };
 // K7: agentId beku di run untuk label agent aktif.
@@ -25,6 +26,8 @@ type RunRow = {
   agentId?: string;
   // B2d: sumber yang dibaca run ini (hanya ada di snapshot, bukan daftar run).
   sources?: { title: string; url: string }[];
+  // D6: pemakaian run; hanya ada di snapshot, dan `null` untuk run pra-D6.
+  metering?: RunMetering | null;
 };
 type MessageRow = { id: string; role: string; text: string };
 // T02: snapshotSeq = cursor event konsisten server; seluruh delta <= nilai itu
@@ -292,8 +295,11 @@ export function TaskView({ taskId }: { taskId?: string }) {
           }
         }
       } catch {
-        // Koneksi putus: snapshot tetap benar; sinyalkan lewat banner.
-        setStalled(true);
+        // Efek dibersihkan (run terminal → tidak ada stream lagi) juga melempar
+        // AbortError. Itu bukan koneksi putus: tanpa penjaga ini banner
+        // "sambung ulang" menyala palsu dan tak pernah dibersihkan karena efek
+        // berikutnya langsung `return` untuk run terminal.
+        if (!controller.signal.aborted) setStalled(true);
       }
     })();
     return () => controller.abort();
@@ -462,6 +468,14 @@ export function TaskView({ taskId }: { taskId?: string }) {
                 {t("tasks.sources")}
               </h2>
               <SourceList sources={snapshot.run.sources} />
+            </div>
+          ) : null}
+          {/* D6: metering hanya setelah run terminal — selama run berjalan
+              angkanya masih bergerak, dan komponen ini menjanjikan ringkasan,
+              bukan progress. `null` (run pra-D6) tidak merender apa pun. */}
+          {snapshot?.run && !runActive && snapshot.run.metering ? (
+            <div data-testid="task-metering">
+              <RunMeteringSummary metering={snapshot.run.metering} />
             </div>
           ) : null}
           {/* D5: aktivitas per langkah. Label final dari server; timeline
