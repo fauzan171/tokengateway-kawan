@@ -111,6 +111,82 @@ describe("K7 pemilih agent", () => {
   });
 });
 
+describe("D4: kartu onboarding di task-view", () => {
+  /** /settings GET mengembalikan `onboarding`; PATCH dicatat. */
+  function stubSettings(onboarding: string, patchOk = true): { patches: string[] } {
+    const patches: string[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/kawan/v1/agents") return json({ agents: [] });
+      if (url === "/api/kawan/v1/tasks") return json(TASKS);
+      if (url === "/api/kawan/v1/settings") {
+        if (init?.method === "PATCH") {
+          if (!patchOk) return json({}, 400);
+          patches.push(String(init.body));
+          return json({ settings: { onboarding } });
+        }
+        return json({ settings: { theme: "system", locale: "id", fontScale: 100, sendOnEnter: true, onboarding } });
+      }
+      return json({}, 404);
+    });
+    return { patches };
+  }
+
+  it("GET /settings kosong → kartu tampil di atas form", async () => {
+    stubSettings("");
+    await render();
+    expect(container.querySelector('[data-testid="onboarding-options"]')).not.toBeNull();
+  });
+
+  it("GET /settings sudah terisi → kartu tidak tampil", async () => {
+    stubSettings("riset");
+    await render();
+    expect(container.querySelector('[data-testid="onboarding-options"]')).toBeNull();
+  });
+
+  it("pilih fokus lalu Simpan → PATCH /settings { onboarding } dan kartu hilang", async () => {
+    const { patches } = stubSettings("");
+    await render();
+    const label = [...container.querySelectorAll<HTMLLabelElement>("label")].find((item) =>
+      item.textContent?.includes("Riset dan rangkuman"),
+    )!;
+    const radio = label.querySelector("input")!;
+    await act(async () => {
+      radio.click();
+    });
+    const save = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Simpan",
+    )!;
+    await act(async () => {
+      save.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(patches).toHaveLength(1);
+    expect(JSON.parse(patches[0]!)).toEqual({ onboarding: "riset" });
+    expect(container.querySelector('[data-testid="onboarding-options"]')).toBeNull();
+  });
+
+  it("PATCH gagal → error inline role=alert, kartu tetap tampil", async () => {
+    stubSettings("", false);
+    await render();
+    const label = [...container.querySelectorAll<HTMLLabelElement>("label")].find((item) =>
+      item.textContent?.includes("Riset dan rangkuman"),
+    )!;
+    await act(async () => {
+      label.querySelector("input")!.click();
+    });
+    const save = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Simpan",
+    )!;
+    await act(async () => {
+      save.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Gagal menyimpan");
+    expect(container.querySelector('[data-testid="onboarding-options"]')).not.toBeNull();
+  });
+});
+
 describe("T02: task pertama + idempotensi + replay dedup", () => {
   /** Kiriman POST /tasks dengan delay supaya klik kedua jatuh saat penerbangan. */
   function stubCreate(delayMs = 20): { posts: { url: string; key: string | null }[] } {

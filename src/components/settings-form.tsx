@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import type { UserSettings } from "@/lib/settings/settings";
+import { OnboardingFocusCard } from "@/components/onboarding-focus-card";
 
 const FONT_MIN = 90;
 const FONT_MAX = 130;
@@ -163,6 +164,17 @@ export function SettingsForm() {
         <label htmlFor="send-on-enter" className="font-medium">
           {t("settings.sendOnEnter")}
         </label>
+      </div>
+
+      {/* D4: fokus onboarding — kartu sama seperti di task-view, controlled;
+          perubahan langsung masuk PATCH yang sudah ada (tanpa endpoint baru). */}
+      <div className="flex flex-col gap-2">
+        <span className="font-medium">{t("settings.onboarding")}</span>
+        <p className="text-sm text-muted-foreground">{t("settings.onboarding.help")}</p>
+        <OnboardingFocusCard
+          value={settings.onboarding}
+          onChange={(value) => change({ onboarding: value })}
+        />
       </div>
 
       {error ? (

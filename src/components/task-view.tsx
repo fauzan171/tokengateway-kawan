@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT, type Translate } from "@/lib/i18n/context";
 import { PhaseTimeline, ThinkingDots, type PhaseView } from "@/components/thinking-indicator";
+import { OnboardingFocusCard } from "@/components/onboarding-focus-card";
 
 type TaskRow = { id: string; title: string; status: string; activeRunId: string | null; updatedAt: string };
 // K7: agentId beku di run untuk label agent aktif.
@@ -97,6 +98,11 @@ export function TaskView({ taskId }: { taskId?: string }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // D4: fokus onboarding. Kosong = belum dijawab → kartu tampil di atas form.
+  // `onboardingLoaded` mencegah kartu berkedip sebelum GET /settings pulang.
+  const [onboarding, setOnboarding] = useState("");
+  const [onboardingLoaded, setOnboardingLoaded] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
   // UX-1: stream SSE terputus — tampilkan sambung ulang, jangan diam.
   const [stalled, setStalled] = useState(false);
   const [live, setLive] = useState("");
@@ -147,6 +153,28 @@ export function TaskView({ taskId }: { taskId?: string }) {
         if (!cancelled && Array.isArray(payload.agents)) setAgents(payload.agents);
       } catch {
         // Daftar agent gagal dimuat: pemilih kosong, server tetap memvalidasi.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // D4: fokus onboarding sekali saat mount. Kosong = belum dijawab → kartu tampil
+  // di atas form. Gagal memuat: dianggap belum dijawab (kartu tampil), dan
+  // menyimpan hanya lewat aksi eksplisit pengguna.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/kawan/v1/settings");
+        if (!response.ok) throw new Error("gagal");
+        const payload = (await response.json()) as { settings: { onboarding?: string } };
+        if (!cancelled) setOnboarding(payload.settings.onboarding ?? "");
+      } catch {
+        // Abaikan: kartu tetap tampil karena onboarding tetap "".
+      } finally {
+        if (!cancelled) setOnboardingLoaded(true);
       }
     })();
     return () => {
@@ -330,6 +358,26 @@ export function TaskView({ taskId }: { taskId?: string }) {
     }
   }, [active, snapshot?.run, loadSnapshot, t]);
 
+  // D4: simpan fokus onboarding. Sukses → onboarding terisi → kartu hilang.
+  // Gagal → error inline; nilai tetap di draft kartu (state lokalnya) untuk dicoba lagi.
+  const saveOnboarding = useCallback(
+    async (value: string) => {
+      setOnboardingError(null);
+      try {
+        const response = await fetch("/api/kawan/v1/settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ onboarding: value }),
+        });
+        if (!response.ok) throw new Error("gagal");
+        setOnboarding(value);
+      } catch {
+        setOnboardingError(t("onboarding.saveFailed"));
+      }
+    },
+    [t],
+  );
+
   // Run aktif: stream belum terminal. Nama sejalur dengan gate SSE di atas.
   const runActive = !!snapshot?.run && !TERMINAL.has(snapshot.run.status);
 
@@ -436,6 +484,20 @@ export function TaskView({ taskId }: { taskId?: string }) {
             </select>
           </label>
         ) : null}
+        {/* D4: kartu fokus untuk pengguna baru, di atas form input task pertama.
+            Tampil hanya bila GET /settings sudah pulang dan jawabannya masih kosong;
+            kartu tidak memblokir submit. */}
+        {onboardingLoaded && onboarding === "" ? (
+          <div className="flex flex-col gap-2">
+            <OnboardingFocusCard value={onboarding} onChange={(value) => void saveOnboarding(value)} compact />
+            {onboardingError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {onboardingError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="flex flex-col gap-2">
           <label htmlFor="task-input" className="text-sm font-medium">
             {t("tasks.inputLabel")}
