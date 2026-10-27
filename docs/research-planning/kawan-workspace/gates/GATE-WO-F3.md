@@ -1,7 +1,7 @@
 # GATE — WO-F3 (aktivitas per langkah di task-view)
 
 Worktree `worktrees/wo-f3` (`wo/f3`), basis `feat/kawan-workspace` `80ac9889`.
-Squash-merge ke `feat/kawan-workspace`: lihat commit `feat(wo): F3 …`. AUTO_PUSH=0 (lokal saja).
+Squash-merge ke `feat/kawan-workspace`: `eb4e9ac4`. AUTO_PUSH=0 (lokal saja).
 
 ## Gate (verbatim, dijalankan koordinator di worktree wo-f3)
 
