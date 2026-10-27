@@ -85,6 +85,7 @@ Tabel status hidup di file ini (koordinator update tiap perubahan state):
 | WO-B2c | done | — (squash `80ac9889`) | `gates/GATE-WO-B2c.md`: tsc 0, eslint 0, test 127 file/1371 lulus, build 0. QA APPROVED; S2 (jalur `webSearch` di `generate.ts:1000` bypass gate) ditutup iterasi 2. Scope: taint/grant REV-03 penuh ditunda (v1 tak punya ingest privat) | 2 |
 | WO-F4 | done | — (squash `11a464cf`) | `gates/GATE-WO-F4.md`: tsc 0, eslint 0, test 127 file/1365 lulus, build 0. QA APPROVED. Tanpa baris biaya (S2-2); integrasi TaskView = WO-F5 | 1 |
 | WO-B3 | draft | `worktrees/wo-b3` (`wo/b3`) | loop riset `research.ts` (framing→discovery→extraction→validation→synthesis, ≤3 siklus), registry `web_search`/`web_read`, dispatch agent "research" | 1 |
+| WO-F2 | done | — (squash `0a2bdef1`) | `gates/GATE-WO-F2.md`: tsc 0, eslint 0, test 128 file/1387 lulus, build 0. QA APPROVED tanpa S1/S2; S3-1 rollback optimistis settings-form diterima (pola lama, bukan regresi WO ini) + S3/S4 a11y/tes ditunda ke WP terpisah | 1 |
 | WO-F3 | done | — (squash `eb4e9ac4`) | `gates/GATE-WO-F3.md`: tsc 0, eslint 0, test 128 file/1383 lulus, build 0. QA APPROVED; S3 double-announce diterima (pola rumah chat-view.tsx:931/1120), S4 `prevRunIdRef` diterima (run id unik) | 1 |
 
 **Catatan basis (26 Okt, koreksi SDD):** SDD menjanjikan basis `main` `9c2f5320`.
