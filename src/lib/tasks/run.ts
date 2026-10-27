@@ -505,14 +505,26 @@ export async function runTaskRun(
     return;
   }
 
+  // D6: angka final ikut durable di kolom `usageJson`, bukan hanya event —
+  // snapshot membaca kolom, dan tanpa ini metering agen default selalu kosong
+  // walau gateway melaporkan usage.
+  const usagePayload = {
+    reported: usage !== null && usage.totalTokens !== null,
+    promptTokens: usage?.promptTokens ?? null,
+    completionTokens: usage?.completionTokens ?? null,
+    totalTokens: usage?.totalTokens ?? null,
+    estimated: usage === null || usage.totalTokens === null,
+  };
   await fenced(db, fence, (tx) =>
     appendEvent(tx, run.id, "usage.updated", {
-      reported: usage !== null && usage.totalTokens !== null,
-      promptTokens: usage?.promptTokens ?? null,
-      completionTokens: usage?.completionTokens ?? null,
-      totalTokens: usage?.totalTokens ?? null,
+      ...usagePayload,
       estimatedReservedTokens: OUTPUT_RESERVE_TOKENS,
-    }).then(() => tx.taskRun.update({ where: { id: run.id }, data: { stepCount: { increment: 1 } } })),
+    }).then(() =>
+      tx.taskRun.update({
+        where: { id: run.id },
+        data: { stepCount: { increment: 1 }, usageJson: JSON.stringify(usagePayload) },
+      }),
+    ),
   );
 
   if (run.assistantMessageId) {

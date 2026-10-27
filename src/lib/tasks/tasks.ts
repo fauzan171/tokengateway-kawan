@@ -15,6 +15,7 @@ import { getAgent, type AgentDefinition } from "@/lib/agents/registry";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import { idempotencyDigest } from "@/lib/chat/idempotency";
 import type { Db } from "@/lib/db";
+import { toRunMetering, type RunMetering } from "./budget";
 import { enqueue } from "@/lib/jobs/queue";
 
 export const OPERATION_CREATE_TASK = "task.create";
@@ -65,6 +66,12 @@ export type RunDto = {
   deadlineAt: string;
   cancelRequestedAt: string | null;
   errorCode: string | null;
+  /** D1: penyebab run berhenti (`sufficient_evidence`/`budget_limit`/...). */
+  stopReason: string | null;
+  /** D1: jumlah siklus riset yang sudah dimulai. */
+  researchCycle: number;
+  /** D6: hanya diisi snapshot task; daftar run tidak memuatnya (additive). */
+  metering?: RunMetering | null;
   startedAt: string | null;
   finishedAt: string | null;
 };
@@ -92,6 +99,8 @@ type RunRow = {
   deadlineAt: Date;
   cancelRequestedAt: Date | null;
   errorCode: string | null;
+  stopReason: string | null;
+  researchCycle: number;
   startedAt: Date | null;
   finishedAt: Date | null;
 };
@@ -126,6 +135,8 @@ export function toRunDto(row: RunRow): RunDto {
     deadlineAt: row.deadlineAt.toISOString(),
     cancelRequestedAt: iso(row.cancelRequestedAt),
     errorCode: row.errorCode,
+    stopReason: row.stopReason,
+    researchCycle: row.researchCycle,
     startedAt: iso(row.startedAt),
     finishedAt: iso(row.finishedAt),
   };
@@ -155,6 +166,8 @@ const RUN_FIELDS = {
   deadlineAt: true,
   cancelRequestedAt: true,
   errorCode: true,
+  stopReason: true,
+  researchCycle: true,
   startedAt: true,
   finishedAt: true,
 } as const;
@@ -582,12 +595,27 @@ export async function getTaskSnapshot(db: Db, userId: string, taskId: string): P
     });
 
     const run = task.activeRunId
-      ? await tx.taskRun.findFirst({ where: { id: task.activeRunId, taskId }, select: RUN_FIELDS })
+      ? await tx.taskRun.findFirst({
+          where: { id: task.activeRunId, taskId },
+          select: { ...RUN_FIELDS, budgetJson: true, usageJson: true },
+        })
       : null;
+
+    // D6: metering additive pada DTO run (kontrak SDD-BACKEND §D6 / S2-2).
+    // Satu query tambahan, hanya untuk run aktif; run lama (kolom null) tetap
+    // terbaca sebagai nol + `reported:false`.
+    const sources = run
+      ? await tx.taskSource.findMany({
+          where: { runId: run.id },
+          select: { kind: true, finalUrl: true, requestedUrl: true, textHash: true },
+        })
+      : [];
 
     return {
       task: toTaskDto(task),
-      run: run ? toRunDto(run) : null,
+      run: run
+        ? { ...toRunDto(run), metering: toRunMetering(run, sources) }
+        : null,
       messages: messages.map((row) => ({
         id: row.id,
         role: row.role,

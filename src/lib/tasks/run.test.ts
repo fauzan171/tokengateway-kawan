@@ -108,6 +108,22 @@ describe("runTaskRun", () => {
     expect(kinds[kinds.length - 1]).toBe("run.completed");
   });
 
+  it("usage final jalur umum ditulis durable ke usageJson (D6)", async () => {
+    // SDD-FRONTEND §D6 membaca `run.metering.usage` dari kolom, bukan event.
+    // Tanpa tulisan ini agen default selalu tampil "tidak dilaporkan".
+    const { runId } = await admission("Halo", modelFor("unicode-split"));
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    const usage = JSON.parse(run.usageJson ?? "null") as {
+      reported?: boolean;
+      totalTokens?: number | null;
+    } | null;
+    expect(usage).not.toBeNull();
+    expect(typeof usage!.reported).toBe("boolean");
+    expect(usage!.reported).toBe(usage!.totalTokens !== null);
+  });
+
   it("seq event unik dan menaik tanpa celah", async () => {
     const { runId } = await admission("Halo", modelFor("unicode-split"));
     await runTaskRun(db, config(), runId, new AbortController().signal);

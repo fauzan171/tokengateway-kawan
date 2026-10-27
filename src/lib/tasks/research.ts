@@ -41,7 +41,7 @@ import {
 } from "@/lib/chat/generate";
 import { createStreamParser, type StreamUsage } from "@/lib/chat/stream-parse";
 import type { Db } from "@/lib/db";
-import type { FenceChecker } from "@/lib/jobs/fence";
+import { LeaseLost, type FenceChecker } from "@/lib/jobs/fence";
 import { assertOutboundAllowed, fetchOutbound, type OutboundPolicyOptions } from "@/lib/net";
 import { sha256Hex } from "@/lib/sources/record";
 import { getTool, type ToolContext, type ToolResult } from "@/lib/tools/registry";
@@ -54,6 +54,7 @@ import {
   held,
   type RunRow,
 } from "./run";
+import { readStoredBudget, settleUsage } from "./budget";
 
 /** Batas keras loop riset (SDD §D1). Semua dalam satu tempat supaya teruji. */
 export const RESEARCH_LIMITS = {
@@ -143,7 +144,6 @@ class ResearchProviderError extends Error {
 }
 
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
-const ESTIMATOR_VERSION = 1;
 
 // ---------------------------------------------------------------------------
 // Event + langkah
@@ -333,71 +333,32 @@ async function phaseCompleted(ctx: Ctx, phase: ResearchPhase, cycle: number): Pr
 // Anggaran
 // ---------------------------------------------------------------------------
 
-function initialBudget(): Budget {
-  return {
-    max: RESEARCH_LIMITS.maxInputTokens,
-    promptTokens: 0,
-    completionTokens: 0,
-    searches: 0,
-    reads: 0,
-    toolCalls: 0,
-    unreportedCalls: 0,
-    estimatorVersion: ESTIMATOR_VERSION,
-  };
-}
-
 /**
- * Bentuk durable `budgetJson` (kontrak D1): `{max, consumed:{...}, estimatorVersion}`.
- * `parseBudget` WAJIB membaca `consumed` — versi pertama menulis nested tapi
- * membaca flat, jadi setiap resume mengembalikan anggaran ke nol dan batas
- * token/tool bisa dilewati berulang. Nilai flat lama tetap diterima.
+ * Bentuk durable `budgetJson` didefinisikan di `budget.ts` (satu penulis, satu
+ * pembaca). Di sini hanya adapter ke bentuk datar yang dipakai loop: versi
+ * pertama menulis nested tapi membaca flat, jadi setiap resume mengembalikan
+ * anggaran ke nol dan batas token/tool bisa dilewati berulang.
  */
 function parseBudget(json: string | null): Budget {
-  if (!json) return initialBudget();
-  try {
-    const parsed = JSON.parse(json) as Partial<Budget> & {
-      consumed?: Partial<Omit<Budget, "max" | "estimatorVersion">>;
-    };
-    const consumed = parsed.consumed ?? parsed;
-    const base = initialBudget();
-    const num = (value: unknown, fallback: number): number =>
-      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
-    return {
-      max: num(parsed.max, base.max),
-      promptTokens: num(consumed.promptTokens, 0),
-      completionTokens: num(consumed.completionTokens, 0),
-      searches: num(consumed.searches, 0),
-      reads: num(consumed.reads, 0),
-      toolCalls: num(consumed.toolCalls, 0),
-      unreportedCalls: num(consumed.unreportedCalls, 0),
-      estimatorVersion: num(parsed.estimatorVersion, ESTIMATOR_VERSION),
-    };
-  } catch {
-    return initialBudget();
-  }
+  const stored = readStoredBudget(json, RESEARCH_LIMITS.maxInputTokens);
+  return { max: stored.max, ...stored.consumed, estimatorVersion: stored.estimatorVersion };
 }
 
-async function saveBudget(ctx: Ctx): Promise<void> {
-  const budget = ctx.budget;
-  await fenced(ctx.db, ctx.fence, async (tx) => {
-    await tx.taskRun.update({
-      where: { id: ctx.run.id },
-      data: {
-        budgetJson: JSON.stringify({
-          max: budget.max,
-          consumed: {
-            promptTokens: budget.promptTokens,
-            completionTokens: budget.completionTokens,
-            searches: budget.searches,
-            reads: budget.reads,
-            toolCalls: budget.toolCalls,
-            unreportedCalls: budget.unreportedCalls,
-          },
-          estimatorVersion: budget.estimatorVersion,
-        }),
-      },
-    });
-  });
+/** Settle delta ke durable + sinkron ke salinan memori (dipakai cek anggaran). */
+async function settle(
+  ctx: Ctx,
+  delta: Partial<Budget> & { unreportedCalls?: number },
+): Promise<void> {
+  // Durable dulu: bila tulis gagal, salinan memori tidak boleh lebih maju
+  // daripada yang tersimpan (angka yang "hilang" saat resume harus sama
+  // dengan yang benar-benar tercatat).
+  await settleUsage(ctx.db, ctx.fence, ctx.run.id, delta, RESEARCH_LIMITS.maxInputTokens);
+  ctx.budget.promptTokens += delta.promptTokens ?? 0;
+  ctx.budget.completionTokens += delta.completionTokens ?? 0;
+  ctx.budget.searches += delta.searches ?? 0;
+  ctx.budget.reads += delta.reads ?? 0;
+  ctx.budget.toolCalls += delta.toolCalls ?? 0;
+  ctx.budget.unreportedCalls += delta.unreportedCalls ?? 0;
 }
 
 /** Sisa anggaran token; reservasi output dicek SEBELUM panggilan model. */
@@ -527,10 +488,11 @@ async function modelTurn(
 
     // Usage tak dilaporkan dihitung sebagai reservasi penuh: anggaran tidak
     // pernah "terlihat lapar" karena provider diam, dan tidak pernah negatif.
-    ctx.budget.promptTokens += usage?.promptTokens ?? 0;
-    ctx.budget.completionTokens += usage?.completionTokens ?? RESEARCH_LIMITS.maxOutputTokens;
-    if (!usage) ctx.budget.unreportedCalls += 1;
-    await saveBudget(ctx);
+    await settle(ctx, {
+      promptTokens: usage?.promptTokens ?? 0,
+      completionTokens: usage?.completionTokens ?? RESEARCH_LIMITS.maxOutputTokens,
+      unreportedCalls: usage ? 0 : 1,
+    });
 
     await stepDone(ctx, step, { status: "succeeded", label: input.label, result: text });
     return text;
@@ -615,10 +577,11 @@ async function callTool(
   const tool = getTool(input.toolName);
   if (!tool) throw new Error(`Tool ${input.toolName} tidak ada di registry.`);
 
-  ctx.budget.toolCalls += 1;
-  if (input.toolName === "web_search") ctx.budget.searches += 1;
-  else ctx.budget.reads += 1;
-  await saveBudget(ctx);
+  await settle(ctx, {
+    toolCalls: 1,
+    searches: input.toolName === "web_search" ? 1 : 0,
+    reads: input.toolName === "web_search" ? 0 : 1,
+  });
 
   const timeoutMs =
     input.toolName === "web_search" ? RESEARCH_LIMITS.searchTimeoutMs : RESEARCH_LIMITS.readTimeoutMs;
@@ -1155,6 +1118,21 @@ export async function runResearchRun(
       );
       return;
     }
+    // Lease hilang = worker lain sudah mengambil alih; menulis apa pun di sini
+    // justru menabrak pemilik baru. Biarkan rantai ke atas menanganinya.
+    if (err instanceof LeaseLost) throw err;
+    // Lease bisa sudah berpindah walau galatnya bukan `LeaseLost` (fence yang
+    // diperiksa tadi masih `true`). Menutup run di sini berarti menabrak worker
+    // baru yang sedang menjalankannya.
+    if (fence && !(await fence.heldFresh())) throw err;
+    // Galat tak terduga (mis. settle anggaran gagal setelah 8 CAS) tetap harus
+    // menutup run: tanpa penutup, run tertinggal `running` tanpa event terminal
+    // walau worker sudah menyerah — snapshot lalu membeku selamanya.
+    await finish(db, run, "indeterminate", {
+      messageId: run.assistantMessageId,
+      stopReason: "provider_error",
+      error: { code: "RUN_FAILED", message: "Run berhenti karena galat internal.", retryable: true },
+    });
     throw err;
   }
 
@@ -1188,25 +1166,35 @@ export async function runResearchRun(
     return;
   }
 
-  await fenced(db, fence, (tx) =>
-    tx.taskRun.update({
+  // D6: `reported` hanya bila SETIAP panggilan model melaporkan usage;
+  // `estimated` kebalikannya. Memakai `completionTokens > 0` salah karena
+  // usage absen diisi reservasi penuh — angkanya selalu > 0, jadi estimasi
+  // akan dilaporkan sebagai tagihan nyata.
+  const reported = ctx.budget.unreportedCalls === 0;
+  const usageEvent = {
+    reported,
+    promptTokens: ctx.budget.promptTokens,
+    completionTokens: ctx.budget.completionTokens,
+    totalTokens: tokensUsed(ctx.budget),
+    estimated: !reported,
+  };
+
+  // Penjaga status: cancel/deadline bisa masuk setelah pemeriksaan di atas.
+  // Menimpa baris terminal akan membuat `stopReason` snapshot bertentangan
+  // dengan event penutup (yang tak ditulis lagi karena run sudah terminal).
+  const written = await fenced(db, fence, async (tx) => {
+    const fresh = await tx.taskRun.findUnique({ where: { id: run.id }, select: { status: true } });
+    if (!fresh || isTerminalRun(fresh.status)) return false;
+    await tx.taskRun.update({
       where: { id: run.id },
-      data: {
-        stopReason: ctx.stopReason,
-        // D6: `reported` hanya bila SETIAP panggilan model melaporkan usage;
-        // `estimated` kebalikannya. Memakai `completionTokens > 0` salah karena
-        // usage absen diisi reservasi penuh — angkanya selalu > 0, jadi
-        // estimasi akan dilaporkan sebagai tagihan nyata.
-        usageJson: JSON.stringify({
-          reported: ctx.budget.unreportedCalls === 0,
-          promptTokens: ctx.budget.promptTokens,
-          completionTokens: ctx.budget.completionTokens,
-          totalTokens: tokensUsed(ctx.budget),
-          estimated: ctx.budget.unreportedCalls > 0,
-        }),
-      },
-    }),
-  );
+      data: { stopReason: ctx.stopReason, usageJson: JSON.stringify(usageEvent) },
+    });
+    // Kind yang sama dengan agent default (run.ts), supaya klien punya satu
+    // jalur baca angka final.
+    await appendEvent(tx, run.id, "usage.updated", usageEvent);
+    return true;
+  });
+  if (!written) return;
 
   await finish(db, run, "completed", {
     messageId: run.assistantMessageId,
