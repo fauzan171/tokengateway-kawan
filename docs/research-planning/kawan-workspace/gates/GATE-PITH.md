@@ -74,10 +74,30 @@ muncul di badan prompt validasi). 14/14 lulus.
 | Gate | Hasil |
 | --- | --- |
 | `npx tsc --noEmit -p tsconfig.json` | exit 0, tanpa output |
-| `npx eslint src/lib/tasks/research.ts src/lib/tasks/research.test.ts src/lib/sources/read.ts src/lib/sources/sources.test.ts` | exit 0, tanpa output |
+| `npm run lint` | exit 0 — `0 problems` (basis: 29.720 masalah, semuanya dari `worktrees/**` + `.agents/**`) |
 | `node scripts/check-migrations.mjs` | OK — 2 provider, init dibekukan, urutan sama |
-| `npm test` | lihat GATE-WO-9 (basis 1385) + 2 test baru |
-| `npm run build` | lihat bawah |
+| `npm test` | `Test Files 130 passed (130)` / `Tests 1421 passed (1421)` |
+| `npm run build` | exit 0, seluruh route ter-render |
+
+## Regresi yang ditemukan gate dan diperbaiki (`a8c633ff`)
+
+`@use-pith/core` **ESM-only** (`exports` tanpa kondisi `require`), sedangkan
+worker dijalankan `node --import tsx src/worker.ts` sebagai CJS. Import statis
+membuat **seluruh worker** gagal saat resolve:
+
+```
+Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: No "exports" main defined in
+  node_modules/@use-pith/core/package.json
+```
+
+Itu bukan cuma jalur riset — proses worker mati sebelum heartbeat. Dua test
+`tests/worker-lifecycle.test.ts` menangkapnya (worker tak pernah mencetak
+`"result":"started"`). Perbaikan: `import()` dinamis di `extractContent()`;
+Node meng-cache modul, jadi biayanya sekali per proses.
+
+Gate lint juga menemukan `eslint.config.mjs` tidak meng-ignore `worktrees/**`
+dan `.agents/**` (worktree agen lain, 1.316 file). Komentar di config sudah
+menyebut "worktree agen lain" tetapi path yang dipakai hanya `.claude/**`.
 
 ## Risiko yang harus diketahui
 
