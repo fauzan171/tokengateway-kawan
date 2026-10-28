@@ -180,6 +180,12 @@
   scrollbar-width: thin;
   border-radius: 0.75rem;
 }
+/* Mermaid menulis lebar piksel tetap ke SVG-nya; tanpa ini diagram melebar
+   keluar bubble di layar sempit. Tabel sudah punya wrapper overflow-x-auto. */
+.kawan-markdown svg {
+  max-width: 100%;
+  height: auto;
+}
 
 /* Indikator proses ala Gemini: tiga titik bergelombang, bukan teks statis. */
 @keyframes kawan-dot-wave {

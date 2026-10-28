@@ -570,6 +570,43 @@ describe("D5: aktivitas per langkah dari step.started/step.completed", () => {
   });
 });
 
+describe("jawaban agen dirender sebagai Markdown", () => {
+  it("tabel dan mermaid dari assistant tampil, pesan pengguna tetap teks apa adanya", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/agents") return json({ agents: [] });
+      if (url === "/api/kawan/v1/tasks") return json(TASKS);
+      if (url === "/api/kawan/v1/tasks/task_1") {
+        return json({
+          task: { id: "task_1", title: "t", status: "active", activeRunId: "run_1", updatedAt: "2026-01-01" },
+          run: { id: "run_1", status: "completed", segment: 1, errorCode: null, agentId: null },
+          messages: [
+            { id: "m1", role: "user", text: "| a | b |", createdAt: "2026-01-01T00:00:00.000Z" },
+            {
+              id: "m2",
+              role: "assistant",
+              text: "| a | b |\n|---|---|\n| 1 | 2 |",
+              createdAt: "2026-01-01T00:00:01.000Z",
+            },
+          ],
+          snapshotSeq: 0,
+        });
+      }
+      if (url.includes("/events")) return json({}, 500);
+      return json({}, 404);
+    });
+    await render("task_1");
+
+    const articles = container.querySelectorAll("article");
+    // Pesan pengguna: pipa tetap teks, tidak jadi <table>.
+    expect(articles[0]?.querySelector("table")).toBeNull();
+    expect(articles[0]?.textContent).toContain("| a | b |");
+    // Jawaban agen: tabel GFM benar-benar dirender, dengan wrapper scroll.
+    const table = articles[1]?.querySelector("table");
+    expect(table).not.toBeNull();
+    expect(articles[1]?.querySelector(".overflow-x-auto")).not.toBeNull();
+  });
+});
+
 describe("D5: appendActivity murni", () => {
   const t = ((key: string) => key) as never;
   it("step.started menambah; step.completed failed menandai; kind asing tetap", () => {

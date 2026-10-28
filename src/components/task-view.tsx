@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useT, type Translate } from "@/lib/i18n/context";
 import { PhaseTimeline, ThinkingDots, type PhaseView } from "@/components/thinking-indicator";
 import { OnboardingFocusCard } from "@/components/onboarding-focus-card";
+import { Markdown } from "@/components/markdown";
 import { SourceList } from "@/components/source-list";
 import { RunMeteringSummary, type RunMetering } from "@/components/run-metering-summary";
 
@@ -456,7 +457,13 @@ export function TaskView({ taskId }: { taskId?: string }) {
               <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {row.role === "user" ? t("tasks.roleUser") : t("tasks.roleAssistant")}
               </h2>
-              <p className="whitespace-pre-wrap">{row.text}</p>
+              {/* Jawaban agen memuat tabel/mermaid, jadi lewat <Markdown />;
+                  pesan pengguna tetap teks apa adanya. */}
+              {row.role === "assistant" ? (
+                <Markdown text={row.text} />
+              ) : (
+                <p className="whitespace-pre-wrap">{row.text}</p>
+              )}
             </article>
           ))}
           {/* B2d: sumber jawaban run aktif. Ditempel setelah daftar pesan
