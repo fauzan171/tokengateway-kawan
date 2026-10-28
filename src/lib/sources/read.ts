@@ -14,7 +14,6 @@
  * validasi redirect). Ambil fungsi murni, tetap pakai jaringan kita.
  */
 
-import { htmlToMarkdown } from "@use-pith/core";
 import {
   assertOutboundAllowed,
   fetchOutbound,
@@ -93,8 +92,19 @@ function tidy(text: string): string {
     .trim();
 }
 
-/** Isi halaman \u2192 judul + teks, tanpa nav/footer/cookie/modal. */
-function extractContent(html: string, url: string): { title: string; text: string } {
+/**
+ * Isi halaman \u2192 judul + teks, tanpa nav/footer/cookie/modal.
+ *
+ * `import()` dinamis, bukan import statis: paket ini ESM-only (`exports` tanpa
+ * `require`), sedangkan worker dijalankan tsx sebagai CJS \u2014 import statis
+ * membuat `node --import tsx src/worker.ts` gagal total di resolve. Modulnya
+ * di-cache Node, jadi biayanya sekali per proses.
+ */
+async function extractContent(
+  html: string,
+  url: string,
+): Promise<{ title: string; text: string }> {
+  const { htmlToMarkdown } = await import("@use-pith/core");
   const extracted = htmlToMarkdown(html, url);
   return {
     title: extractTitle(html) || (extracted.title ?? "").trim(),
@@ -185,7 +195,7 @@ export async function readSource(
     if (type === "text/plain") {
       text = html.trim();
     } else {
-      const extracted = extractContent(html, finalUrl);
+      const extracted = await extractContent(html, finalUrl);
       title = extracted.title;
       text = extracted.text;
     }

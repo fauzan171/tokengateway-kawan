@@ -5,7 +5,7 @@
  * diganti stub. Tidak ada permintaan keluar.
  */
 
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import type { Db } from "@/lib/db";
 
