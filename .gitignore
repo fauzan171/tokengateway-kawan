@@ -68,3 +68,7 @@ docs/audit/pdf/
 
 # Worktree agen orkestrasi lokal (bukan sumber repo)
 /.claude/
+/worktrees/
+/.agent-teams/
+/.playwright-cli/
+/snap*.yml

@@ -1,7 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 import { e2eEnv } from "./e2e/global-setup";
 
-const PORT = 3100;
+// 3100 bisa sudah dipakai proses lain di host ini; `E2E_PORT` membebaskan suite
+// dijalankan pada port lain tanpa menyunting config.
+const PORT = Number(process.env["E2E_PORT"] ?? 3100);
 
 export default defineConfig({
   testDir: "./e2e",
@@ -43,7 +45,9 @@ export default defineConfig({
     // Server lama memegang handle DB yang sudah dihapus seed → sesi E2E mati
     // dan tes dialihkan ke /masuk. Selalu pakai server baru.
     reuseExistingServer: false,
-    timeout: 180_000,
+    // `npm run build` di mesin 3 vCPU melewati 180 dtk; server siap setelah
+    // build + start, jadi batas ini milik build, bukan milik uji.
+    timeout: 420_000,
     // DB uji terpisah + gateway palsu (loopback http diizinkan presisi).
     env: e2eEnv(),
   },

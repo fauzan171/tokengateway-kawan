@@ -73,6 +73,33 @@ export const RESEARCH_LIMITS = {
 
 export type ResearchPhase = "framing" | "discovery" | "extraction" | "validation" | "synthesis";
 
+/** D4: kalimat peran untuk tiap preset onboarding. */
+const FOCUS_PRESETS: Record<string, string> = {
+  riset: "riset mendalam yang bersumber dan berbukti",
+  data: "analisis data dan angka",
+  tulis: "penulisan dan penyuntingan teks",
+  campur: "gabungan riset, data, dan penulisan",
+};
+
+/**
+ * D4: satu kalimat peran dari snapshot `configJson.focus` (SDD-BACKEND §D4).
+ * `custom:` dipotong 200 char; nilai tak dikenal atau JSON rusak → null, supaya
+ * run lama dan snapshot cacat tetap berjalan tanpa kalimat fokus.
+ */
+function focusLine(configJson: string | null): string | null {
+  let focus: unknown;
+  try {
+    focus = (JSON.parse(configJson ?? "null") as { focus?: unknown } | null)?.focus;
+  } catch {
+    return null;
+  }
+  if (typeof focus !== "string" || focus.trim() === "") return null;
+  const custom = focus.startsWith("custom:") ? focus.slice("custom:".length).trim().slice(0, 200) : "";
+  const label = custom !== "" ? custom : FOCUS_PRESETS[focus];
+  if (!label) return null;
+  return `Fokus pengguna saat ini: ${label}. Sesuaikan jawaban dengan fokus itu.`;
+}
+
 /** Stop reason durable (kolom `TaskRun.stopReason`). */
 type StopReason =
   | "sufficient_evidence"
@@ -130,6 +157,8 @@ type Ctx = {
   /** URL yang sudah pernah dibaca di run ini (durable: dari TaskSource). */
   readUrls: Set<string>;
   stopReason: StopReason | null;
+  /** D4: kalimat peran dari snapshot `configJson.focus`; null = tanpa fokus. */
+  focusLine: string | null;
 };
 
 /** Galat jalur model; dipetakan ke `provider_error` di penutup run. */
@@ -432,6 +461,7 @@ async function modelTurn(
           messages: [
             { role: "system", content: input.system },
             { role: "system", content: ctx.agent.systemPrompt },
+            ...(ctx.focusLine ? [{ role: "system", content: ctx.focusLine }] : []),
             {
               role: "system",
               content: buildRuntimeContext({
@@ -1062,6 +1092,7 @@ export async function runResearchRun(
     budget: parseBudget(run.budgetJson),
     readUrls: new Set(readRows.map((row) => row.requestedUrl)),
     stopReason: null,
+    focusLine: focusLine(run.configJson),
   };
 
   let verdict: Verdict = { gap: "", sufficient: false, nextQueries: [] };

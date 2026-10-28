@@ -7,7 +7,7 @@
  * terenkripsi), memakai `ENCRYPTION_SECRET` tetap milik proses uji.
  */
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { hashSync } from "@node-rs/argon2";
@@ -17,7 +17,26 @@ import { E2E_ENCRYPTION_SECRET, FAKE_GATEWAY_BASE } from "./fake-gateway";
 const DIR = join(process.cwd(), "e2e", ".tmp");
 export const DB_FILE = join(DIR, "e2e.db");
 export const TOKEN_FILE = join(DIR, "token.txt");
-const MIGRATION = "prisma/migrations/sqlite/00000000000000_init/migration.sql";
+const MIGRATIONS_DIR = "prisma/migrations/sqlite";
+
+/**
+ * Semua migrasi sqlite, urut nama (bertanggal → kronologis).
+ *
+ * Dulu hanya `init` yang diterapkan; akibatnya DB e2e tidak punya tabel `Task*`,
+ * `Artifact`, `WorkerHeartbeat`, dst. — spec apa pun yang menyentuh fitur baru
+ * gagal karena "tabel tidak ada", bukan karena kode salah (pola insiden
+ * produksi 2026-10-21). Migrasi repo ini additive dan idempoten per direktori,
+ * jadi menerapkan seluruhnya di DB kosong aman.
+ */
+function applyMigrations(db: Database.Database): void {
+  const dirs = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d{14}_/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  for (const dir of dirs) {
+    db.exec(readFileSync(join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8"));
+  }
+}
 
 export const TOKEN = "e2e-token-render";
 /** Kredensial `user-e2e`; dipakai spec yang butuh sesi. */
@@ -93,7 +112,7 @@ export function seed(): void {
   for (const suffix of ["", "-wal", "-shm"]) rmSync(`${DB_FILE}${suffix}`, { force: true });
 
   const db = new Database(DB_FILE);
-  db.exec(readFileSync(MIGRATION, "utf8"));
+  applyMigrations(db);
 
   const user = db.prepare(
     `INSERT INTO "User" (id, email, name, role, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,

@@ -32,7 +32,9 @@ export function mimeForFormat(format: ArtifactFormat): string {
  * Nama kosong → `berkas.<format>`. TIDAK dipakai sebagai path berkas.
  */
 export function sanitizeDisplayName(raw: string, format: ArtifactFormat): string {
-  const stripped = raw.replace(/[\\/]/g, " ").replace(/[..]+/g, " ").replace(/\p{C}/gu, "").trim();
+  // `\.{2,}` = titik dua atau lebih. Sebelumnya `[..]+` (character class) yang
+  // mencocokkan SETIAP titik, sehingga "rekap.xlsx" rusak jadi "rekap xlsx.xlsx".
+  const stripped = raw.replace(/[\\/]/g, " ").replace(/\.{2,}/g, " ").replace(/\p{C}/gu, "").trim();
   const ext = `.${format}`;
   let base = stripped.slice(0, 120).trim();
   if (!base) base = `berkas${ext}`;

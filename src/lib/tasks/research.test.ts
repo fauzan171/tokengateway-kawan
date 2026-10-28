@@ -334,3 +334,49 @@ describe("loop riset (D1)", () => {
     expect(rows.map((row) => row.seq)).toEqual(rows.map((_, index) => index + 1));
   });
 });
+describe("D4 — fokus onboarding di prompt riset", () => {
+  /** Menaruh snapshot config pada run, seperti yang dilakukan admission. */
+  async function setFocus(runId: string, focus: unknown) {
+    await db.taskRun.update({
+      where: { id: runId },
+      data: { configJson: JSON.stringify({ schemaVersion: 1, focus }) },
+    });
+  }
+
+  function lastBody(): string {
+    return JSON.stringify(fixture.requests[fixture.requests.length - 1]!.body);
+  }
+
+  it("preset fokus masuk sebagai kalimat peran system", async () => {
+    const { runId } = await admission();
+    await setFocus(runId, "riset");
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+
+    const body = lastBody();
+    expect(body).toContain("Fokus pengguna saat ini: riset mendalam");
+    expect((await db.taskRun.findUniqueOrThrow({ where: { id: runId } })).status).toBe("completed");
+  });
+
+  it("custom dipotong 200 karakter dan karakter kontrol hilang", async () => {
+    const { runId } = await admission();
+    await setFocus(runId, `custom:${"a".repeat(150)}\n${"b".repeat(100)}`);
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+
+    const body = lastBody();
+    expect(body).not.toContain("b".repeat(51));
+    expect(body).toContain("a".repeat(150));
+  });
+
+  it("focus null / JSON rusak → prompt tanpa kalimat fokus, run tetap selesai", async () => {
+    const { runId } = await admission();
+    await setFocus(runId, null);
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+    expect(lastBody()).not.toContain("Fokus pengguna saat ini");
+
+    const second = await admission("Riset kedua");
+    await db.taskRun.update({ where: { id: second.runId }, data: { configJson: "{rusak" } });
+    await runTaskRun(db, config(), second.runId, new AbortController().signal);
+    expect(lastBody()).not.toContain("Fokus pengguna saat ini");
+    expect((await db.taskRun.findUniqueOrThrow({ where: { id: second.runId } })).status).toBe("completed");
+  });
+});

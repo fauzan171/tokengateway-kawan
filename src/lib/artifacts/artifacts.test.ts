@@ -68,6 +68,14 @@ describe("sanitizeDisplayName", () => {
     expect(sanitizeDisplayName("", "md")).toBe("berkas.md");
   });
 
+  it("titik tunggal pada ekstensi dipertahankan", () => {
+    // Regresi: `/\.{2,}/` sempat ditulis `[..]+` (character class), sehingga
+    // setiap titik dibuang dan "rekap.xlsx" menjadi "rekap xlsx.xlsx".
+    expect(sanitizeDisplayName("rekap.xlsx", "xlsx")).toBe("rekap.xlsx");
+    expect(sanitizeDisplayName("rekap-e2e.xlsx", "xlsx")).toBe("rekap-e2e.xlsx");
+    expect(sanitizeDisplayName("laporan v1.2.docx", "docx")).toBe("laporan v1.2.docx");
+  });
+
   it("membatasi panjang 120 karakter", () => {
     expect(sanitizeDisplayName("x".repeat(500), "txt").length).toBeLessThanOrEqual(120);
   });
