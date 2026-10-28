@@ -46,6 +46,18 @@ describe("composeSystemPrompt — urutan otoritas", () => {
     const prompt = composeSystemPrompt(base);
     expect(prompt.blocks.map((b) => b.kind)).not.toContain("preference");
   });
+
+  it("kebijakan melarang penafian keterbatasan sebagai pembuka jawaban", () => {
+    const text = composeSystemPrompt(base).content;
+    expect(text).toContain("JANGAN membuka jawaban dengan daftar keterbatasan");
+    expect(text).toContain("yang tidak tersedia di sesi ini");
+  });
+
+  it("kebijakan meminta tabel GFM dan blok mermaid untuk data visual", () => {
+    const text = composeSystemPrompt(base).content;
+    expect(text).toContain("tabel Markdown GFM");
+    expect(text).toContain("```mermaid");
+  });
 });
 
 describe("wrapUntrusted", () => {
@@ -70,11 +82,14 @@ describe("wrapUntrusted", () => {
 });
 
 describe("buildCapabilityBlock", () => {
-  it("menyatakan ketiadaan tool dengan tegas", () => {
+  it("menyatakan ketiadaan tool sebagai fakta, bukan larangan yang dipantulkan", () => {
     const text = buildCapabilityBlock(base);
-    expect(text).toContain("Tidak ada tool");
-    expect(text).toContain("TIDAK aktif");
-    expect(text).toContain("TIDAK tersedia");
+    expect(text).toContain("tanpa tool");
+    expect(text).toContain("Pencarian web nonaktif");
+    expect(text).toContain("Eksekusi kode nonaktif");
+    // Penafian gaya lama memancing model mengulanginya di pesan sapaan.
+    expect(text).not.toContain("TIDAK");
+    expect(text).toContain("jangan dibacakan ke pengguna");
   });
 
   it("menyebut tool yang benar-benar ada, tanpa menambah yang lain", () => {
@@ -85,8 +100,8 @@ describe("buildCapabilityBlock", () => {
       canRunCode: false,
     });
     expect(text).toContain("generate_file, generate_document");
-    expect(text).toContain("Tool lain tidak ada");
-    expect(text).toContain("Eksekusi kode TIDAK tersedia");
+    expect(text).toContain("Di luar daftar itu tidak ada");
+    expect(text).toContain("Eksekusi kode nonaktif");
   });
 });
 

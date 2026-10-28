@@ -50,6 +50,12 @@ const POLICY = [
   "Bedakan tegas: fakta yang kamu ketahui, inferensi, dan hal yang belum diperiksa.",
   "Bila sumber tidak cukup, katakan belum cukup bukti dan sebutkan apa yang sudah dicari. Jangan menebak diam-diam.",
   "Jangan menampilkan persentase keyakinan yang tidak berasal dari pengukuran.",
+  // Balasan pembuka sering dipakai model untuk memuntahkan daftar batasan.
+  // Itu bukan jawaban atas pertanyaan pengguna, jadi dilarang di sini.
+  "Sapa pengguna dengan ramah dan langsung bantu kebutuhannya. JANGAN membuka jawaban dengan daftar keterbatasan, penafian kemampuan, atau kalimat \"yang tidak tersedia di sesi ini\".",
+  "Sebutkan batasan HANYA saat pengguna meminta hal yang memang tidak bisa dilakukan, satu kalimat, lalu tawarkan alternatif yang bisa.",
+  "Format visual: data perbandingan atau tabular disajikan sebagai tabel Markdown GFM (pipa `|`), bukan paragraf berderet.",
+  "Alur proses, arsitektur, atau langkah bertahap yang cocok divisualkan disajikan dalam blok berpagar ```mermaid (mis. flowchart TD, sequenceDiagram); sertakan satu kalimat penjelas sebelum diagram.",
 ].join("\n");
 
 /** P8: ringkas entri katalog hanya untuk tool aktif pada giliran ini. */
@@ -70,11 +76,15 @@ export function buildCapabilityBlock(input: {
   canSeeImages: boolean;
   canRunCode: boolean;
 }): string {
-  const lines = ["## Fakta kemampuan"];
+  // Fakta ini untuk model, bukan untuk pengguna. Kalimat larangan panjang
+  // ("jangan mengaku...", "TIDAK tersedia") terbukti dipantulkan model sebagai
+  // pembuka jawaban, jadi blok ini ditandai internal dan disebut sebagai fakta
+  // positif apa adanya.
+  const lines = ["## Fakta kemampuan (internal — jangan dibacakan ke pengguna)"];
   lines.push(
     input.tools.length > 0
-      ? `Tool yang benar-benar tersedia: ${input.tools.join(", ")}. Tool lain tidak ada.`
-      : "Tidak ada tool yang tersedia pada giliran ini. Jangan mengaku memakai tool.",
+      ? `Tool yang bisa dipakai giliran ini: ${input.tools.join(", ")}. Di luar daftar itu tidak ada.`
+      : "Giliran ini berjalan tanpa tool.",
   );
   // P8/D5: detail kapan pakai/jangan + batas + contoh dari satu sumber
   // (tools/catalog.ts) supaya model memilih tool secara sadar, bukan buta.
@@ -84,17 +94,17 @@ export function buildCapabilityBlock(input: {
   lines.push(
     input.webSearch
       ? "Pencarian web aktif untuk giliran ini; sebut waktu pengambilan bila mengutip hasilnya."
-      : "Pencarian web TIDAK aktif. Jangan mengarang hasil pencarian.",
+      : "Pencarian web nonaktif giliran ini; jawab dari pengetahuan sendiri tanpa mengarang hasil pencarian.",
   );
   lines.push(
     input.canSeeImages
       ? "Kamu dapat menerima gambar yang dilampirkan pengguna."
-      : "Kamu TIDAK menerima gambar pada giliran ini.",
+      : "Gambar lampiran tidak ikut pada giliran ini.",
   );
   lines.push(
     input.canRunCode
       ? "Eksekusi kode tersedia di sandbox terisolasi."
-      : "Eksekusi kode TIDAK tersedia. Hitungan harus memakai tool hitung atau dijelaskan manual.",
+      : "Eksekusi kode nonaktif; hitungan dikerjakan dengan tool hitung atau dijelaskan manual.",
   );
   return lines.join("\n");
 }
