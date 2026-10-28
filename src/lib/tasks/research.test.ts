@@ -311,6 +311,23 @@ describe("loop riset (D1)", () => {
     expect(await db.taskStep.count({ where: { runId, kind: "model" } })).toBe(0);
   });
 
+  it("halaman terbaca menyimpan isi nyata, jadi validasi berikutnya punya bukti", async () => {
+    // Regresi: `page_read` dulu selalu `snippet: null`, sehingga fase validasi
+    // dan resume lintas-restart hanya melihat "(dibaca N karakter)" tanpa isi.
+    const { runId } = await admission();
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+
+    const reads = await db.taskSource.findMany({ where: { runId, kind: "page_read" } });
+    expect(reads.length).toBeGreaterThan(0);
+    for (const row of reads) {
+      expect(row.snippet).not.toBeNull();
+      expect(row.snippet).toContain("Teks halaman");
+    }
+
+    const validation = fixture.requests.at(-2);
+    expect(JSON.stringify(validation?.body)).toContain("Teks halaman");
+  });
+
   it("usage tak dilaporkan → metering estimasi, bukan tagihan nyata", async () => {
     // S3-3: `reported` dulu diturunkan dari `completionTokens > 0`, padahal
     // usage absen diisi reservasi penuh — angkanya selalu > 0.

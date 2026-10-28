@@ -908,7 +908,8 @@ model TaskSource {
   requestedUrl String
   finalUrl     String?
   title        String?
-  /// terpotong ≤300 char, hasil provider
+  /// search_result: ≤300 char dari provider. page_read: potongan teks hasil
+  /// ekstraksi (≤ `maxExcerptCharsPerSource`), dipakai fase validasi/resume.
   snippet      String?
   textChars    Int?
   /// sha256 teks ter-ekstrak

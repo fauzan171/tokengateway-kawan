@@ -329,6 +329,8 @@ async function stepDone(
 /** Batas pesan hasil tool yang menahan konteks; sisanya sudah ada di prompt. */
 const MAX_TOOL_MESSAGES = 12;
 const MAX_TOOL_MESSAGE_CHARS = 20_000;
+/** Potongan tiap sumber di prompt validasi: 8 × 1.200 char ≈ 2.400 token. */
+const EVIDENCE_EXCERPT_CHARS = 1_200;
 
 /**
  * Hasil tool masuk sebagai pesan `user` berlabel: model melihatnya sebagai
@@ -811,7 +813,10 @@ async function extraction(ctx: Ctx, cycle: number, candidates: Evidence[]): Prom
       requestedUrl: candidate.url,
       finalUrl: typeof data?.url === "string" ? data.url : candidate.url,
       title: typeof data?.title === "string" ? data.title : candidate.title,
-      snippet: null,
+      // Potongan teks nyata hasil ekstraksi Pith, bukan null: fase validasi dan
+      // resume lintas-restart hanya melihat `TaskSource`, jadi tanpa ini halaman
+      // yang sudah dibaca tampil sebagai "(dibaca N karakter)" tanpa isi.
+      snippet: text === "" ? null : text.slice(0, RESEARCH_LIMITS.maxExcerptCharsPerSource),
       textChars: text.length,
       textHash: text === "" ? null : sha256Hex(text),
     });
@@ -875,7 +880,12 @@ async function evidenceText(ctx: Ctx): Promise<string[]> {
   });
   return sources.map((source) => {
     const url = source.finalUrl ?? source.requestedUrl;
-    const body = source.snippet ?? `(dibaca ${source.textChars ?? 0} karakter; teks penuh ada di UI sumber)`;
+    // Snippet `page_read` kini berisi teks halaman; dipotong lagi di sini supaya
+    // 8 sumber × 6.000 karakter tidak menghabiskan `maxInputTokens`.
+    const body =
+      source.snippet === null
+        ? `(dibaca ${source.textChars ?? 0} karakter; teks penuh ada di UI sumber)`
+        : source.snippet.slice(0, EVIDENCE_EXCERPT_CHARS);
     return `SUMBER ${url}\nJUDUL: ${source.title ?? url}\n${body}`;
   });
 }
