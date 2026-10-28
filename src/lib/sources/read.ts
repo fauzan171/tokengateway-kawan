@@ -5,8 +5,16 @@
  * Tidak ada yang dijalankan dari halaman: tanpa script, tanpa cookie, tanpa
  * subresource. Ekstraksi gagal / login / paywall → `blocked`/`unsupported`,
  * BUKAN halaman kosong yang dianggap "sudah dibaca".
+ *
+ * Ekstraksi isi memakai `htmlToMarkdown` dari `@use-pith/core` (Readability +
+ * Turndown): membuang nav/footer/cookie/modal lalu mengubah wadah utama jadi
+ * markdown. SENGAJA bukan `engine.scrape()`/`scrapeUrlCore()` — fungsi itu
+ * memakai `fetch` global sendiri (`dist/index.js:443`), jadi melewati
+ * `fetchOutbound` dan seluruh kebijakan egress (allowlist, dispatcher pinning,
+ * validasi redirect). Ambil fungsi murni, tetap pakai jaringan kita.
  */
 
+import { htmlToMarkdown } from "@use-pith/core";
 import {
   assertOutboundAllowed,
   fetchOutbound,
@@ -57,12 +65,6 @@ const PAYWALL_MARKERS = [
 
 const READABLE_TYPES = ["text/html", "application/xhtml+xml", "text/plain", "application/pdf"];
 
-function stripNoise(html: string): string {
-  return html
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<(script|style|noscript|svg|iframe|template)[\s\S]*?<\/\1>/gi, "");
-}
-
 function decodeEntities(text: string): string {
   return text
     .replace(/&nbsp;/g, " ")
@@ -73,36 +75,31 @@ function decodeEntities(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
+/** `<meta property="og:title">` lebih akurat daripada `<title>` halaman. */
 function extractTitle(html: string): string {
   const og = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i);
-  if (og?.[1]) return decodeEntities(og[1]).trim();
-  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return title?.[1] ? decodeEntities(title[1]).replace(/\s+/g, " ").trim() : "";
+  return og?.[1] ? decodeEntities(og[1]).trim() : "";
 }
 
 /**
- * ENG-1: pilih wadah konten utama bila ada - <article>, <main> - supaya
- * menu navigasi/footer tidak mendominasi teks halaman (kasus nyata:
- * README GitHub terbenam di char ke-3300+ di balik menu). Kandidat
- * terpanjang yang menang; tanpa kecocokan, HTML apa adanya (fallback).
+ * Rapikan teks Pith: ia mempertahankan indentasi sumbernya, jadi baris bisa
+ * membawa spasi awal dan paragraf bisa menempel (`"A\n       B"`).
  */
-function pickMainContent(html: string): string {
-  const article = html.match(/<article[^>]*>[\s\S]*?<\/article>/i);
-  const main = html.match(/<main[^>]*>[\s\S]*?<\/main>/i);
-  const candidates = [article?.[0], main?.[0]].filter((v): v is string => typeof v === "string");
-  if (candidates.length === 0) return html;
-  return candidates.reduce((a, b) => (b.length > a.length ? b : a));
-}
-function htmlToText(html: string): string {
-  return decodeEntities(
-    stripNoise(pickMainContent(html))
-      .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr)[^>]*>/gi, "\n")
-      .replace(/<[^>]+>/g, " "),
-  )
+function tidy(text: string): string {
+  return text
     .replace(/[ \t\u00a0]+/g, " ")
     .replace(/ *\n */g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/** Isi halaman \u2192 judul + teks, tanpa nav/footer/cookie/modal. */
+function extractContent(html: string, url: string): { title: string; text: string } {
+  const extracted = htmlToMarkdown(html, url);
+  return {
+    title: extractTitle(html) || (extracted.title ?? "").trim(),
+    text: tidy(extracted.text),
+  };
 }
 
 function detectPaywall(html: string): boolean {
@@ -185,8 +182,13 @@ export async function readSource(
     if (type !== "text/plain" && detectPaywall(html)) {
       throw new ReadError("PAYWALL", "Halaman di balik paywall/login.");
     }
-    title = type === "text/plain" ? "" : extractTitle(html);
-    text = type === "text/plain" ? html.trim() : htmlToText(html);
+    if (type === "text/plain") {
+      text = html.trim();
+    } else {
+      const extracted = extractContent(html, finalUrl);
+      title = extracted.title;
+      text = extracted.text;
+    }
   }
 
   if (text === "") throw new ReadError("NO_TEXT", "Halaman tidak berisi teks yang dapat dibaca.");

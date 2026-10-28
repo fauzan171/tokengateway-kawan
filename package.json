@@ -23,6 +23,7 @@
     "@prisma/adapter-better-sqlite3": "^7.10.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@use-pith/core": "^0.1.2",
     "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",

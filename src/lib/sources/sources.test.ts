@@ -89,6 +89,26 @@ describe("web.read", () => {
     expect(result.text).not.toContain("x{}");
   });
 
+  it("membuang nav/footer/cookie lintas wadah, bukan hanya <article>", async () => {
+    // Ekstraksi Pith memakai Readability, jadi boilerplate di luar wadah utama
+    // ikut hilang walaupun halaman tidak punya <article>/<main>.
+    fetchMock.mockResolvedValue(
+      html(
+        `<html><head><title>Repo</title></head><body>
+          <nav>Menu Situs</nav>
+          <div id="readme"><h1>Proyek</h1><p>Deskripsi panjang proyek ini.</p></div>
+          <div class="cookie-banner">Kami memakai cookie</div>
+          <footer>Hak cipta</footer>
+        </body></html>`,
+      ),
+    );
+    const result = await readSource("https://contoh.test/repo");
+    expect(result.text).toContain("Deskripsi panjang proyek ini.");
+    expect(result.text).not.toContain("Menu Situs");
+    expect(result.text).not.toContain("Kami memakai cookie");
+    expect(result.text).not.toContain("Hak cipta");
+  });
+
   it("negatif: 403 → BLOCKED, bukan halaman kosong", async () => {
     fetchMock.mockResolvedValue(html("nope", 403));
     await expect(readSource("https://contoh.test/a")).rejects.toMatchObject({ code: "BLOCKED" });
