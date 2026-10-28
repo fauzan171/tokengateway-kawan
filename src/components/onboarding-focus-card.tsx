@@ -4,8 +4,8 @@
  * Kartu fokus onboarding (SDD-FRONTEND §D4).
  *
  * Controlled: nilai terpilih masuk lewat `value`, hasil keluar lewat `onChange`.
- * Tanpa fetch dan tanpa fungsi simpan sendiri — halaman task dan pengaturan
- * memakai kartu yang sama, masing-masing yang menyimpan.
+ * Tanpa fetch dan tanpa fungsi simpan sendiri — halaman pengaturan yang
+ * menyimpan.
  *
  * Nilai tersimpan: `riset` | `data` | `tulis` | `campur` | `custom:<teks>`.
  * "Lewati dulu" hanya menyembunyikan kartu di sesi ini (state lokal); tidak

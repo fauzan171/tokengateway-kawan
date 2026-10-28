@@ -166,8 +166,8 @@ export function SettingsForm() {
         </label>
       </div>
 
-      {/* D4: fokus onboarding — kartu sama seperti di task-view, controlled;
-          perubahan langsung masuk PATCH yang sudah ada (tanpa endpoint baru). */}
+      {/* D4: fokus onboarding, controlled; perubahan langsung masuk PATCH
+          yang sudah ada (tanpa endpoint baru). */}
       <div className="flex flex-col gap-2">
         <span className="font-medium">{t("settings.onboarding")}</span>
         <p className="text-sm text-muted-foreground">{t("settings.onboarding.help")}</p>
