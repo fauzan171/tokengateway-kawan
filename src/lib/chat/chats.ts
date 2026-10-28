@@ -12,6 +12,7 @@
 import { randomUUID } from "node:crypto";
 import { ApiError, STATUS } from "@/lib/api/errors";
 import type { Db } from "@/lib/db";
+import { getAgentFile } from "@/lib/agents/loader";
 
 /** Bentuk chat yang boleh keluar dari modul ini (SDD-3.4). */
 export type PublicChat = {
@@ -22,6 +23,7 @@ export type PublicChat = {
   /** Naik setiap perubahan judul; 0 berarti judul masih bawaan. */
   titleRevision: number;
   modelRef: string | null;
+  agentId: string | null;
   currentMessageId: string | null;
   folderId: string | null;
   pinned: boolean;
@@ -37,6 +39,7 @@ export const CHAT_FIELDS = {
   titleSource: true,
   titleRevision: true,
   modelRef: true,
+  agentId: true,
   currentMessageId: true,
   folderId: true,
   pinned: true,
@@ -51,6 +54,7 @@ export type ChatRow = {
   titleSource: string;
   titleRevision: number;
   modelRef: string | null;
+  agentId: string | null;
   currentMessageId: string | null;
   folderId?: string | null;
   pinned: number;
@@ -66,6 +70,7 @@ export function toPublicChat(row: ChatRow): PublicChat {
     titleSource: row.titleSource,
     titleRevision: row.titleRevision,
     modelRef: row.modelRef,
+    agentId: row.agentId,
     currentMessageId: row.currentMessageId,
     folderId: row.folderId ?? null,
     pinned: row.pinned === 1,
@@ -101,12 +106,29 @@ function normalizeModelRef(value: unknown): string | null {
   return value.trim();
 }
 
+/** `null`/absen = agen bawaan; teks harus menunjuk berkas `agents/<id>.md`. */
+function normalizeAgentId(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw badRequest("INVALID_AGENT", "agentId harus berupa teks tidak kosong.");
+  }
+  const id = value.trim();
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) {
+    throw badRequest("INVALID_AGENT", "agentId hanya huruf kecil, angka, - dan _.");
+  }
+  if (getAgentFile(id) === null) {
+    throw badRequest("UNKNOWN_AGENT", `Agen "${id}" tidak terdaftar.`);
+  }
+  return id;
+}
+
 export type CreateChatInput = {
   userId: string;
   /** Judul sementara; kosong/absen memakai judul bawaan. */
   title?: unknown;
   modelRef?: unknown;
   folderId?: unknown;
+  agentId?: unknown;
 };
 
 export async function createChat(db: Db, input: CreateChatInput): Promise<PublicChat> {
@@ -115,6 +137,10 @@ export async function createChat(db: Db, input: CreateChatInput): Promise<Public
   const folderId = typeof input.folderId === "string" && input.folderId.trim() !== ""
     ? input.folderId.trim()
     : null;
+
+  // Agen divalidasi terhadap berkas, bukan diterima apa adanya: id asing akan
+  // membuat prompt sistem kosong tanpa jejak.
+  const agentId = normalizeAgentId(input.agentId);
 
   const row = await db.chat.create({
     data: {
@@ -125,6 +151,7 @@ export async function createChat(db: Db, input: CreateChatInput): Promise<Public
       // tidak boleh menimpanya (FIX-04).
       titleSource: input.title === undefined || input.title === null ? "auto" : "manual",
       modelRef,
+      agentId,
       folderId,
     },
     select: CHAT_FIELDS,

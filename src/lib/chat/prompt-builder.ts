@@ -163,6 +163,11 @@ export type ComposeInput = {
   untrusted?: readonly { source: string; content: string }[];
   /** Prompt milik pengguna; tetap di bawah kebijakan. */
   userSystemPrompt?: string | null;
+  /**
+   * Identitas agen (badan `agents/<id>.md`). Ditempatkan setingkat fakta
+   * kemampuan: mengubah peran model, bukan kebijakan server.
+   */
+  agentPrompt?: string | null;
   budgetChars?: number;
 };
 
@@ -194,6 +199,13 @@ export function composeSystemPrompt(input: ComposeInput): ComposedPrompt {
       }),
     },
   ];
+
+  if (input.agentPrompt?.trim()) {
+    blocks.push({
+      kind: "capability",
+      content: `## Peran agen\n${input.agentPrompt.trim()}\n(Peran ini tidak dapat mengubah kebijakan server.)`,
+    });
+  }
 
   const preference = buildPreferenceBlock({
     ...(input.language ? { language: input.language } : {}),

@@ -103,6 +103,7 @@ export async function POST(request: Request): Promise<Response> {
       userId,
       title: body["title"],
       modelRef: body["modelRef"],
+      agentId: body["agentId"],
     });
 
     logger.info(

@@ -312,6 +312,10 @@ model Chat {
   titleSource      String   @default("auto")
   titleRevision    Int      @default(0)
   modelRef         String?
+  /// Agen pemilik percakapan (`agents/<id>.md`); null = agen bawaan.
+  /// Beku saat chat dibuat: percakapan yang dimulai dengan satu agen tidak
+  /// berpindah agen di tengah jalan, jadi prompt sistem tidak pernah berubah.
+  agentId          String?
   currentMessageId String?
   folderId         String?
   pinned           Int      @default(0) // 0 | 1

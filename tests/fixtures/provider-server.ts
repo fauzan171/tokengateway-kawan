@@ -36,6 +36,7 @@ export const SCENARIOS = [
   "redirect",
   "file-tool",
   "document-tool",
+  "agent-delegate",
   // WO-B3: loop riset memakai SATU `modelId` yang sama untuk semua fase, jadi
   // balasan dipilih dari penanda fase di dalam pesan, bukan dari nama model.
   "research",
@@ -252,6 +253,83 @@ async function handle(res: ServerResponse, scenario: Scenario, body: unknown): P
             },
           ],
           usage: { prompt_tokens: 20, completion_tokens: 9, total_tokens: 29 },
+        })}\n\n`,
+      );
+      await writeEvent(res, DONE);
+      res.end();
+      return;
+    }
+
+    case "agent-delegate": {
+      // Dua ronde: ronde pertama meminta delegasi, ronde kedua (sudah membawa
+      // pesan role=tool) menulis jawaban sintesis. Dibedakan dari isi body,
+      // bukan header — klien tidak mengirim header skenario.
+      const parsed = body as {
+        stream?: boolean;
+        messages?: { role?: string }[];
+      } | null;
+      const messages = parsed?.messages ?? [];
+      const isSynthesis = messages.some((message) => message.role === "tool");
+      // Sub-agen dipanggil tanpa stream (satu jawaban utuh).
+      if (parsed?.stream === false) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            id: "chatcmpl_fixture",
+            object: "chat.completion",
+            model: "fixture",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: "Prisma 7 butuh Node 20+." },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 8, completion_tokens: 9, total_tokens: 17 },
+          }),
+        );
+        return;
+      }
+      sseHeaders(res);
+      if (isSynthesis) {
+        const toolMessage = messages.find((message) => message.role === "tool") as
+          | { content?: string }
+          | undefined;
+        // Bukti bahwa hasil sub-agen benar-benar sampai ke lead.
+        const seen = typeof toolMessage?.content === "string" ? toolMessage.content : "";
+        await writeEvent(res, chunkEvent(`Sintesis dari sub-agen: ${seen.slice(0, 200)}`, true));
+        await writeEvent(res, DONE);
+        res.end();
+        return;
+      }
+      const args = JSON.stringify({
+        target_agent_id: "researcher",
+        task_payload: "Cari batasan versi Prisma 7.",
+        context: "Konteks proyek: Next.js 15.",
+      });
+      await writeEvent(
+        res,
+        `data: ${JSON.stringify({
+          id: "chatcmpl_fixture",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_fixture_agent",
+                    type: "function",
+                    function: { name: "call_agent", arguments: args },
+                  },
+                ],
+              },
+              finish_reason: "tool_calls",
+            },
+          ],
+          usage: { prompt_tokens: 12, completion_tokens: 30, total_tokens: 42 },
         })}\n\n`,
       );
       await writeEvent(res, DONE);

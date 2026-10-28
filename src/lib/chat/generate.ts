@@ -63,6 +63,16 @@ import {
 // P3: daftar tool chat berasal dari registry, bukan konstanta lokal. Parser di
 // atas tetap dipakai di loop supaya perilakunya tidak berubah.
 import { chatToolNames, chatTools } from "@/lib/tools/registry";
+import { getAgentFile } from "@/lib/agents/loader";
+import {
+  CALL_AGENT_TOOL_NAME,
+  callAgentTool,
+  delegateAgent,
+  delegateToolText,
+  parseCallAgentArgs,
+  toolCallId,
+  type DelegateResult,
+} from "@/lib/agents/delegate";
 import { createArtifact, readArtifactForModel } from "@/lib/artifacts/create";
 import { buildAncestryPath, type TreeNode } from "./tree";
 import { getSystemPrompt } from "./system-prompt";
@@ -745,7 +755,7 @@ export async function runGeneration(
 
   const chat = await db.chat.findUnique({
     where: { id: generation.chatId },
-    select: { id: true, userId: true, modelRef: true, title: true },
+    select: { id: true, userId: true, modelRef: true, title: true, agentId: true },
   });
   if (!chat) throw new GenerationSetupError("Chat untuk generasi ini tidak ditemukan.");
 
@@ -1091,6 +1101,13 @@ export async function runGeneration(
   let text = "";
   let ordinal = 0;
 
+  // Langkah 3: agen pemilik chat. Id asing (berkas agen dihapus) tidak
+  // menggagalkan generasi — chat tetap jalan sebagai agen bawaan tanpa
+  // delegasi, karena kehilangan peran lebih ringan daripada chat mati.
+  const agent = chat.agentId === null ? null : getAgentFile(chat.agentId);
+  const callAgentToolDefs =
+    agent && agent.allowedSubAgents.length > 0 ? [callAgentTool(agent.allowedSubAgents)] : [];
+
   // FIX-11: potongan tool call disatukan per index setelah stream selesai.
   const toolsEnabled = true;
   const toolFragments = new Map<number, { id?: string; name?: string; arguments: string }>();
@@ -1143,11 +1160,12 @@ export async function runGeneration(
           {
             role: "system",
             content: composeSystemPrompt({
-              tools: toolsEnabled ? chatToolNames() : [],
+              tools: toolsEnabled ? [...chatToolNames(), ...callAgentToolDefs.map((t) => t.function.name)] : [],
               webSearch: searchSystem !== null,
               canSeeImages: history.messages.some((message) => Array.isArray(message.content)),
               canRunCode: false,
               ...(userSystem ? { userSystemPrompt: userSystem } : {}),
+              ...(agent ? { agentPrompt: agent.body } : {}),
               runtimeContext: buildRuntimeContext({
                 now: new Date(),
                 // shortcut: preferensi zona waktu per pengguna belum ada kolomnya
@@ -1203,11 +1221,12 @@ export async function runGeneration(
           {
             role: "system",
             content: composeSystemPrompt({
-              tools: toolsEnabled ? chatToolNames() : [],
+              tools: toolsEnabled ? [...chatToolNames(), ...callAgentToolDefs.map((t) => t.function.name)] : [],
               webSearch: searchSystem !== null,
               canSeeImages: history.messages.some((message) => Array.isArray(message.content)),
               canRunCode: false,
               ...(userSystem ? { userSystemPrompt: userSystem } : {}),
+              ...(agent ? { agentPrompt: agent.body } : {}),
               runtimeContext: buildRuntimeContext({
                 now: new Date(),
                 // shortcut: preferensi zona waktu per pengguna belum ada kolomnya
@@ -1226,7 +1245,9 @@ export async function runGeneration(
           ...history.messages,
         ],
         stream: true,
-        ...(toolsEnabled ? { tools: chatTools() } : {}),
+        // Langkah 3: `call_agent` menyusul daftar tool bawaan, hanya bila agen
+        // pemilik chat punya sub-agen sah.
+        ...(toolsEnabled ? { tools: [...chatTools(), ...callAgentToolDefs] } : {}),
       },
       outbound: {
         allowInsecureHttp: config.allowInsecureHttp,
@@ -1295,6 +1316,9 @@ export async function runGeneration(
   // bisa hilang tanpa satu pun tanda di UI.
   let docTruncated = false;
   let docUnknownBlocks = 0;
+  // Langkah 3: hasil delegasi dicatat sebagai part supaya UI bisa menampilkan
+  // indikator kolaborasi setelah jawaban selesai (SSE hanya untuk langsung).
+  const agentParts: { kind: "agent"; agentId: string; name: string; status: string; text: string }[] = [];
   const toolCalls = assembleToolCalls(toolFragments);
   if (toolCalls.length > 0) {
     // Tool call nyata: sebutkan nama tool yang dijalankan, bukan animasi.
@@ -1305,6 +1329,61 @@ export async function runGeneration(
     });
   }
   for (const call of toolCalls.slice(0, 3)) {
+    if (call.name === CALL_AGENT_TOOL_NAME) {
+      // Delegasi dicatat sebagai part, bukan teks: lead tidak menulis ulang
+      // hasil sub-agen, jadi tanpa part ini kolaborasi tak terlihat di UI.
+      let args: { targetAgentId: string; taskPayload: string; context: string } | null = null;
+      try {
+        args = parseCallAgentArgs(call.arguments);
+      } catch {
+        args = null;
+      }
+      if (!agent || !args) {
+        agentParts.push({ kind: "agent", agentId: "", name: "", status: "invalid", text: "" });
+        continue;
+      }
+      const target = getAgentFile(args.targetAgentId);
+      const name = target?.name ?? args.targetAgentId;
+      await publishEvent(db, generationId, "phase", {
+        phase: "agent",
+        label: `${agent.name} memanggil ${name}`,
+        data: { agentId: args.targetAgentId },
+      });
+      let result: DelegateResult;
+      try {
+        result = await delegateAgent({
+          lead: agent,
+          args,
+          url: await assertOutboundAllowed(`${baseUrl.replace(/\/+$/, "")}${CHAT_COMPLETIONS_PATH}`, {
+            allowInsecureHttp: config.allowInsecureHttp,
+            allowlist: config.outboundAllowlist,
+          }),
+          apiKey,
+          modelId: model,
+          outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
+          signal,
+        });
+      } catch {
+        // Signal dibatalkan di tengah delegasi: jalur stop yang menutup generasi.
+        if (signal.aborted) return;
+        result = { status: "failed", message: "Delegasi gagal.", errorCode: "DELEGATE_FAILED" };
+      }
+      agentParts.push({
+        kind: "agent",
+        agentId: args.targetAgentId,
+        name,
+        status: result.status,
+        text: result.text ?? result.message ?? "",
+      });
+      await publishEvent(db, generationId, "part", {
+        kind: "agent",
+        agentId: args.targetAgentId,
+        name,
+        status: result.status,
+        text: result.text ?? result.message ?? "",
+      });
+      continue;
+    }
     if (call.name === GENERATE_DOCUMENT_TOOL_NAME) {
       try {
         const args = parseGenerateDocumentArgs(call.arguments);
@@ -1357,6 +1436,102 @@ export async function runGeneration(
       }
     } catch {
       // Argumen tidak sah atau render gagal: catat sebagai catatan, bukan galat.
+    }
+  }
+
+  // Ronde sintesis: sub-agen sudah menjawab, lead belum. Tanpa ronde ini
+  // pengguna hanya melihat kartu delegasi tanpa jawaban akhir. Sekali saja —
+  // tidak ada loop, jadi tidak ada risiko delegasi berantai.
+  // `agentParts` diisi berurutan hanya untuk call_agent, jadi zip dengan
+  // daftar call_agent saja — bukan indeks gabungan seluruh toolCalls.
+  const agentCalls = toolCalls.slice(0, 3).filter((call) => call.name === CALL_AGENT_TOOL_NAME);
+  const delegated = agentCalls
+    .map((call, index) => ({ call, part: agentParts[index] }))
+    .filter((row): row is { call: (typeof agentCalls)[number]; part: NonNullable<(typeof agentParts)[number]> } =>
+      row.part !== undefined,
+    );
+  if (delegated.length > 0 && !signal.aborted) {
+    try {
+      await publishEvent(db, generationId, "phase", {
+        phase: "synthesis",
+        label: "Menyusun jawaban akhir",
+        data: { agents: delegated.map((row) => row.part!.agentId) },
+      });
+      const toolMessages = delegated.map((row) => ({
+        role: "tool",
+        tool_call_id: toolCallId(row.call.id),
+        content: delegateToolText(
+          row.part!.status === "ok"
+            ? { status: "ok", text: row.part!.text }
+            : { status: "failed", message: row.part!.text },
+          row.part!.agentId,
+        ),
+      }));
+      await streamGateway({
+        generationId,
+        url: `${baseUrl.replace(/\/+$/, "")}${CHAT_COMPLETIONS_PATH}`,
+        apiKey,
+        body: {
+          model,
+          messages: [
+            {
+              role: "system",
+              content: composeSystemPrompt({
+                tools: [],
+                webSearch: false,
+                canSeeImages: false,
+                canRunCode: false,
+                ...(agent ? { agentPrompt: agent.body } : {}),
+              }).content,
+            },
+            ...history.messages,
+            {
+              role: "assistant",
+              content: text,
+              tool_calls: delegated.map((row) => ({
+                id: toolCallId(row.call.id),
+                type: "function",
+                function: { name: CALL_AGENT_TOOL_NAME, arguments: row.call.arguments },
+              })),
+            },
+            ...toolMessages,
+            {
+              role: "user",
+              content: "Susun jawaban akhir untuk saya dari hasil agen di atas.",
+            },
+          ],
+          stream: true,
+        },
+        outbound: {
+          allowInsecureHttp: config.allowInsecureHttp,
+          allowlist: config.outboundAllowlist,
+        },
+        signal,
+        shouldStop: () => stopIfRequested(db, generationId),
+        onDelta: async (delta) => {
+          await held();
+          if (delta.kind !== "text" || !delta.text) {
+            if (delta.kind === "usage" && delta.usage) {
+              await publishEvent(db, generationId, "usage", delta.usage);
+            }
+            return;
+          }
+          text += delta.text;
+          await db.chatMessagePart.create({
+            data: {
+              id: randomUUID(),
+              messageId: generation.assistantMessageId,
+              kind: "text",
+              payloadJson: JSON.stringify({ text: delta.text }),
+              ordinal: ordinal++,
+            },
+          });
+          await publishEvent(db, generationId, "part", { kind: "text", text: delta.text });
+        },
+      });
+    } catch (err) {
+      // Kesalahan ronde sintesis tidak menghapus hasil delegasi yang sudah ada.
+      if (signal.aborted || err instanceof LeaseLost || err instanceof StopRequested) throw err;
     }
   }
 
@@ -1420,6 +1595,8 @@ export async function runGeneration(
   const contentJson = JSON.stringify({
     parts: [
       ...notePart,
+      // Kartu agen mendahului teks: kolaborasi terbaca sebelum jawaban akhir.
+      ...agentParts.filter((part) => part.agentId !== ""),
       ...artifactParts,
       ...(text === "" ? [] : [{ kind: "text", text }]),
       ...citationParts,

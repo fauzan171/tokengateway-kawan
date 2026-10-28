@@ -511,6 +511,93 @@ describe("runGeneration", () => {
     expect(assistant.status).toBe("complete");
   });
 
+  it("call_agent: sub-agen dijalankan, hasilnya disintesis lead, tercatat sebagai part", async () => {
+    const chat = await createChat(db, { userId, agentId: "architect" });
+    const sent = await sendMessage(db, {
+      userId,
+      chatId: chat.id,
+      content: "Rancang arsitektur ini",
+      parentId: null,
+      model: modelFor("agent-delegate"),
+      idempotencyKey: null,
+    });
+    const before = fixture.requests.length;
+
+    await run(sent.generationId);
+
+    const requests = fixture.requests.slice(before);
+    // Tiga panggilan: lead (ronde 1), sub-agen (non-stream), lead (sintesis).
+    expect(requests).toHaveLength(3);
+    const subAgent = requests[1]!;
+    expect((subAgent.body as { stream?: boolean }).stream).toBe(false);
+    const subMessages = (subAgent.body as { messages: { role: string; content: string }[] })
+      .messages;
+    expect(subMessages[0]!.content).toContain("agen riset");
+    expect(subMessages[1]!.content).toContain("Cari batasan versi Prisma 7.");
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({
+      where: { id: sent.assistantMessageId },
+    });
+    expect(assistant.status).toBe("complete");
+    const parts = JSON.parse(assistant.contentJson).parts as {
+      kind: string;
+      agentId?: string;
+      status?: string;
+      text?: string;
+    }[];
+    const agentPart = parts.find((part) => part.kind === "agent");
+    expect(agentPart?.agentId).toBe("researcher");
+    expect(agentPart?.status).toBe("ok");
+    expect(agentPart?.text).toContain("Prisma 7");
+
+    const text = parts.filter((part) => part.kind === "text").map((part) => part.text).join("");
+    expect(text).toContain("Sintesis dari sub-agen");
+    expect(text).toContain("Prisma 7 butuh Node 20+");
+  });
+
+  it("call_agent: target di luar allowed_sub_agents ditolak tanpa panggilan provider", async () => {
+    const chat = await createChat(db, { userId, agentId: "researcher" });
+    // `researcher` tidak punya sub-agen, jadi tool tidak dikirim ke gateway
+    // sama sekali dan balasan model tetap mengalir seperti biasa.
+    const sent = await sendMessage(db, {
+      userId,
+      chatId: chat.id,
+      content: "Halo",
+      parentId: null,
+      model: modelFor("usage-present"),
+      idempotencyKey: null,
+    });
+    const before = fixture.requests.length;
+
+    await run(sent.generationId);
+
+    const request = fixture.requests.slice(before)[0]!;
+    const tools = (request.body as { tools?: { function: { name: string } }[] }).tools ?? [];
+    expect(tools.map((tool) => tool.function.name)).not.toContain("call_agent");
+  });
+
+  it("chat dengan agentId asing tetap berjalan sebagai agen bawaan", async () => {
+    const chat = await createChat(db, { userId });
+    // Baris dibuat langsung: createChat menolak id asing, tapi berkas agen bisa
+    // dihapus sesudah chat dibuat — generasi tidak boleh mati karena itu.
+    await db.chat.update({ where: { id: chat.id }, data: { agentId: "sudah-dihapus" } });
+    const sent = await sendMessage(db, {
+      userId,
+      chatId: chat.id,
+      content: "Halo",
+      parentId: null,
+      model: modelFor("usage-present"),
+      idempotencyKey: null,
+    });
+
+    await run(sent.generationId);
+
+    const assistant = await db.chatMessage.findUniqueOrThrow({
+      where: { id: sent.assistantMessageId },
+    });
+    expect(assistant.status).toBe("complete");
+  });
+
   it("riwayat di bawah budget tidak mencatat history-trimmed", async () => {
     const chat = await createChat(db, { userId });
     let parentId: string | null = null;
