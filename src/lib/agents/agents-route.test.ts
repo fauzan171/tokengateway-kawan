@@ -1,9 +1,9 @@
 /**
- * K5: katalog agent publik — hanya metadata yang aman, disaring audiens.
+ * Katalog agent publik — hanya metadata yang aman, dibaca dari `agents/*.md`.
  *
  * Dua lapis, pola sama dengan uji route lain di repo:
- *   - `toAgentEntry`: pemetaan tidak membawa systemPrompt/tools;
- *   - `GET`: sesi + role nyata di SQLite sementara menentukan audiens.
+ *   - `toAgentEntry`: pemetaan tidak membawa badan prompt / allowed_sub_agents;
+ *   - `GET`: sesi nyata di SQLite sementara; katalog datang dari berkas agen.
  */
 
 import { randomUUID } from "node:crypto";
@@ -11,7 +11,6 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempDb, type TempDb } from "../../../tests/helpers/auth-db";
 import type { Config } from "@/lib/config/env";
 import type { Db } from "@/lib/db";
-import * as registry from "./registry";
 
 const state = vi.hoisted(() => ({
   userId: "",
@@ -75,29 +74,16 @@ async function getAgents(): Promise<{ status: number; body: AgentBody }> {
 }
 
 describe("GET /api/kawan/v1/agents", () => {
-  it("pengguna biasa hanya melihat agent audience 'all'", async () => {
+  it("mengembalikan agen dari agents/*.md beserta greeting", async () => {
     const { status, body } = await getAgents();
     expect(status).toBe(200);
-    expect(body.agents.map((agent) => agent["id"])).toContain("default");
-    expect(body.agents.every((agent) => agent["audience"] === "all")).toBe(true);
-  });
-
-  it("admin melihat agent khusus admin", async () => {
-    await db.user.update({ where: { id: state.userId }, data: { role: "admin" } });
-    const adminAgent = {
-      ...registry.getAgent("default")!,
-      id: "admin-only",
-      audience: "admin" as const,
-    };
-    const original = registry.listAgents;
-    const spy = vi.spyOn(registry, "listAgents").mockImplementation((audience) =>
-      audience === "admin" ? [...original(audience), adminAgent] : original(audience),
-    );
-    try {
-      const { body } = await getAgents();
-      expect(body.agents.map((agent) => agent["id"])).toContain("admin-only");
-    } finally {
-      spy.mockRestore();
+    const ids = body.agents.map((agent) => agent["id"]);
+    expect(ids).toEqual(expect.arrayContaining(["architect", "researcher", "reviewer"]));
+    for (const agent of body.agents) {
+      expect(typeof agent["name"]).toBe("string");
+      expect(typeof agent["role"]).toBe("string");
+      expect(typeof agent["greeting"]).toBe("string");
+      expect((agent["greeting"] as string).length).toBeGreaterThan(0);
     }
   });
 
@@ -107,28 +93,29 @@ describe("GET /api/kawan/v1/agents", () => {
     expect(res.status).toBe(401);
   });
 
-  it("respons tidak memuat systemPrompt maupun tools", async () => {
+  it("respons tidak memuat badan prompt maupun allowed_sub_agents", async () => {
     const { body } = await getAgents();
     const raw = JSON.stringify(body);
+    expect(raw).not.toContain("allowedSubAgents");
+    expect(raw).not.toContain("allowed_sub_agents");
     expect(raw).not.toContain("systemPrompt");
-    expect(raw).not.toContain("\"tools\"");
-    expect(raw).not.toContain("Kebijakan server");
+    // Kalimat pertama badan prompt architect tidak boleh ikut.
+    expect(raw).not.toContain("merancang, bukan menulis");
   });
 
   it("toAgentEntry hanya memetakan field publik", () => {
     const entry = toAgentEntry({
-      id: "default",
-      version: 1,
-      label: "Kawan",
+      id: "arsitek",
+      name: "Arsitek",
+      role: "Arsitektur",
       description: "umum",
-      systemPrompt: "RAHASIA-SYSTEM-PROMPT",
-      tools: ["rahasia"],
-      defaultModelId: "deepseek-v4.1-flash",
-      limits: { maxSteps: 40, maxTokensPerRun: 50_000, deadlineMs: 900_000 },
-      audience: "all",
+      model: "deepseek-v4.1-flash",
+      greeting: "Halo!",
+      allowedSubAgents: ["rahasia-sub"],
+      body: "RAHASIA-SYSTEM-PROMPT",
     });
     expect(Object.keys(entry).sort()).toEqual(
-      ["audience", "defaultModelId", "description", "id", "label", "limits", "version"].sort(),
+      ["description", "greeting", "id", "model", "name", "role"].sort(),
     );
     expect(JSON.stringify(entry)).not.toContain("RAHASIA");
   });

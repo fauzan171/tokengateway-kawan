@@ -1,36 +1,30 @@
 /**
- * Bentuk publik katalog agent (K5).
+ * Bentuk publik katalog agent.
  *
  * Dipisah dari `route.ts` karena Next.js hanya mengizinkan handler route
  * diekspor dari berkas route. Menaruh pemetaan di sini juga membuat aturan
- * "systemPrompt dan tools tidak pernah keluar" bisa diuji tanpa HTTP.
+ * "body (system prompt) tidak pernah keluar" bisa diuji tanpa HTTP.
  */
 
-import type { AgentAudience, AgentDefinition } from "./registry";
+import type { AgentFile } from "./loader";
 
 export type AgentEntry = {
   id: string;
-  version: number;
-  label: string;
+  name: string;
+  role: string;
   description: string;
-  defaultModelId: string;
-  limits: { maxSteps: number; maxTokensPerRun: number; deadlineMs: number };
-  audience: AgentAudience;
+  model: string;
+  greeting: string;
 };
 
-/** Field publik saja. `systemPrompt` dan `tools` sengaja tidak dipetakan. */
-export function toAgentEntry(agent: AgentDefinition): AgentEntry {
+/** Field publik saja. `body` dan `allowedSubAgents` sengaja tidak dipetakan. */
+export function toAgentEntry(agent: AgentFile): AgentEntry {
   return {
     id: agent.id,
-    version: agent.version,
-    label: agent.label,
+    name: agent.name,
+    role: agent.role,
     description: agent.description,
-    defaultModelId: agent.defaultModelId,
-    limits: {
-      maxSteps: agent.limits.maxSteps,
-      maxTokensPerRun: agent.limits.maxTokensPerRun,
-      deadlineMs: agent.limits.deadlineMs,
-    },
-    audience: agent.audience,
+    model: agent.model,
+    greeting: agent.greeting,
   };
 }

@@ -1,21 +1,17 @@
 /**
- * Katalog agent (K5): `GET /api/kawan/v1/agents`.
+ * Katalog agent: `GET /api/kawan/v1/agents`.
  *
- * Yang dikembalikan hanya metadata yang dibutuhkan pemilih agent. `systemPrompt`
- * dan `tools` TIDAK PERNAH ikut: keduanya rincian internal server yang, kalau
- * bocor, memberi jalan menulis prompt yang menimpa kebijakan.
+ * Daftar dibaca dari `agents/*.md` (loader), bukan dari kode: menambah agen
+ * berarti menambah berkas, tanpa menyentuh route.
  *
- * Penyaringan audiens dilakukan di sini, bukan di klien: agent "admin" tidak
- * boleh sekadar disembunyikan dari tampilan.
- *
- * Pemetaan `toAgentEntry` sengaja tinggal di `lib/agents/public.ts`, bukan di
- * berkas ini: Next.js menolak export selain handler route dari `route.ts`
- * (build gagal "not a valid Route export field").
+ * Yang dikembalikan hanya metadata yang dibutuhkan katalog dan sapaan pembuka.
+ * Badan markdown (system prompt) dan `allowed_sub_agents` TIDAK PERNAH ikut:
+ * keduanya rincian internal server.
  */
 
 import { requestId } from "@/lib/api/errors";
 import { handleRouteError, jsonOk, requireContext } from "@/lib/api/route";
-import { listAgents, type AgentAudience } from "@/lib/agents/registry";
+import { listAgentFiles } from "@/lib/agents/loader";
 import { toAgentEntry } from "@/lib/agents/public";
 
 export const runtime = "nodejs";
@@ -26,10 +22,8 @@ export async function GET(request: Request): Promise<Response> {
   const reqId = requestId(request);
   const started = Date.now();
   try {
-    const { userId, db } = await requireContext();
-    const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } });
-    const audience: AgentAudience = user?.role === "admin" ? "admin" : "all";
-    return jsonOk({ schemaVersion: 1, agents: listAgents(audience).map(toAgentEntry) }, reqId);
+    await requireContext();
+    return jsonOk({ schemaVersion: 1, agents: listAgentFiles().map(toAgentEntry) }, reqId);
   } catch (err) {
     return handleRouteError(err, reqId, ROUTE, started);
   }
