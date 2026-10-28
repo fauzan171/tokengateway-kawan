@@ -4,12 +4,12 @@ import { E2E_EMAIL, E2E_PASSWORD } from "./seed";
 /**
  * WO-9 — reconnect SSE di tengah run (acceptance WO-10 poin 5).
  *
- * Membuktikan `afterSeq` tidak menggandakan teks maupun aktivitas. Caranya:
+ * Membuktikan reconnect tidak menggandakan teks maupun aktivitas. Caranya:
  * jalankan agent riset, lalu paksa koneksi stream putus ketika run masih
  * berjalan dengan meng-abort request `.../events`. Server tetap menulis event
- * (worker tidak ikut mati); setelah itu halaman memuat ulang snapshot dan
- * melanjutkan dari cursor. Kalau dedup salah, potongan teks/aktivitas muncul dua
- * kali.
+ * (worker tidak ikut mati); pengguna menekan "Sambung ulang", halaman memuat
+ * ulang snapshot lalu menyambung stream dengan cursor terakhir. Kalau dedup
+ * `(runId, seq)` salah, potongan teks/aktivitas muncul dua kali.
  *
  * Beda dari `research.spec.ts` (yang reload SETELAH terminal): di sini putusnya
  * terjadi saat run aktif, jadi jalan replay + cursor benar-benar dipakai.
@@ -56,17 +56,17 @@ test("WO-9: putus SSE di tengah run tidak menggandakan teks atau aktivitas", asy
   const banner = page.getByTestId("sse-stalled-banner");
   await expect(banner).toBeVisible({ timeout: 30_000 });
 
-  // Sambung ulang: snapshot + stream dimulai lagi dari cursor terakhir.
+  // Sambung ulang: snapshot dimuat ulang lalu stream menyambung dari cursor
+  // terakhir; dedup `(runId, seq)` sisi klien yang mencegah penggandaan.
   await banner.getByRole("button", { name: /Sambung ulang/i }).click();
 
   // Run tetap lanjut di server. Tunggu terminal lewat metering.
   await expect(page.getByTestId("task-metering")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByRole("article").filter({ hasText: "Balasan palsu" }).first()).toBeVisible();
 
-  // Inti acceptance: satu jawaban, satu aktivitas per langkah.
+  // Inti acceptance: satu jawaban, satu label sintesis. Hitungan jumlah
+  // listitem sengaja tidak dipakai — `PhaseTimeline` sudah memotong ke 3 item
+  // secara struktural (`slice(-3)`), jadi `<= 3` tidak bisa gagal.
   expect(await occurrences(page, "Balasan palsu")).toBe(1);
-  const steps = await page.getByTestId("phase-timeline").getByRole("listitem").count();
-  expect(steps).toBeLessThanOrEqual(3);
-  // Label sintesis muncul tepat sekali (bukan dobel karena replay).
   expect(await occurrences(page, "Menyusun jawaban akhir")).toBe(1);
 });

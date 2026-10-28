@@ -29,8 +29,11 @@ const MIGRATIONS_DIR = "prisma/migrations/sqlite";
  * jadi menerapkan seluruhnya di DB kosong aman.
  */
 function applyMigrations(db: Database.Database): void {
+  // Filter sama dengan `scripts/check-migrations.mjs`: direktori apa pun. Pola
+  // `^\d{14}_` di sini akan melewati direktori yang lolos checker & prisma
+  // secara diam-diam, mengulang persis insiden "tabel tidak ada".
   const dirs = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && /^\d{14}_/.test(entry.name))
+    .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
   for (const dir of dirs) {
@@ -50,6 +53,13 @@ export const E2E_B_USER_ID = "user-e2e-b";
 /** Admin: alur E. */
 export const ADMIN_EMAIL = "admin@example.com";
 export const ADMIN_USER_ID = "user-e2e-admin";
+/**
+ * Pengguna khusus onboarding: tanpa baris `UserSetting` dan tidak pernah dihapus
+ * spec lain. `flow-e` menghapus `E2E_B`, jadi memakai E2E_B di sini membuat
+ * kedua spec saling menimpa saat `fullyParallel` di satu DB bersama.
+ */
+export const ONBOARDING_EMAIL = "e2e-onboarding@example.com";
+export const ONBOARDING_USER_ID = "user-e2e-onboarding";
 /** Akun yang sengaja belum diaktifkan: alur A memakai jalur ini. */
 export const PENDING_EMAIL = "pending@example.com";
 export const PENDING_USER_ID = "user-e2e-pending";
@@ -119,13 +129,16 @@ export function seed(): void {
   );
   user.run(E2E_USER_ID, E2E_EMAIL, "E2E", "user", "active", now);
   user.run(E2E_B_USER_ID, E2E_B_EMAIL, "E2E B", "user", "active", now);
+  // Tanpa UserSetting: kartu onboarding harus tampil. Tidak dibuatkan Connection
+  // karena spec ini tidak pernah menjalankan chat.
+  user.run(ONBOARDING_USER_ID, ONBOARDING_EMAIL, "E2E Onboarding", "user", "active", now);
   user.run(ADMIN_USER_ID, ADMIN_EMAIL, "Admin E2E", "admin", "active", now);
   user.run(PENDING_USER_ID, PENDING_EMAIL, "Pending", "user", "pending", now);
 
   const credential = db.prepare(
     `INSERT INTO "Credential" (userId, passwordHash, updatedAt) VALUES (?, ?, ?)`,
   );
-  for (const id of [E2E_USER_ID, E2E_B_USER_ID, ADMIN_USER_ID, PENDING_USER_ID]) {
+  for (const id of [E2E_USER_ID, E2E_B_USER_ID, ONBOARDING_USER_ID, ADMIN_USER_ID, PENDING_USER_ID]) {
     credential.run(id, hashSync(E2E_PASSWORD), now);
   }
 

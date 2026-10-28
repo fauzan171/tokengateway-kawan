@@ -95,7 +95,9 @@ function focusLine(configJson: string | null): string | null {
   }
   if (typeof focus !== "string" || focus.trim() === "") return null;
   const custom = focus.startsWith("custom:") ? focus.slice("custom:".length).trim().slice(0, 200) : "";
-  const label = custom !== "" ? custom : FOCUS_PRESETS[focus];
+  // `Object.hasOwn`: tanpa ini `focus = "constructor"` mengambil fungsi dari
+  // prototype chain dan lolos `if (!label)`, menyisipkan teks sampah ke prompt.
+  const label = custom !== "" ? custom : Object.hasOwn(FOCUS_PRESETS, focus) ? FOCUS_PRESETS[focus] : null;
   if (!label) return null;
   return `Fokus pengguna saat ini: ${label}. Sesuaikan jawaban dengan fokus itu.`;
 }

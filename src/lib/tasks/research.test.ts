@@ -357,7 +357,7 @@ describe("D4 — fokus onboarding di prompt riset", () => {
     expect((await db.taskRun.findUniqueOrThrow({ where: { id: runId } })).status).toBe("completed");
   });
 
-  it("custom dipotong 200 karakter dan karakter kontrol hilang", async () => {
+  it("custom dipotong 200 karakter", async () => {
     const { runId } = await admission();
     await setFocus(runId, `custom:${"a".repeat(150)}\n${"b".repeat(100)}`);
     await runTaskRun(db, config(), runId, new AbortController().signal);
@@ -365,6 +365,18 @@ describe("D4 — fokus onboarding di prompt riset", () => {
     const body = lastBody();
     expect(body).not.toContain("b".repeat(51));
     expect(body).toContain("a".repeat(150));
+  });
+
+  it("preset bernama properti prototype tidak menyisipkan teks sampah", async () => {
+    // Regresi: `FOCUS_PRESETS[focus]` tanpa `Object.hasOwn` mengembalikan
+    // `Object`/`Function` dari prototype chain untuk "constructor"/"toString".
+    const { runId } = await admission();
+    await setFocus(runId, "constructor");
+    await runTaskRun(db, config(), runId, new AbortController().signal);
+
+    const body = lastBody();
+    expect(body).not.toContain("native code");
+    expect(body).not.toContain("[object Object]");
   });
 
   it("focus null / JSON rusak → prompt tanpa kalimat fokus, run tetap selesai", async () => {

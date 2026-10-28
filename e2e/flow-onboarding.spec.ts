@@ -1,13 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-import { E2E_B_EMAIL, E2E_PASSWORD } from "./seed";
+import { E2E_PASSWORD, ONBOARDING_EMAIL } from "./seed";
 
 /**
  * WO-9 — onboarding end-to-end (acceptance WO-10 poin 6).
  *
- * Memakai pengguna kedua (`E2E_B`): seed tidak menulis `UserSetting` untuknya,
- * jadi jawaban onboarding benar-benar kosong dan kartu harus muncul. Pengguna
- * utama sudah punya baris settings dari spec lain, sehingga tidak bisa dipakai
- * untuk membuktikan keadaan "belum dijawab".
+ * Memakai pengguna khusus (`ONBOARDING`): seed tidak menulis `UserSetting`
+ * untuknya, jadi jawaban onboarding benar-benar kosong dan kartu harus muncul.
+ * Pengguna utama sudah punya baris settings dari spec lain, sehingga tidak bisa
+ * dipakai untuk membuktikan keadaan "belum dijawab". `E2E_B` juga tidak bisa:
+ * `flow-e` menghapusnya, dan kedua spec berjalan paralel di satu DB.
  *
  * Oracles:
  *  - kartu tampil sebelum dijawab, hilang setelah disimpan;
@@ -18,7 +19,7 @@ import { E2E_B_EMAIL, E2E_PASSWORD } from "./seed";
 
 async function login(page: Page): Promise<void> {
   await page.goto("/masuk");
-  await page.getByLabel("Email").fill(E2E_B_EMAIL);
+  await page.getByLabel("Email").fill(ONBOARDING_EMAIL);
   await page.getByLabel("Kata sandi").fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Masuk" }).click();
   await expect(page).not.toHaveURL(/\/masuk/);

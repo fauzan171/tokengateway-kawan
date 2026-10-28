@@ -12,9 +12,10 @@ import { E2E_EMAIL, E2E_PASSWORD } from "./seed";
  * Oracles:
  *  - entri artefak muncul dengan nama + format;
  *  - unduhan lewat route mengembalikan 200 dan byte yang diawali `PK`
- *    (ZIP/OOXML), bukan HTML galat;
- *  - `sha256` byte yang diunduh sama dengan `Artifact.sha256` di DB
- *    (dibuktikan lewat endpoint artefak: panjang byte + header).
+ *    (ZIP/OOXML), bukan HTML galat, dengan panjang wajar.
+ *
+ * Hash bukan oracle di sini: `file-gen.test.ts:102` yang membandingkan
+ * `Artifact.sha256` dengan hash byte storage. Spec ini tidak menyentuh DB.
  */
 
 async function login(page: Page): Promise<void> {
