@@ -247,3 +247,66 @@ describe("idempotensi kiriman (FIX-03)", () => {
     expect(posts[0].key).toBeTruthy();
   });
 });
+
+/**
+ * Langkah 4 — katalog agen sebagai tampilan awal chat kosong. Yang diuji:
+ * kartu dirender dari server, pilihan mengunci `agentId` di chat baru, dan
+ * sapaan agen muncul sebagai bubble pembuka.
+ */
+describe("katalog agen (Langkah 4)", () => {
+  const AGENTS = {
+    agents: [
+      {
+        id: "architect",
+        name: "Software Architect",
+        role: "Arsitektur & Desain Sistem",
+        description: "Merancang arsitektur dan trade-off.",
+        model: "deepseek-v4.1-flash",
+        greeting: "Halo! Saya Software Architect Kawan.",
+      },
+    ],
+  };
+
+  it("chat kosong tanpa pesan → katalog tampil, bukan kotak input kosong", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/kawan/v1/agents") return json(AGENTS);
+      if (url === "/api/kawan/v1/models") return json({ models: [] });
+      if (url === "/api/kawan/v1/capabilities") return json(NONE);
+      if (url === "/api/kawan/v1/documents") return json({ documents: [] });
+      return json({}, 404);
+    });
+    await mount();
+
+    expect(container.textContent).toContain("Software Architect");
+    expect(container.textContent).toContain("Arsitektur & Desain Sistem");
+    expect(has("Pilih Agen: Software Architect")).toBe(true);
+  });
+
+  it("pilih agen → POST /chat membawa agentId, sapaan jadi bubble pembuka", async () => {
+    let posted: Record<string, unknown> | null = null;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/kawan/v1/agents") return json(AGENTS);
+      if (url === "/api/kawan/v1/models") return json({ models: [] });
+      if (url === "/api/kawan/v1/capabilities") return json(NONE);
+      if (url === "/api/kawan/v1/documents") return json({ documents: [] });
+      if (url === "/api/kawan/v1/chat" && init?.method === "POST") {
+        posted = JSON.parse(String(init.body));
+        return json({ id: "c9" });
+      }
+      if (url.startsWith("/api/kawan/v1/chat/")) return json({ messages: [] });
+      return json({}, 404);
+    });
+    await mount();
+
+    const card = container.querySelector('[aria-label="Pilih Agen: Software Architect"]')!;
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+
+    expect(posted).toEqual({ agentId: "architect" });
+    expect(container.textContent).toContain("Halo! Saya Software Architect Kawan.");
+    // Katalog sudah tidak tampil: chat ini terkunci ke satu agen.
+    expect(has("Pilih Agen: Software Architect")).toBe(false);
+  });
+});

@@ -33,6 +33,7 @@ import {
 import { IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/chat/content";
 import { applyVariables } from "@/lib/prompts/variables";
 import { useT, type Translate } from "@/lib/i18n/context";
+import type { AgentEntry } from "@/lib/agents/public";
 import { ThinkingDots, PhaseTimeline, type PhaseView } from "@/components/thinking-indicator";
 import { FilePreviewDrawer, type PreviewTarget } from "@/components/file-preview-drawer";
 
@@ -146,14 +147,27 @@ function parseSources(contentJson: string): SourceView[] {
   return [];
 }
 
+/** Bagian delegasi `call_agent` yang tercatat di jawaban lead (Langkah 3). */
+type AgentPartView = { agentId: string; name: string; status: string; text: string };
+
+function parseAgentParts(contentJson: string): AgentPartView[] {
+  try {
+    const data = JSON.parse(contentJson);
+    if (!Array.isArray(data?.parts)) return [];
+    return data.parts.filter(
+      (p: { kind?: string; agentId?: string }) =>
+        p?.kind === "agent" && typeof p?.agentId === "string" && p.agentId !== "",
+    ) as AgentPartView[];
+  } catch {}
+  return [];
+}
+
 type CitationView = {
   index: number;
   chunkId: string;
   filename: string;
   page: number | null;
-};
-
-function parseCitations(contentJson: string): CitationView[] {
+};function parseCitations(contentJson: string): CitationView[] {
   try {
     const data = JSON.parse(contentJson);
     if (!Array.isArray(data?.parts)) return [];
@@ -233,6 +247,12 @@ export function ChatView({
   // membawa id + URL unduhan, bukan base64.
   const [attachments, setAttachments] = useState<ImageRef[]>([]);
   const [modelRef, setModelRef] = useState<string | null>(null);
+  // Langkah 4: katalog agen tampil di chat kosong tanpa pesan. Agen terpilih
+  // dikunci di chat baru dan tidak bisa berpindah di tengah percakapan.
+  const [agents, setAgents] = useState<AgentEntry[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [pickingAgent, setPickingAgent] = useState(false);
+  const activeAgent = agents.find((agent) => agent.id === activeAgentId) ?? null;
   const [vision, setVision] = useState(false);
   const [webSearchAvailable, setWebSearchAvailable] = useState(false);
   const [webSearchOn, setWebSearchOn] = useState(false);
@@ -311,6 +331,22 @@ export function ChatView({
     };
   }, []);
 
+  // Langkah 4: katalog agen dimuat sekali; gagal fetch berarti katalog tidak
+  // dirender (bukan katalog kosong yang membingungkan).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/kawan/v1/agents")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data?.agents)) return;
+        setAgents(data.agents as AgentEntry[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Preferensi Enter/Shift+Enter dibaca sekali saat mount.
   useEffect(() => {
     let cancelled = false;
@@ -360,6 +396,7 @@ export function ChatView({
         const leaf = preferredLeaf !== undefined ? preferredLeaf : data.chat?.currentMessageId ?? null;
         setActiveLeafId(leaf);
         if (typeof data.chat?.modelRef === "string") setModelRef(data.chat.modelRef);
+        if (typeof data.chat?.agentId === "string") setActiveAgentId(data.chat.agentId);
       }
     } catch {}
     setLoadingChat(false);
@@ -389,6 +426,8 @@ export function ChatView({
     setErrorState(null);
     setMessages([]);
     setActiveLeafId(null);
+    // Agen milik chat tujuan; `refreshChat` mengisi ulang dari server.
+    setActiveAgentId(null);
     setInput(chatId ? draftsRef.current.get(chatId) ?? readDraft(chatId) : "");
     chatIdRef.current = chatId;
     // `input` dibaca lewat ref: efek ini hanya boleh jalan saat chat berganti.
@@ -417,7 +456,7 @@ export function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeGenId]);
 
-  async function ensureChat(): Promise<string> {
+  async function ensureChat(agentId: string | null = null): Promise<string> {
     if (chatId) return chatId;
     const res = await fetch("/api/kawan/v1/chat", {
       method: "POST",
@@ -426,13 +465,37 @@ export function ChatView({
       // supaya judul otomatis bisa mengisinya (FIX-04). Model hanya dikirim
       // bila chat ini memang sudah punya pilihan; selebihnya server yang
       // menentukan dan melaporkan fallback-nya.
-      body: JSON.stringify(modelRef ? { modelRef } : {}),
+      body: JSON.stringify({
+        ...(modelRef ? { modelRef } : {}),
+        ...(agentId ? { agentId } : {}),
+      }),
     });
     if (!res.ok) throw new Error(t("chat.createFailed"));
     const data = await res.json();
     setChatId(data.id);
     onChatCreated?.(data.id);
     return data.id;
+  }
+
+  /**
+   * Langkah 4: memilih agen mengunci chat baru ke agen itu. `greeting` dirender
+   * sebagai bubble pembuka selama chat belum punya pesan — tidak disimpan ke
+   * server, jadi bukan konteks model dan tidak mengotori pohon pesan.
+   */
+  async function handlePickAgent(agent: AgentEntry) {
+    if (chatId || pickingAgent) return;
+    setPickingAgent(true);
+    try {
+      await ensureChat(agent.id);
+      setActiveAgentId(agent.id);
+    } catch (err: unknown) {
+      setErrorState({
+        message: err instanceof Error ? err.message : t("chat.createFailed"),
+        retryable: false,
+      });
+    } finally {
+      setPickingAgent(false);
+    }
   }
 
   async function streamSSE(
@@ -913,6 +976,10 @@ export function ChatView({
   }
 
   // Active ancestry path
+  // Badge kolaborasi: fakta dari fase server, bukan state sendiri.
+  const delegationPhases = phases.filter((p) => p.phase === "agent" || p.phase === "synthesis");
+  const showDelegation = delegationPhases.length > 0;
+
   let activeMessages: TreeNode[] = [];
   try {
     if (messages.length > 0) {
@@ -945,6 +1012,53 @@ export function ChatView({
               <div className="ml-auto h-10 w-2/5 animate-pulse rounded-2xl bg-primary/20" />
               <div className="h-24 w-4/5 animate-pulse rounded-2xl bg-muted/60" />
             </div>
+          ) : chatId === null && agents.length > 0 ? (
+            // Langkah 4: chat baru tanpa pesan = katalog agen, bukan kotak
+            // input kosong. Katalog hilang bila chat sudah ada.
+            <div className="kawan-fade-in flex min-h-[50vh] flex-col justify-center p-4 text-left">
+              <h1 className="text-3xl font-medium tracking-tight text-neutral-600 dark:text-neutral-300 sm:text-4xl">
+                {t("chat.agentCatalogTitle")}
+              </h1>
+              <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                {t("chat.agentCatalogHint")}
+              </p>
+              <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {agents.map((agent) => (
+                  <li key={agent.id}>
+                    <button
+                      type="button"
+                      disabled={pickingAgent}
+                      onClick={() => handlePickAgent(agent)}
+                      aria-label={`${t("chat.agentPick")}: ${agent.name}`}
+                      className="flex h-full w-full cursor-pointer flex-col gap-2 rounded-2xl bg-[#f0f4f9] p-4 text-left transition-colors hover:bg-neutral-200/70 disabled:opacity-60 dark:bg-[#1e1f20] dark:hover:bg-neutral-800"
+                    >
+                      <span className="flex items-center gap-2">
+                        <KawanMascot mood="idle" size={24} />
+                        <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100">
+                          {agent.name}
+                        </span>
+                      </span>
+                      <span className="text-xs font-medium text-muted-foreground">{agent.role}</span>
+                      <span className="line-clamp-3 text-xs text-neutral-700 dark:text-neutral-300">
+                        {agent.description}
+                      </span>
+                      <span className="mt-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Sparkles className="size-3.5" aria-hidden />
+                        {t("chat.agentPick")}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : activeAgent ? (
+            // Agen terpilih: sapaan pembuka dari berkasnya, bukan judul generik.
+            <div className="kawan-fade-in flex flex-col items-start">
+              <div className="mb-1.5">
+                <KawanMascot mood="idle" size={20} />
+              </div>
+              <Markdown text={activeAgent.greeting} />
+            </div>
           ) : (
             <div className="flex min-h-[50vh] flex-col justify-center p-4 text-left">
               <h1 className="text-4xl font-medium tracking-tight text-neutral-500 dark:text-neutral-400 sm:text-5xl">
@@ -975,6 +1089,7 @@ export function ChatView({
             const notes = parseNotes(m.contentJson);
             const artifacts = parseArtifacts(m.contentJson);
             const citations = parseCitations(m.contentJson);
+            const agentParts = parseAgentParts(m.contentJson);
             const sources = parseSources(m.contentJson);
             const siblings = siblingsOf(messages, m.id);
             const sibIdx = siblings.findIndex((s) => s.id === m.id);
@@ -1123,6 +1238,45 @@ export function ChatView({
                     )}
                     {m.status === "streaming" && phases.length > 0 && (
                       <PhaseTimeline phases={phases} active={!text} />
+                    )}
+                    {/* Langkah 4: badge kolaborasi lipat. `<details>` native =
+                        bisa dibuka-tutup tanpa state dan tetap terbaca pembaca
+                        layar. Isinya fakta dari server, bukan animasi. */}
+                    {(agentParts.length > 0 || (m.status === "streaming" && showDelegation)) && (
+                      <details
+                        className="kawan-fade-in mt-2 rounded-xl border bg-muted/40 px-3 py-2 text-xs"
+                        data-testid="delegation-badge"
+                      >
+                        <summary className="cursor-pointer select-none text-muted-foreground">
+                          {t("chat.delegationTitle")}
+                          {agentParts.length > 0
+                            ? ` · ${agentParts.length}`
+                            : ` · ${t("chat.delegationRunning")}`}
+                        </summary>
+                        <ul className="mt-2 space-y-2">
+                          {agentParts.length > 0
+                            ? agentParts.map((part, index) => (
+                                <li key={`${part.agentId}-${index}`}>
+                                  <p className="font-medium text-foreground">
+                                    {part.name || part.agentId}
+                                    <span className="ml-1 font-normal text-muted-foreground">
+                                      {part.status === "ok" ? "✓" : t("chat.delegationFailed")}
+                                    </span>
+                                  </p>
+                                  {part.text && (
+                                    <p className="mt-0.5 line-clamp-4 whitespace-pre-wrap text-muted-foreground">
+                                      {part.text}
+                                    </p>
+                                  )}
+                                </li>
+                              ))
+                            : delegationPhases.map((phase, index) => (
+                                <li key={`${phase.phase}-${index}`} className="text-muted-foreground">
+                                  {phase.label}
+                                </li>
+                              ))}
+                        </ul>
+                      </details>
                     )}
                   </div>
                 )}
@@ -1294,6 +1448,12 @@ export function ChatView({
 
       {/* Input Composer */}
       <form onSubmit={handleSend} className="relative pt-2">
+        {activeAgent && (
+          <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <KawanMascot mood="idle" size={16} />
+            {activeAgent.name}
+          </p>
+        )}
         {attachments.length > 0 && (
           <ul className="mb-2 flex flex-wrap gap-2">
             {attachments.map((file, index) => (
