@@ -1,5 +1,5 @@
 /**
- * D3: chain pencarian riset Tavily → Jina → direct (failover fail-closed).
+ * D3: chain pencarian riset Tavily → Jina → DDG → direct (failover fail-closed).
  *
  * Terpisah dari `web.ts` (SearXNG) supaya perilaku chat lama tidak berubah.
  * Kontrak provider seragam; kegagalan sebagian tidak dianggap gagal penuh dan
@@ -9,6 +9,7 @@
  * Semua request keluar lewat kebijakan egress (`fetchOutbound`); key hanya hidup
  * di memori proses ini dan tidak pernah masuk pesan galat, log, atau hasil.
  *
+ * DDG (DuckDuckGo HTML) gratis tanpa key: fallback saat TAVILY/JINA kosong.
  * Limitasi kualitas: ekstrak `direct` memakai `readSource` existing (tanpa
  * Readability — dependensi sengaja tidak ditambah), jadi menu/footer bisa ikut
  * ke snippet pada halaman tanpa `<article>`/`<main>`.
@@ -23,7 +24,7 @@ import type { Db } from "@/lib/db";
 import { SearchError, SNIPPET_MAX, type SearchResult } from "./web";
 import { sanitizeSearchQuery } from "./egress";
 
-export type SearchProviderName = "tavily" | "jina" | "direct";
+export type SearchProviderName = "tavily" | "jina" | "duckduckgo" | "direct";
 
 export interface SearchProvider {
   name: SearchProviderName;
@@ -36,7 +37,7 @@ export interface SearchProvider {
  *  `ready` (baca) + `countSearch` (tulis) tidak atomik, jadi dua request paralel
  *  bisa overshoot sedikit (≤ derajat konkurensi). Hitungan tidak hilang (upsert
  *  atomik) dan angka ini buffer atas kuota provider, jadi overshoot kecil cukup. */
-const QUOTA: Record<SearchProviderName, number> = { tavily: 100, jina: 50, direct: 40 };
+const QUOTA: Record<SearchProviderName, number> = { tavily: 100, jina: 50, duckduckgo: 100, direct: 40 };
 
 /**
  * Tujuan AAD baris `ConnectorCredential` untuk key pencarian.
@@ -164,7 +165,7 @@ function mapHits(rows: unknown, limit: number): SearchResult[] {
 
 /**
  * Satu objek per provider (bukan hierarki kelas). `key` undefined menandai
- * provider tanpa key (direct); `ready` menolaknya untuk provider berkey.
+ * provider tanpa key (duckduckgo/direct); `ready` menolaknya untuk provider berkey.
  */
 function provider(
   name: SearchProviderName,
@@ -174,11 +175,51 @@ function provider(
   return {
     name,
     ready: async (db, userId) => {
-      if (name !== "direct" && !key) return false;
+      if ((name === "tavily" || name === "jina") && !key) return false;
       return (await usedToday(db, userId, name)) < QUOTA[name];
     },
     search: run,
   };
+}
+
+/** Decode entitas HTML umum tanpa dependensi. */
+function decodeHtml(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_m, n: string) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, h: string) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'");
+}
+
+/** Petakan HTML DuckDuckGo (`result__a` + `result__snippet`) ke `SearchResult`. */
+function mapDuckHits(html: string, limit: number): SearchResult[] {
+  const fetchedAt = new Date().toISOString();
+  const out: SearchResult[] = [];
+  // shortcut: pola anchor DDG stabil; upgrade ke DOM parser bila DDG ubah markup.
+  const re =
+    /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>(?:[\s\S]*?<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>)?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    let url = decodeHtml(m[1] ?? "").trim();
+    // DDG membungkus tautan luar lewat redirect `/l/?uddg=<url-asli>`.
+    if (url.includes("uddg=")) {
+      try {
+        url = new URL(url, "https://duckduckgo.com").searchParams.get("uddg") ?? url;
+      } catch {
+        // Pertahankan URL mentah; filter http di bawah yang memutuskan.
+      }
+    }
+    if (url.startsWith("//")) url = `https:${url}`;
+    if (!url.startsWith("http")) continue;
+    const title = decodeHtml((m[2] ?? "").replace(/<[^>]*>/g, "").trim()) || url;
+    const snippet = decodeHtml((m[3] ?? "").replace(/<[^>]*>/g, "").trim()).slice(0, SNIPPET_MAX);
+    out.push({ title, url, snippet, fetchedAt });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 /** Susun provider dengan key sudah teresolusi dan kebijakan egress terkunci. */
@@ -219,6 +260,35 @@ function makeProviders(
       );
       return mapHits(payload["data"], limit);
     }),
+    // duckduckgo: fallback gratis tanpa key (HTML lite, bukan API).
+    // Selalu ready; kegagalan (blokir/captcha/bukan HTML) → failover ke direct.
+    provider("duckduckgo", undefined, async (query, limit, signal) => {
+      const url = new URL("https://html.duckduckgo.com/html/");
+      url.searchParams.set("q", query);
+      const target = await assertOutboundAllowed(url.toString(), outbound);
+      const response = await fetchOutbound(
+        target,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            accept: "text/html",
+            "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+          },
+          body: new URLSearchParams({ q: query }).toString(),
+          signal,
+          redirect: "follow",
+        },
+        outbound,
+      );
+      if (!response.ok) {
+        throw new SearchError(
+          `Penyedia pencarian membalas ${response.status}.`,
+          response.status === 429 || response.status >= 500,
+        );
+      }
+      return mapDuckHits(await response.text(), limit);
+    }),
     // direct: baca satu URL yang sudah diketahui lewat readSource existing,
     // bukan mesin scraping. Query non-URL gagal → chain fail-closed.
     provider("direct", undefined, async (query, _limit, signal) => {
@@ -236,8 +306,8 @@ function makeProviders(
 }
 
 /**
- * Failover berurutan: tavily → jina → direct. Provider yang kuotanya habis atau
- * keynya tak ada dilewati (bukan error). Sukses sebagian dilaporkan lewat
+ * Failover berurutan: tavily → jina → duckduckgo → direct. Provider yang
+ * kuotanya habis atau keynya tak ada dilewati (bukan error). Sukses sebagian dilaporkan lewat
  * `attempts`. Semua gagal/habis → `SearchError("SEARCH_UNAVAILABLE", false)`,
  * tanpa hasil apa pun.
  */

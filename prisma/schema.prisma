@@ -908,7 +908,7 @@ model TaskSource {
   stepId       String?
   /// search_result | page_read
   kind         String
-  provider     String?  /// tavily | jina | direct
+  provider     String?  /// tavily | jina | duckduckgo | direct
   requestedUrl String
   finalUrl     String?
   title        String?
@@ -931,7 +931,7 @@ model TaskSource {
 model SearchUsageDaily {
   id       String @id
   userId   String
-  /// tavily | jina | direct
+  /// tavily | jina | duckduckgo | direct
   provider String
   /// UTC "YYYY-MM-DD"
   day      String

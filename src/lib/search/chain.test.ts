@@ -99,8 +99,35 @@ it("direct sukses — readSource dipakai apa adanya saat tavily/jina gagal", asy
   expect(readSourceMock).toHaveBeenCalledOnce();
 });
 
+it("tanpa key → duckduckgo gratis dipakai, uddg diekstrak", async () => {
+  delete process.env["TAVILY_API_KEY"];
+  delete process.env["JINA_API_KEY"];
+  // fetchMock dipakai DDG lewat fetchOutbound → fetch; kembalikan HTML DDG.
+  fetchMock.mockResolvedValue(
+    new Response(
+      `<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fd.test%2F1">Judul &amp; Tes</a>` +
+        `<a class="result__snippet" href="#">isi cuplikan</a>`,
+      { status: 200, headers: { "content-type": "text/html" } },
+    ),
+  );
+
+  const out = await chainSearch(db, "u1", "apa itu", { signal: signal() });
+
+  expect(out.provider).toBe("duckduckgo");
+  expect(out.results[0]).toMatchObject({
+    url: "https://d.test/1",
+    title: "Judul & Tes",
+    snippet: "isi cuplikan",
+  });
+  expect(out.attempts.some((a) => a.provider === "tavily")).toBe(false);
+  expect(out.attempts.some((a) => a.provider === "jina")).toBe(false);
+});
+
 it("direct gagal / query non-URL → tetap SEARCH_UNAVAILABLE, bukan sukses kosong", async () => {
-  fetchMock.mockResolvedValue(jsonResponse({}, 500));
+  fetchMock
+    .mockResolvedValueOnce(jsonResponse({}, 500)) // tavily
+    .mockResolvedValueOnce(jsonResponse({}, 500)) // jina
+    .mockResolvedValueOnce(new Response("<html></html>", { status: 200 })); // ddg: nol hasil
   readSourceMock.mockRejectedValue(new Error("bukan URL"));
 
   const error = await chainSearch(db, "u1", "bukan url sama sekali", { signal: signal() }).catch(
@@ -111,7 +138,10 @@ it("direct gagal / query non-URL → tetap SEARCH_UNAVAILABLE, bukan sukses koso
 });
 
 it("semua provider gagal → SEARCH_UNAVAILABLE, tanpa hasil, retryable:false", async () => {
-  fetchMock.mockResolvedValue(jsonResponse({}, 500));
+  fetchMock
+    .mockResolvedValueOnce(jsonResponse({}, 500)) // tavily
+    .mockResolvedValueOnce(jsonResponse({}, 500)) // jina
+    .mockResolvedValueOnce(new Response("<html></html>", { status: 200 })); // ddg: nol hasil
 
   const error = await chainSearch(db, "u1", "apa itu", { signal: signal() }).catch((e: unknown) => e);
   expect(error).toBeInstanceOf(SearchError);
