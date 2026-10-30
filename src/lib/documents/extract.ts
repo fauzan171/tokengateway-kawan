@@ -6,7 +6,6 @@
  * metadata halaman untuk sitasi (REQ-NT-57).
  */
 
-import { PDFParse } from "pdf-parse";
 import { detectFormat, matchesClaimedMime, type DetectedFormat } from "./magic";
 import { extractDocx, extractPptx, extractXlsx, type SheetCell } from "./office";
 
@@ -58,6 +57,7 @@ function fromText(data: Buffer): ExtractResult {
 }
 
 async function fromPdf(data: Buffer): Promise<ExtractResult> {
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: new Uint8Array(data) });
   let pages: { page: number; text: string }[];
   try {
