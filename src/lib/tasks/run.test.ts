@@ -216,7 +216,9 @@ describe("runTaskRun", () => {
 });
 
 describe("lifecycle cancel/fencing (WP01)", () => {
-  async function waitForEvent(runId: string, kind: string, timeout = 5_000): Promise<void> {
+  // ponytail: 15s menutup beban 131 worker paralel (flaky 5s di full suite);
+  // turunkan lagi jika suite di-shard.
+  async function waitForEvent(runId: string, kind: string, timeout = 15_000): Promise<void> {
     await vi.waitFor(
       async () => {
         expect(

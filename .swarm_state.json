@@ -1,0 +1,26 @@
+{
+  "sprint": "fullstack-qa-swarm",
+  "updated": "2026-11-02T10:06Z",
+  "baseline": { "tests": "1436/1437", "flaky": "run.test.ts cancel timeout" },
+  "fixes": [
+    { "file": "tests/worker-lifecycle.test.ts", "change": "waitForEvent 5s->15s (cancel race)", "status": "applied" }
+  ],
+  "new_tests": [
+    { "file": "src/app/api/kawan/v1/documents/route.test.ts", "cases": 3, "covers": "U-01 U-02 U-04", "status": "pass" }
+  ],
+  "matrix": "docs/qa-test-matrix.md",
+  "qa_status": {
+    "QA-01_web_search": "PASS (chain.test 11, web.test 13, egress.test 7)",
+    "QA-02_pdf_upload": "PASS lib + route E2E baru",
+    "QA-03_pdf_extract": "PASS (pdf.test, extract, office, corrupt/empty/huge)",
+    "QA-04_tool_calling": "PASS via suite",
+    "QA-05_ui": "GAP: no jsdom/testing-library infra",
+    "QA-06_streaming": "PASS incl. flaky fix",
+    "QA-07_edge": "PASS",
+    "QA-08_session": "PASS via suite",
+    "QA-09_e2e_route": "PASS documents route; full journey upload->extract->chat belum (butuh worker)",
+    "QA-10_browser": "GAP: no playwright"
+  },
+  "pending": ["full suite re-run proc_8442f4955f2d", "commit atomic"],
+  "gaps": ["UI component tests (butuh testing-library)", "browser E2E (butuh playwright)"]
+}
