@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, E2E_PASSWORD } from "./seed";
+import { login } from "./seed";
 
 /**
  * WP-NT-P6-10 — gate alur C tahap UI.
@@ -11,15 +11,14 @@ import { E2E_EMAIL, E2E_PASSWORD } from "./seed";
  */
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/masuk");
-  await page.getByLabel("Email").fill(E2E_EMAIL);
-  await page.getByLabel("Kata sandi").fill(E2E_PASSWORD);
-  await page.getByRole("button", { name: "Masuk" }).click();
-  await expect(page.getByRole("region", { name: "Dokumen" })).toBeVisible();
+  await login(page);
 });
 
 test("panel menampilkan dokumen siap dan gagal beserta tombol coba lagi", async ({ page }) => {
-  const panel = page.getByRole("region", { name: "Dokumen" });
+  await page.goto("/");
+  // DocumentsPanel (region "Dokumen") tidak dipakai di beranda; dokumen tampil
+  // sebagai chips di composer (role=status di dalam kotak input).
+  const panel = page.getByRole("status");
 
   const ready = panel.getByRole("listitem").filter({ hasText: "laporan.pdf" });
   await expect(ready).toBeVisible();
@@ -37,6 +36,7 @@ test("panel menampilkan dokumen siap dan gagal beserta tombol coba lagi", async 
 
 test("360px tanpa gulir horizontal", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 900 });
-  await expect(page.getByRole("region", { name: "Dokumen" })).toBeVisible();
+  await page.goto("/");
+  await expect(page.getByRole("status").getByRole("listitem").first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

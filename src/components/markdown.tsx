@@ -124,7 +124,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
               href={href}
               target="_blank"
               rel="noopener noreferrer nofollow"
-              className="underline underline-offset-2"
+              className="text-primary underline underline-offset-2 hover:opacity-80"
             >
               {children}
             </a>

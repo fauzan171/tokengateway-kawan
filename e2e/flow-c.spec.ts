@@ -33,14 +33,15 @@ async function login(page: Page): Promise<void> {
   await page.getByLabel("Email").fill(E2E_EMAIL);
   await page.getByLabel("Kata sandi").fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Masuk" }).click();
-  await expect(page.getByRole("region", { name: "Dokumen" })).toBeVisible();
+  await expect(page.getByPlaceholder(/Tulis pesan/)).toBeVisible();
 }
 
 test("C: PDF diproses worker, jawaban menyitasi potongan", async ({ page }) => {
   await login(page);
-  const panel = page.getByRole("region", { name: "Dokumen" });
+  // Dokumen dilampirkan lewat tombol di composer; status tampil di chips (role=status).
+  const panel = page.getByRole("status");
 
-  await panel.getByLabel("Lampirkan dokumen").setInputFiles({
+  await page.getByLabel("Lampirkan dokumen").setInputFiles({
     name: "penjualan.pdf",
     mimeType: "application/pdf",
     buffer: pdfWithText("Penjualan naik pada kuartal ini."),
@@ -49,6 +50,9 @@ test("C: PDF diproses worker, jawaban menyitasi potongan", async ({ page }) => {
   const item = panel.getByRole("listitem").filter({ hasText: "penjualan.pdf" });
   await expect(item).toBeVisible();
   await expect(item).toContainText("Siap", { timeout: 30_000 });
+
+  // Chip dokumen harus dipilih supaya documentIds terkirim dan chatDocument terbentuk.
+  await item.getByRole("button", { name: /Lampirkan penjualan\.pdf/ }).click();
 
   await page.getByPlaceholder(/Tulis pesan/).fill("Bagaimana penjualan SITASI");
   await page.getByRole("button", { name: "Kirim pesan" }).click();

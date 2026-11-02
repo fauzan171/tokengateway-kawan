@@ -44,7 +44,7 @@ function applyMigrations(db: Database.Database): void {
 export const TOKEN = "e2e-token-render";
 /** Kredensial `user-e2e`; dipakai spec yang butuh sesi. */
 export const E2E_EMAIL = "e2e@example.com";
-export const E2E_PASSWORD = "kata-sandi-e2e-panjang";
+export const E2E_PASSWORD = "kata-sandi-rahasia-123";
 export const E2E_USER_ID = "user-e2e";
 
 /** Pengguna kedua: alur D (tautan anonim) dan E (hapus pengguna). */
@@ -194,4 +194,13 @@ export function seed(): void {
   db.close();
 
   writeFileSync(TOKEN_FILE, TOKEN);
+}
+
+/** Login via form `/masuk`; dipakai spec yang butuh sesi autentik. */
+export async function login(page: import("@playwright/test").Page, email: string = E2E_EMAIL, password: string = E2E_PASSWORD): Promise<void> {
+  await page.goto("/masuk");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Kata sandi").fill(password);
+  await page.getByRole("button", { name: "Masuk" }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/masuk"), { timeout: 10_000 });
 }

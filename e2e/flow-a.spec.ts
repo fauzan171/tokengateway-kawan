@@ -19,6 +19,9 @@ async function login(page: Page, email: string): Promise<void> {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Kata sandi").fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Masuk" }).click();
+  // Tanpa ini goto() berikutnya membatalkan respons login sebelum cookie
+  // sesi terpasang — halaman tujuan memantulkan kembali ke /masuk.
+  await page.waitForURL((url) => !url.pathname.startsWith("/masuk"));
 }
 
 async function testConnection(page: Page, baseUrl: string, apiKey: string): Promise<void> {
@@ -82,8 +85,6 @@ test("A: daftar, aktivasi admin, hubungkan gateway, kirim pesan", async ({ page,
 
 test("A: tiga keadaan gagal uji koneksi", async ({ page }) => {
   await login(page, "e2e@example.com");
-  await expect(page.getByRole("region", { name: "Dokumen" })).toBeVisible();
-
   // 401 dari gateway.
   await testConnection(page, GATEWAY, "kunci-ditolak");
   await expect(page.getByRole("status")).toContainText("Key ditolak oleh gateway.");

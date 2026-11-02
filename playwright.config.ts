@@ -40,7 +40,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run build && npm start -- --port ${PORT}`,
+    command: `npm start -- --port ${PORT}`, // build sudah jalan manual (cache hangat); webServer build ulang = OOM SIGKILL
     url: `http://127.0.0.1:${PORT}`,
     // Server lama memegang handle DB yang sudah dihapus seed → sesi E2E mati
     // dan tes dialihkan ke /masuk. Selalu pakai server baru.
