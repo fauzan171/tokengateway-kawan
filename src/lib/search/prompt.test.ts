@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildSearchSystem, wantsFreshData, wantsUrlInspection, webSearchRequested } from "./prompt";
+import { buildSearchSystem, extractFirstUrl, wantsFreshData, wantsUrlInspection, webSearchRequested } from "./prompt";
 
 describe("webSearchRequested", () => {
   it("true bila ada bagian web-search", () => {
@@ -132,5 +132,27 @@ describe("wantsUrlInspection (ENG-1)", () => {
   it("URL tanpa kata kerja, atau kalimat tanpa URL = false", () => {
     expect(wantsUrlInspection("https://github.com/x/y")).toBe(false);
     expect(wantsUrlInspection("apa itu fotosintesis")).toBe(false);
+  });
+});
+
+// Kasus asli: "tolong cek bagian brand di tokengateway.dev" — domain
+// polos tanpa skema. Sebelum patch lolos deteksi; chat menjawab
+// "pencarian web nonaktif" (REQ-NT-52).
+describe("domain polos tanpa skema", () => {
+  it("domain polos + kata kerja = inspeksi", () => {
+    expect(wantsUrlInspection("tolong cek bagian brand di tokengateway.dev")).toBe(true);
+  });
+  it("domain polos dinormalisasi ke https://", () => {
+    expect(extractFirstUrl("tolong cek bagian brand di tokengateway.dev")).toBe(
+      "https://tokengateway.dev",
+    );
+    expect(extractFirstUrl("lihat https://tokengateway.dev/about")).toBe(
+      "https://tokengateway.dev/about",
+    );
+    expect(extractFirstUrl("apa itu brand bukabaja")).toBeNull();
+  });
+  it("kata biasa berkemiripan domain tidak salah tangkap", () => {
+    expect(wantsUrlInspection("apa itu brand bukabaja")).toBe(false);
+    expect(extractFirstUrl("email saya user@mail.example tidak relevan")).toBeNull();
   });
 });

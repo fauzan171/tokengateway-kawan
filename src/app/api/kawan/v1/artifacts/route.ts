@@ -55,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
             ? { format: "json", content: JSON.parse(text) }
             : sourceFormat === "csv"
               ? { format: "csv", rows: text.split(/\r?\n/).map((line: string) => line.split(",")) }
-              : { format: sourceFormat as "md" | "txt" | "html", content: text },
+              : { format: sourceFormat as "md" | "txt" | "html" | "svg", content: text },
           format,
         );
       } catch (err) {
@@ -73,7 +73,7 @@ export async function POST(request: Request): Promise<Response> {
         input:
           converted.format === "json"
             ? { format: "json", content: JSON.parse(converted.content) }
-            : { format: converted.format as "md" | "txt" | "html", content: converted.content },
+            : { format: converted.format as "md" | "txt" | "html" | "svg", content: converted.content },
       });
       return jsonOk({ artifact }, reqId, 201);
     }

@@ -188,6 +188,7 @@ export function createSseStream(options: SseStreamOptions): ReadableStream<Uint8
         const events = await db.generationEvent.findMany({
           where: { generationId, seq: { gt: lastSeq } },
           orderBy: { seq: "asc" },
+          take: 500,
           select: { seq: true, kind: true, payloadJson: true },
         });
 

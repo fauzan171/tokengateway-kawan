@@ -17,7 +17,8 @@ export class ArtifactError extends Error {
 }
 
 export type ArtifactInput =
-  | { format: "md" | "txt" | "html"; content: string }
+  // CHART-INLINE: svg hasil chart tampil inline sebagai artefak gambar teks.
+  | { format: "md" | "txt" | "html" | "svg"; content: string }
   // FIX-16: byte media (PNG hasil image generation) masuk sebagai artefak.
   | { format: "png"; bytes: Uint8Array }
   | { format: "json"; content: unknown }

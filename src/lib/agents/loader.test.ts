@@ -55,11 +55,17 @@ describe("parseAgentFile", () => {
 describe("berkas agen di repo", () => {
   const agents = listAgentFiles();
 
-  it("memuat architect, researcher, reviewer", () => {
+  it("memuat katalog lengkap: teknis + nonteknis", () => {
     expect(agents.map((agent) => agent.id).sort()).toEqual([
       "architect",
+      "ide-konten",
+      "marketing",
+      "penerjemah",
+      "penulis",
       "researcher",
       "reviewer",
+      "sosmed",
+      "tutor",
     ]);
   });
 

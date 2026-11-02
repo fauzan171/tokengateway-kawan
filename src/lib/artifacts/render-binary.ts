@@ -31,7 +31,89 @@ export type ImageResolver = (artifactId: string) => Promise<{ bytes: Buffer; mim
 // Unicode (opsi B, DITUNDA) — bukan perbaikan satu baris.
 const latin1 = (text: string) => text.replace(/[^\x00-\xFF]/g, "?");
 
-/** PDF: heading tebal + besar per level, bullets/daftar bernomor, table " | ", code Courier, D3: pageBreak/divider/image. */
+// -----------------------------------------------------------------------
+// FIX-PDF-TBL: tabel PDF
+// -----------------------------------------------------------------------
+
+const PAD_X = 4; // padding teks dalam sel (poin)
+const PAD_Y = 3; // padding vertikal dalam sel (poin)
+
+/**
+ * Tabel PDF: kolom proporsional lebar konten, header tebal + latar abu,
+ * baris data zebra, teks tiap sel dibungkus (wrap), garis sel 0,5 poin.
+ * Baris lebih tinggi dari ruang halaman tersisa memicu addPage otomatis
+ * lewat opsi pdf.text width+height (tidak pindah di tengah baris).
+ * ponytail: tanpa fitur merge cell / align per kolom — tambah saat DocSchema punya field itu.
+ */
+function renderPdfTable(pdf: PDFDocument, headers: string[], rows: string[][]): void {
+  // Ukur tinggi sel dengan font body (heightOfString memakai font aktif).
+  pdf.font("Helvetica").fontSize(TEMA.font.body);
+  const columnCount = Math.max(headers.length, 1);
+  const contentWidth = TEMA.page.width - TEMA.margin * 2;
+  const columnWidth = contentWidth / columnCount;
+
+  // Tinggi baris diukur lewat pdf.heightOfString dengan lebar kolom efektif,
+  // jadi wrap otomatis benar untuk konten panjang.
+  const cellWidth = columnWidth - PAD_X * 2;
+  const rowHeight = (cells: string[]): number =>
+    Math.max(
+      TEMA.font.body + PAD_Y * 2,
+      ...cells.map((cell) => pdf.heightOfString(latin1(cell), { width: cellWidth })),
+    ) + PAD_Y; // akun baseline teks yang turun ke bawah sel
+
+  const drawRow = (cells: string[], options: { header: boolean }): void => {
+    const height = rowHeight(cells);
+    // Pindah halaman SEBELUM menggambar supaya garis + teks tetap satu
+    // halaman (pdf.text saja yang auto-addPage bikin baris terbelah).
+    if (pdf.y + height > pdf.page.maxY()) pdf.addPage();
+    const rowIndex = tableRowIndex++;
+    const x0 = TEMA.margin;
+    const y0 = pdf.y;
+
+    // Latar sel: header abu gelap, baris data zebra (tableAlt). Objek warna
+    // PDFKit menerima string hex.
+    if (options.header || rowIndex % 2 === 1) {
+      pdf
+        .rect(x0, y0, contentWidth, height)
+        .fill(options.header ? "#e5e7eb" : TEMA.color.tableAlt);
+    }
+
+    pdf.lineWidth(0.5).strokeColor("#d1d5db");
+    for (let i = 0; i <= columnCount; i++) {
+      pdf
+        .moveTo(x0 + columnWidth * i, y0)
+        .lineTo(x0 + columnWidth * i, y0 + height)
+        .stroke();
+    }
+    pdf.moveTo(x0, y0).lineTo(x0 + contentWidth, y0).stroke();
+    pdf.moveTo(x0, y0 + height).lineTo(x0 + contentWidth, y0 + height).stroke();
+
+    cells.forEach((cell, i) => {
+      pdf
+        .font(options.header ? "Helvetica-Bold" : "Helvetica")
+        .fontSize(TEMA.font.body)
+        .fillColor(TEMA.color.text)
+        .text(latin1(cell), x0 + columnWidth * i + PAD_X, y0 + PAD_Y, {
+          width: cellWidth,
+          height: height - PAD_Y, // clip + auto addPage saat baris tak muat
+          lineBreak: true,
+        });
+    });
+
+    pdf.y = y0 + height;
+  };
+
+  let tableRowIndex = 0;
+  drawRow(headers, { header: true });
+  for (const row of rows) {
+    // Baris bisa lebih pendek dari headers: pad dengan string kosong supaya
+    // kolom dan garis tetap konsisten.
+    drawRow([...row, ...Array(columnCount - row.length).fill("")], { header: false });
+  }
+  pdf.moveDown(0.5);
+}
+
+/** PDF: heading tebal + besar per level, bullets/daftar bernomor, code Courier, D3: pageBreak/divider/image. */
 export async function renderPdfBytes(doc: DocSchema, resolveImage: ImageResolver | null = null): Promise<Buffer> {
   // Ukuran halaman dan margin dari TEMA (D2): dulu PDFKit memakai default Letter
   // 612x792, berbeda dari jalur transkrip percakapan.
@@ -65,9 +147,9 @@ export async function renderPdfBytes(doc: DocSchema, resolveImage: ImageResolver
         });
         break;
       case "table":
-        pdf.font("Helvetica").fontSize(TEMA.font.body);
-        pdf.text(latin1(block.headers.join(" | ")));
-        for (const row of block.rows) pdf.text(latin1(row.join(" | ")));
+        // FIX-PDF-TBL: tabel digambar sebagai sel beneran (kolom, garis,
+        // zebra, wrap), bukan baris teks " | " yang tampilannya berantakan.
+        renderPdfTable(pdf, block.headers, block.rows);
         break;
       case "code":
         pdf.font(TEMA.font.mono).fontSize(TEMA.font.code).text(latin1(block.text));
@@ -191,11 +273,17 @@ export async function renderDocxBytes(doc: DocSchema, resolveImage: ImageResolve
       case "table":
         children.push(
           new Table({
+            // VISUAL-UNIFY: header tebal + shading abu, zebra baris ganjil —
+            // selaras PDF/XLSX/chat.
             rows: [block.headers, ...block.rows].map(
-              (row) =>
+              (row, rowIndex) =>
                 new TableRow({
                   children: row.map(
-                    (cell) => new TableCell({ children: [new Paragraph(cell)] }),
+                    (cell) =>
+                      new TableCell({
+                        children: [new Paragraph({ children: [new TextRun({ text: cell, bold: rowIndex === 0 })] })],
+                        shading: rowIndex === 0 ? { fill: "F1F3F5" } : rowIndex % 2 === 1 ? { fill: "F8F9FB" } : undefined,
+                      }),
                   ),
                 }),
             ),
@@ -274,9 +362,17 @@ export async function renderXlsxBytes(doc: DocSchema, resolveImage: ImageResolve
   for (const block of doc.blocks) {
     switch (block.type) {
       case "table": {
+        // VISUAL-UNIFY: header tebal + fill abu, zebra per baris — selaras
+        // render PDF/chat.
         const header = sheet.addRow(block.headers);
         header.font = { bold: true, color: { argb: "FF" + TEMA.color.text.slice(1).toUpperCase() } };
-        for (const row of block.rows) sheet.addRow(row);
+        header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F3F5" } };
+        block.rows.forEach((row, rowIndex) => {
+          const added = sheet.addRow(row);
+          if (rowIndex % 2 === 1) {
+            added.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8F9FB" } };
+          }
+        });
         break;
       }
       case "image": {
@@ -398,12 +494,19 @@ export async function renderPptxBytes(doc: DocSchema, resolveImage: ImageResolve
       const headers = block.headers.slice(0, PPTX_TABLE_MAX_COLS);
       const rows = block.rows.map((row) => row.slice(0, PPTX_TABLE_MAX_COLS));
       slide.addTable(
-        [headers, ...rows].map((row) =>
-          row.map((cell, index) => ({
+        [headers, ...rows].map((row, rowIndex) =>
+          row.map((cell) => ({
             text: cell,
             options: {
               fontSize: TEMA.ptx.body,
-              fill: index % 2 === 0 ? undefined : { color: TEMA.color.tableAlt.slice(1).toUpperCase() },
+              bold: rowIndex === 0,
+              // VISUAL-UNIFY: header fill gelap + zebra per baris, bukan kolom.
+              fill:
+                rowIndex === 0
+                  ? { color: "F1F3F5" }
+                  : rowIndex % 2 === 1
+                    ? { color: TEMA.color.tableAlt.slice(1).toUpperCase() }
+                    : undefined,
             },
           })),
         ),

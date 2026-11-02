@@ -288,80 +288,40 @@ export function ChatView({
   const inputRef = useRef("");
   inputRef.current = input;
 
-  // Tombol lampiran hanya muncul bila model yang dipakai chat ini mengumumkan visi
-  // (REQ-NT-46: model tanpa visi tidak menampilkan tombol, bukan tombol mati).
+  // Konfig sekali jalan (REQ-NT-51 + WP-NT-P8 + REQ-NT-46): models/capabilities/agents/
+  // settings diambil paralel. Serial = 4x latensi auth (~600ms) tiap mount.
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/kawan/v1/models")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !Array.isArray(data?.models)) return;
-        // Chat baru belum punya modelRef; untuk tombol visi pakai model pertama
-        // yang dilaporkan server. Nilai ini TIDAK disimpan: menyimpannya berarti
-        // diam-diam mengunci chat ke model tertentu (FIX-04).
-        const id: string | null =
-          modelRef ?? (typeof data.models[0]?.id === "string" ? data.models[0].id : null);
-        const model = data.models.find((m: { id?: string }) => m.id === id);
-        setVision(model?.capabilities?.vision === true);
-      })
-      .catch(() => {});
+    (async () => {
+      try {
+        const [modelsRes, capsRes, agentsRes, settingsRes] = await Promise.all([
+          fetch("/api/kawan/v1/models").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch("/api/kawan/v1/capabilities").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch("/api/kawan/v1/agents").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch("/api/kawan/v1/settings").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (Array.isArray(modelsRes?.models)) {
+          const id: string | null =
+            modelRef ?? (typeof modelsRes.models[0]?.id === "string" ? modelsRes.models[0].id : null);
+          const model = modelsRes.models.find((m: { id?: string }) => m.id === id);
+          setVision(model?.capabilities?.vision === true);
+        }
+        setWebSearchAvailable(capsRes?.webSearch === true);
+        setMediaCaps({
+          imageGen: capsRes?.imageGen === true,
+          stt: capsRes?.stt === true,
+          tts: capsRes?.tts === true,
+        });
+        if (Array.isArray(agentsRes?.agents)) setAgents(agentsRes.agents as AgentEntry[]);
+        const settings = settingsRes?.settings as { sendOnEnter?: unknown } | undefined;
+        if (typeof settings?.sendOnEnter === "boolean") setSendOnEnter(settings.sendOnEnter);
+      } catch {}
+    })();
     return () => {
       cancelled = true;
     };
   }, [modelRef]);
-
-  // Tombol pencarian web hanya muncul bila server mengonfigurasinya
-  // (REQ-NT-51). Gagal fetch → tombol tidak ditampilkan, bukan tombol mati.
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/kawan/v1/capabilities")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled) return;
-        setWebSearchAvailable(data?.webSearch === true);
-        setMediaCaps({
-          imageGen: data?.imageGen === true,
-          stt: data?.stt === true,
-          tts: data?.tts === true,
-        });
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Langkah 4: katalog agen dimuat sekali; gagal fetch berarti katalog tidak
-  // dirender (bukan katalog kosong yang membingungkan).
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/kawan/v1/agents")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !Array.isArray(data?.agents)) return;
-        setAgents(data.agents as AgentEntry[]);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Preferensi Enter/Shift+Enter dibaca sekali saat mount.
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/kawan/v1/settings")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled) return;
-        const settings = data?.settings as { sendOnEnter?: unknown } | undefined;
-        if (typeof settings?.sendOnEnter === "boolean") setSendOnEnter(settings.sendOnEnter);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Autoscroll hanya saat pengguna memang di dasar. `smooth` per frame
   // membuat dua animasi saling tarik-menarik (streaming terasa tersendat),

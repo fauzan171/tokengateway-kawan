@@ -54,12 +54,29 @@ const FRESH_DATA_PATTERN =
 /**
  * ENG-1: pesan ber-URL dengan kata kerja pemeriksaan (cek, buka, baca,
  * jelaskan, lihat, ringkas) memicu pencarian juga - tujuannya membaca
- * halaman itu, bukan menjawab dari memori.
+ * halaman itu, bukan menjawab dari memori. Domain polos tanpa skema
+ * (`tokengateway.dev`) ikut dihitung: pengguna chat menempel domain,
+ * bukan URL lengkap (REQ-NT-52).
  */
+const BARE_DOMAIN_PATTERN =
+  /(?<![@\w])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:id|com|net|org|io|dev|app|co|xyz|site|online|store|my|info|biz|tech)(?![\w.])/i;
+
 export function wantsUrlInspection(query: string): boolean {
-  const hasUrl = /https?:\/\//.test(query);
-  const intent = /\b(cek|buka|baca|jelaskan|lihat|ringkas|review|periksa)\b/i;
+  const hasUrl = /https?:\/\//.test(query) || BARE_DOMAIN_PATTERN.test(query);
+  const intent = /\b(cek|buka|baca|jelaskan|lihat|ringkas|review|periksa|audit|analisis)\b/i;
   return hasUrl && intent.test(query);
+}
+
+/**
+ * Ambil URL pertama dari teks; domain polos diberi awalan `https://`
+ * (REQ-NT-52). Kembalian `null` bila tidak ada kandidat tautan.
+ */
+export function extractFirstUrl(query: string): string | null {
+  const withScheme = query.match(/https?:\/\/[^\s"'<>]+/);
+  if (withScheme) return withScheme[0].replace(/[).,;!?]+$/, "");
+  const bare = query.match(BARE_DOMAIN_PATTERN);
+  if (bare) return `https://${bare[0]}`;
+  return null;
 }
 
 export function wantsFreshData(query: string): boolean {

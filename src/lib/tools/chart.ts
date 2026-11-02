@@ -33,6 +33,9 @@ export class ChartError extends Error {
 
 export const CHART_LIMITS = { maxPoints: 60, width: 640, height: 360, pad: 48 } as const;
 
+// CHART-INLINE: satu palet untuk semua grafik (SVG chat + PDF), selaras TEMA.
+export const CHART_PALETTE = { bar: "#6366f1", line: "#6366f1", grid: "#e5e7eb", axis: "#9ca3af", text: "#374151", title: "#111827" } as const;
+
 /** Escape XML — label datang dari model/pengguna, bukan kode. */
 function esc(value: string): string {
   return value
@@ -79,6 +82,7 @@ export function renderChart(request: ChartRequest): { svg: string; table: string
   const yOf = (v: number): number => pad + plotH - ((v - min) / span) * plotH;
 
   const marks: string[] = [];
+  // VISUAL-UNIFY: bar rounded + label di atas, selaras kartu ChatGPT/Glm 5.3.
   if (kind === "bar") {
     const slot = plotW / points.length;
     const barW = Math.min(slot * 0.7, 60);
@@ -87,24 +91,35 @@ export function renderChart(request: ChartRequest): { svg: string; table: string
       const y = yOf(point.value);
       const h = Math.abs(yOf(0) - y);
       marks.push(
-        `<rect x="${num(x)}" y="${num(Math.min(y, yOf(0)))}" width="${num(barW)}" height="${num(h)}" fill="#3b82f6"/>`,
+        `<rect x="${num(x)}" y="${num(Math.min(y, yOf(0)))}" width="${num(barW)}" height="${num(h)}" rx="3" fill="${CHART_PALETTE.bar}"/>`,
       );
       marks.push(
-        `<text x="${num(x + barW / 2)}" y="${num(Math.min(y, yOf(0)) - 4)}" font-size="10" text-anchor="middle" fill="#111">${esc(String(point.value))}</text>`,
+        `<text x="${num(x + barW / 2)}" y="${num(Math.min(y, yOf(0)) - 5)}" font-size="10" text-anchor="middle" fill="${CHART_PALETTE.text}">${esc(String(point.value))}</text>`,
       );
     });
   } else {
     const step = points.length === 1 ? 0 : plotW / (points.length - 1);
     const coords = points.map((point, i) => `${num(pad + step * i)},${num(yOf(point.value))}`);
+    // VISUAL-UNIFY: area fill + garis tebal + titik putih berbingkai.
     marks.push(
-      `<polyline fill="none" stroke="#3b82f6" stroke-width="2" points="${coords.join(" ")}"/>`,
+      `<polygon fill="${CHART_PALETTE.line}" opacity="0.12" points="${num(pad)},${num(yOf(0))} ${coords.join(" ")} ${num(pad + plotW)},${num(yOf(0))}"/>`,
+    );
+    marks.push(
+      `<polyline fill="none" stroke="${CHART_PALETTE.line}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${coords.join(" ")}"/>`,
     );
     points.forEach((point, i) => {
       marks.push(
-        `<circle cx="${num(pad + step * i)}" cy="${num(yOf(point.value))}" r="3" fill="#3b82f6"/>`,
+        `<circle cx="${num(pad + step * i)}" cy="${num(yOf(point.value))}" r="3.5" fill="#fff" stroke="${CHART_PALETTE.line}" stroke-width="2"/>`,
       );
     });
   }
+
+  // VISUAL-UNIFY: grid horizontal 4 garis + tick max/mid/min ala kartu analitik.
+  const mid = (max + min) / 2;
+  const gridVals = [max, mid, min];
+  const gridLines = gridVals
+    .map((v) => `<line x1="${pad}" y1="${num(yOf(v))}" x2="${num(width - pad)}" y2="${num(yOf(v))}" stroke="${CHART_PALETTE.grid}"/>`)
+    .join("");
 
   const labelStep = Math.ceil(points.length / 12);
   const xLabels = points
@@ -120,14 +135,16 @@ export function renderChart(request: ChartRequest): { svg: string; table: string
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" ` +
     `aria-label="${esc(title)}" width="${width}" height="${height}">` +
     `<title>${esc(title)}</title>` +
-    `<rect width="${width}" height="${height}" fill="#fff"/>` +
-    `<text x="${num(width / 2)}" y="20" font-size="13" text-anchor="middle" fill="#111">${esc(title)}</text>` +
-    `<line x1="${pad}" y1="${num(yOf(0))}" x2="${num(width - pad)}" y2="${num(yOf(0))}" stroke="#999"/>` +
-    `<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${num(height - pad)}" stroke="#999"/>` +
-    (request.yLabel ? `<text x="12" y="${num(pad + plotH / 2)}" font-size="10" fill="#444" transform="rotate(-90 12 ${num(pad + plotH / 2)})">${esc(request.yLabel + unit)}</text>` : "") +
-    (request.xLabel ? `<text x="${num(width / 2)}" y="${num(height - 8)}" font-size="10" text-anchor="middle" fill="#444">${esc(request.xLabel)}</text>` : "") +
-    `<text x="${num(pad - 4)}" y="${num(yOf(max) + 4)}" font-size="9" text-anchor="end" fill="#444">${num(max)}</text>` +
-    `<text x="${num(pad - 4)}" y="${num(yOf(min) + 4)}" font-size="9" text-anchor="end" fill="#444">${num(min)}</text>` +
+    `<rect width="${width}" height="${height}" rx="8" fill="#fff"/>` +
+    `<text x="${num(width / 2)}" y="22" font-size="14" font-weight="600" text-anchor="middle" fill="${CHART_PALETTE.title}">${esc(title)}</text>` +
+    gridLines +
+    `<line x1="${pad}" y1="${num(yOf(0))}" x2="${num(width - pad)}" y2="${num(yOf(0))}" stroke="${CHART_PALETTE.axis}"/>` +
+    `<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${num(height - pad)}" stroke="${CHART_PALETTE.axis}"/>` +
+    (request.yLabel ? `<text x="12" y="${num(pad + plotH / 2)}" font-size="10" fill="${CHART_PALETTE.text}" transform="rotate(-90 12 ${num(pad + plotH / 2)})">${esc(request.yLabel + unit)}</text>` : "") +
+    (request.xLabel ? `<text x="${num(width / 2)}" y="${num(height - 8)}" font-size="10" text-anchor="middle" fill="${CHART_PALETTE.text}">${esc(request.xLabel)}</text>` : "") +
+    `<text x="${num(pad - 6)}" y="${num(yOf(max) + 4)}" font-size="9" text-anchor="end" fill="${CHART_PALETTE.text}">${num(max)}</text>` +
+    `<text x="${num(pad - 6)}" y="${num(yOf(mid) + 4)}" font-size="9" text-anchor="end" fill="${CHART_PALETTE.text}">${num(Math.round(mid * 100) / 100)}</text>` +
+    `<text x="${num(pad - 6)}" y="${num(yOf(min) + 4)}" font-size="9" text-anchor="end" fill="${CHART_PALETTE.text}">${num(min)}</text>` +
     marks.join("") +
     xLabels +
     `</svg>`;

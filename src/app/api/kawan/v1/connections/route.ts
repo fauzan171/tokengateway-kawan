@@ -18,7 +18,7 @@ import { logger } from "@/lib/api/logger";
 import { auth } from "@/lib/auth";
 import { loadConfig } from "@/lib/config/env";
 import { getDb } from "@/lib/db";
-import { createConnection, listConnections } from "@/lib/connections/connections";
+import { activateConnection, createConnection, listConnections } from "@/lib/connections/connections";
 
 export const runtime = "nodejs";
 
@@ -106,13 +106,23 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
-    const connection = await createConnection(db, config, {
+    let connection = await createConnection(db, config, {
       userId,
       name: useDefault ? String(body["name"] ?? "Langganan") : String(body["name"] ?? ""),
       baseUrl: useDefault ? config.defaultGateway!.baseUrl : String(body["baseUrl"] ?? ""),
       apiKey: useDefault ? config.defaultGateway!.apiKey : String(body["apiKey"] ?? ""),
       skipTest: body["skipTest"] === true,
     });
+
+    // Jalur langganan langsung dijadikan aktif — koneksi lain milik pengguna
+    // yang sama dinonaktifkan dalam transaksi yang sama (REQ-NT-10). Tanpa
+    // ini, klik "Pakai langganan" menambah baris nonaktif dan pengguna
+    // terjebak di loop onboarding (POST 201 tapi GET `isActive` semua false).
+    // `activateConnection` tidak mengubah baseUrl/apiKey, jadi status `active`
+    // dari `createConnection` tetap dipertahankan.
+    if (useDefault && !connection.isActive) {
+      connection = await activateConnection(db, userId, connection.id);
+    }
 
     // Body permintaan TIDAK dicatat: memuat kunci API (SDD-3.1).
     logger.info(

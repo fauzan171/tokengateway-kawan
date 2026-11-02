@@ -130,12 +130,15 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
             </a>
           ),
           table: ({ children }) => (
-            <div className="my-2 max-w-full overflow-x-auto">
+            <div className="my-2 max-w-full overflow-x-auto rounded-lg border">
               <table className="w-max min-w-full border-collapse text-xs">{children}</table>
             </div>
           ),
-          th: ({ children }) => <th className="border px-2 py-1 text-left font-medium">{children}</th>,
-          td: ({ children }) => <td className="border px-2 py-1 align-top">{children}</td>,
+          tr: ({ children }) => <tr className="even:bg-muted/40">{children}</tr>,
+          // VISUAL-UNIFY: header latar muted + tebal, zebra per baris (tr), tanpa
+          // garis per sel — selaras kartu tabel ChatGPT/Glm 5.3.
+          th: ({ children }) => <th className="bg-muted/60 border-b px-2.5 py-1.5 text-left font-semibold">{children}</th>,
+          td: ({ children }) => <td className="border-b border-transparent px-2.5 py-1.5 align-top">{children}</td>,
           ul: ({ children }) => <ul className="my-2 list-disc pl-5">{children}</ul>,
           ol: ({ children }) => <ol className="my-2 list-decimal pl-5">{children}</ol>,
           blockquote: ({ children }) => (

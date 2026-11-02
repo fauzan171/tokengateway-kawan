@@ -43,7 +43,7 @@ import { buildContext } from "@/lib/documents/context";
 import { readEmbeddingConfig } from "@/lib/documents/embed";
 import { retrieveChunks, type RetrievedChunk } from "@/lib/documents/retrieve";
 import { extractCitations } from "@/lib/documents/citations";
-import { buildSearchSystem, wantsFreshData, wantsUrlInspection, webSearchRequested } from "@/lib/search/prompt";
+import { buildSearchSystem, extractFirstUrl, wantsFreshData, wantsUrlInspection, webSearchRequested } from "@/lib/search/prompt";
 import { readWebSearchConfig, webSearch, type SearchResult } from "@/lib/search/web";
 import { enrichSources, readSource, type EnrichedSource } from "@/lib/sources/read";
 import { buildMemoryContext } from "@/lib/memory/store";
@@ -992,9 +992,15 @@ export async function runGeneration(
   // waktu/kenaikan-baru: pertanyaan biasa tidak tersentuh. Konfigurasi mesin
   // tetap wajib; tanpa WEBSEARCH_BASE_URL tidak ada yang berubah.
   const searchConfigured = readWebSearchConfig() !== undefined;
+  // REQ-NT-52: URL/domain di pesan dibaca LANGSUNG (blok direct-read di bawah);
+  // auto-search hanya untuk pertanyaan tanpa URL. Search engine untuk query
+  // ber-URL terbukti balikin hasil tak nyambung (kasus "cek tokengateway.dev"
+  // → PDF jaringan komputer), sehingga direct-read HARUS menang atas search.
+  const directUrl = extractFirstUrl(query);
   const needsFreshData =
     searchConfigured &&
     query.trim() !== "" &&
+    directUrl === null &&
     !webSearchRequested(lastUserRow?.contentJson) &&
     (wantsFreshData(query) || wantsUrlInspection(query));
   if (query.trim() !== "" && (webSearchRequested(lastUserRow?.contentJson) || needsFreshData)) {
@@ -1044,36 +1050,30 @@ export async function runGeneration(
   // searxng upstream kena suspend/captcha; hasil 0 konsisten). Bila pesan
   // memuat URL dan hasil pencarian kosong, baca halaman URL itu LANGSUNG —
   // readSource terbukti mengembalikan 5000+ char berisi README repo GitHub.
-  if (
-    enriched.length === 0 &&
-    sources.length === 0 &&
-    !searchFailed &&
-    /https?:\/\//.test(query)
-  ) {
-    const urlMatch = query.match(/https?:\/\/[^\s]+/);
-    if (urlMatch) {
-      await publishEvent(db, generationId, "phase", {
-        phase: "reading",
-        label: "Membaca tautan langsung",
+  // Domain polos tanpa skema (`tokengateway.dev`) dinormalisasi jadi
+  // `https://` lewat `extractFirstUrl` (REQ-NT-52).
+  if (directUrl !== null && enriched.length === 0 && !searchFailed) {
+    await publishEvent(db, generationId, "phase", {
+      phase: "reading",
+      label: "Membaca tautan langsung",
+    });
+    try {
+      const direct = await readSource(directUrl, {
+        outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
       });
-      try {
-        const direct = await readSource(urlMatch[0], {
-          outbound: { allowInsecureHttp: config.allowInsecureHttp, allowlist: config.outboundAllowlist },
-        });
-        enriched = [
-          {
-            title: direct.source.title,
-            url: direct.source.url,
-            snippet: direct.text.slice(0, 300),
-            fetchedAt: direct.source.fetchedAt,
-            reach: "reachable",
-            contentHash: direct.source.contentHash,
-            text: direct.text,
-          },
-        ];
-      } catch {
-        // Tautan mati/terblokir: biarkan model jujur tanpa sumber.
-      }
+      enriched = [
+        {
+          title: direct.source.title,
+          url: direct.source.url,
+          snippet: direct.text.slice(0, 300),
+          fetchedAt: direct.source.fetchedAt,
+          reach: "reachable",
+          contentHash: direct.source.contentHash,
+          text: direct.text,
+        },
+      ];
+    } catch {
+      // Tautan mati/terblokir: biarkan model jujur tanpa sumber.
     }
   }
 

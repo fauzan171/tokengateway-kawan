@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CalcError, calculate, countText, describe as describeStats } from "./compute";
-import { ChartError, renderChart } from "./chart";
+import { ChartError, CHART_PALETTE, renderChart } from "./chart";
 import { QrError, makeBarcode, makeQr } from "./qr";
 
 type Fixture = { op: string; operands: string[]; precision?: number; rounding?: string; expected: string };
@@ -166,6 +166,21 @@ describe("renderChart", () => {
       renderChart({ kind: "bar", points: [{ label: "a", value: Number.NaN }], title: "x" }),
     ).toThrow(ChartError);
     expect(() => renderChart({ kind: "pie" as never, points, title: "x" })).toThrow(ChartError);
+  });
+
+  // VISUAL-UNIFY: gaya kartu analitik — grid, palet tunggal, bar rounded.
+  it("SVG memakai CHART_PALETTE, grid horizontal, dan bar rounded", () => {
+    const { svg: barSvg } = renderChart({ kind: "bar", points, title: "T" });
+    expect(barSvg).toContain(CHART_PALETTE.bar);
+    expect(barSvg).toContain('rx="3"');
+    // 3 garis grid: max, tengah, min.
+    expect(barSvg.match(new RegExp(`stroke="${CHART_PALETTE.grid}"`, "g"))?.length).toBe(3);
+
+    const { svg: lineSvg } = renderChart({ kind: "line", points, title: "T" });
+    expect(lineSvg).toContain(CHART_PALETTE.line);
+    // Area fill + garis: polygon di bawah polyline.
+    expect(lineSvg.indexOf("<polygon")).toBeLessThan(lineSvg.indexOf("<polyline"));
+    expect(lineSvg).toContain('stroke-linecap="round"');
   });
 });
 

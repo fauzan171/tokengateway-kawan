@@ -2,7 +2,7 @@
 declare module "pdfkit" {
   class PDFDocument extends import("stream").Readable {
     constructor(options?: Record<string, unknown>);
-    text(text: string, options?: Record<string, unknown>): PDFDocument;
+    text(text: string, x?: number, y?: number, options?: Record<string, unknown>): PDFDocument;
     font(name: string, size?: number): PDFDocument;
     fontSize(size: number): PDFDocument;
     addPage(): PDFDocument;
@@ -12,8 +12,16 @@ declare module "pdfkit" {
     lineWidth(width: number): PDFDocument;
     stroke(): PDFDocument;
     image(src: Buffer | string, x?: number, y?: number, options?: Record<string, unknown>): PDFDocument;
+    /** FIX-PDF-TBL: method grafik untuk tabel (sel, latar, zebra, wrap). */
+    rect(x: number, y: number, w: number, h: number): PDFDocument;
+    fill(color?: string): PDFDocument;
+    strokeColor(color: string): PDFDocument;
+    fillColor(color: string): PDFDocument;
+    heightOfString(text: string, options?: Record<string, unknown>): number;
+    moveDown(lines?: number): PDFDocument;
     /** Posisi vertikal kursor saat ini (bottom dari konten terakhir). */
     y: number;
+    page: { maxY(): number };
     end(): void;
     on(event: string, listener: (...args: never[]) => void): this;
   }

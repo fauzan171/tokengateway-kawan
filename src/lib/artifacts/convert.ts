@@ -9,14 +9,14 @@
 import { ArtifactError } from "./render";
 import type { ArtifactFormat } from "./format";
 
-const TEXT_FORMATS = ["md", "txt", "html"] as const;
+const TEXT_FORMATS = ["md", "txt", "html", "svg"] as const;
 type TextFormat = (typeof TEXT_FORMATS)[number];
 
 /** Format sumber yang punya representasi teks jujur (lihat convertArtifact). */
 const TEXT_SOURCE_FORMATS = ["md", "txt", "html", "json", "csv"] as const;
 
 export type ConversionSource =
-  | { format: "md" | "txt" | "html"; content: string }
+  | { format: "md" | "txt" | "html" | "svg"; content: string }
   | { format: "json"; content: unknown }
   | { format: "csv"; rows: unknown[][] };
 

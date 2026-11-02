@@ -130,6 +130,24 @@ describe("createConnection", () => {
     });
   });
 
+  it("langganan baru langsung diaktifkan walau bukan koneksi pertama (REQ-NT-10)", async () => {
+    const userId = await makeUser();
+    const pertama = await create(userId);
+    expect(pertama.isActive).toBe(true);
+
+    // Replika alur POST /connections dengan `useDefault: true` pada rute
+    // tersebut: buat koneksi lalu aktifkan bila belum aktif.
+    let langganan = await create(userId, { name: "Langganan" });
+    expect(langganan.isActive).toBe(false);
+    if (!langganan.isActive) {
+      langganan = await activateConnection(db, userId, langganan.id);
+    }
+
+    expect(langganan.isActive).toBe(true);
+    expect((await getActiveConnection(db, userId))?.id).toBe(langganan.id);
+    expect(await db.connection.count({ where: { userId, isActive: 1 } })).toBe(1);
+  });
+
   it("menolak nama dan apiKey kosong", async () => {
     const userId = await makeUser();
     await expect(create(userId, { name: "  " })).rejects.toMatchObject({ code: "INVALID_NAME" });

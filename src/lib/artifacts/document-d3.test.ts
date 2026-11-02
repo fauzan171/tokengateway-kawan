@@ -3,8 +3,12 @@
  *
  * Parser: batas 20 gambar + truncated; alt/caption dipotong 200; widthPct
  * diklem 10-100. Renderer: dibaca balik dari byte arsip (pembaca independen).
+ *
+ * FIX-PDF-TBL: tabel PDF dirender sebagai sel beneran (garis + kolom +
+ * zebra), bukan baris teks " | ". Uji di bawah mengunci itu.
  */
 
+import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { parseDocSchema } from "./document";
 import { readZip } from "./zip";
@@ -136,5 +140,79 @@ describe("renderer D3 — pembaca independen", () => {
     const slide2 = entryText(bytes, "ppt/slides/slide2.xml");
     expect(slide2).toContain("bawah");
     expect(slide2).toContain('prst="line"');
+  });
+});
+
+describe("FIX-PDF-TBL: tabel PDF sebagai sel beneran", () => {
+  const DOC_TBL = {
+    title: "Tabel",
+    blocks: [
+      {
+        type: "table",
+        headers: ["No", "Negara", "Kepala Negara"],
+        rows: [
+          ["1", "Indonesia", "Prabowo Subianto"],
+          ["2", "Jepang", "Naruhito"],
+        ],
+      },
+    ],
+  };
+
+  /** Teks tiap baris konten stream (zlib didekompres, hex TJ didekode). */
+  function pdfTextLines(bytes: Buffer): string[] {
+    const lines: string[] = [];
+    const src = bytes.toString("latin1");
+    for (const m of src.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+      let raw = Buffer.from(m[1], "latin1");
+      try {
+        raw = Buffer.from(inflateSync(raw));
+      } catch {
+        /* stream tak terkompresi */
+      }
+      const txt = raw.toString("latin1");
+      // PDFKit menulis teks sbg segmen hex TJ terpecah kerning
+      // ([<5072> 10 <61626f>]). Gabung semua segmen hex per baris konten.
+      const cells: string[] = [];
+      for (const line of txt.split("\n")) {
+        const hexes = [...line.matchAll(/<([0-9a-fA-F]+)>/g)].map((h) => h[1]);
+        if (hexes.length > 0) cells.push(Buffer.concat(hexes.map((h) => Buffer.from(h, "hex"))).toString("latin1"));
+        else cells.push(line);
+      }
+      lines.push(...cells);
+    }
+    return lines;
+  }
+
+  it("tidak ada baris teks ' | ' (kolom digambar, bukan digabung pipa)", async () => {
+    const bytes = await renderPdfBytes(DOC_TBL as never);
+    for (const line of pdfTextLines(bytes)) expect(line).not.toContain("|");
+  });
+
+  it("sel tetangga satu baris terpisah (tidak satu string gabungan)", async () => {
+    const bytes = await renderPdfBytes(DOC_TBL as never);
+    const joined = pdfTextLines(bytes).join("\n");
+    expect(joined).toContain("Indonesia");
+    expect(joined).toContain("Prabowo");
+    // Sel digambar terpisah: tak ada baris berisi dua sel data sekaligus.
+    for (const line of pdfTextLines(bytes)) {
+      expect(line.includes("Indonesia") && line.includes("Prabowo")).toBe(false);
+      expect(line.includes("No") && line.includes("Negara") && line.includes("TJ")).toBe(false);
+    }
+  });
+
+  it("tabel 200 baris tetap satu PDF valid tanpa galat", async () => {
+    const big = {
+      title: "Besar",
+      blocks: [
+        {
+          type: "table",
+          headers: ["No", "Nama"],
+          rows: Array.from({ length: 200 }, (_, i) => [String(i + 1), `Baris ${i + 1}`]),
+        },
+      ],
+    };
+    const bytes = await renderPdfBytes(big as never);
+    expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    expect(bytes.length).toBeGreaterThan(5000);
   });
 });

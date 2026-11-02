@@ -28,6 +28,7 @@ npm-debug.log*
 *.db-journal
 *.db-wal
 *.db-shm
+dev.db.bak-*
 
 # Storage / uploads
 storage/
