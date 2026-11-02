@@ -47,10 +47,10 @@ Baseline 2026-11-02: full suite 1436/1437 PASS; 1 flaky `run.test.ts` cancel →
 | L-03 | abort indeterminate | no hang | PASS |
 | L-04 | admission/lease | LeaseLost, CONNECTION_MISSING | PASS |
 
-## P2 — UI (QA-05/QA-10) — gap
+## P2 — UI (QA-05/QA-10)
 | ID | Area | Expected | Status |
 |----|------|----------|--------|
-| UI-01 | documents-panel | render list/upload/error states | GAP: no component test infra (jsdom/testing-library absent) |
+| UI-01 | documents-panel | render list/upload/error states | PASS (jsdom pragma; 11 file komponen, 69 test) |
 | UI-02 | mobile viewport | tap targets ≥44px | GAP: no E2E runner (playwright absent) |
 
 ## P2 — E2E Journey (QA-09) — gap

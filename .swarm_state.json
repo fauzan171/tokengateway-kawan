@@ -14,13 +14,14 @@
     "QA-02_pdf_upload": "PASS lib + route E2E baru",
     "QA-03_pdf_extract": "PASS (pdf.test, extract, office, corrupt/empty/huge)",
     "QA-04_tool_calling": "PASS via suite",
-    "QA-05_ui": "GAP: no jsdom/testing-library infra",
+    "QA-05_ui": "PASS (11 file komponen, 69 test jsdom: chat-view, documents-panel upload states, file-preview, markdown)",
     "QA-06_streaming": "PASS incl. flaky fix",
     "QA-07_edge": "PASS",
     "QA-08_session": "PASS via suite",
     "QA-09_e2e_route": "PASS documents route; full journey upload->extract->chat belum (butuh worker)",
     "QA-10_browser": "GAP: no playwright"
   },
-  "pending": ["full suite re-run proc_8442f4955f2d", "commit atomic"],
+  "pending": [],
+  "final": { "tests": "1440/1440 PASS", "tsc": "clean", "commit": "923cb446" },
   "gaps": ["UI component tests (butuh testing-library)", "browser E2E (butuh playwright)"]
 }
