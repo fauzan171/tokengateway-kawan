@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Newsreader, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
@@ -27,6 +27,11 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata("home");
 }
+
+/* DESIGN.md 3.2 — viewport-fit=cover wajib agar env(safe-area-inset-*) aktif di mobile. */
+export const viewport: Viewport = {
+  viewportFit: "cover",
+};
 
 export default async function RootLayout({
   children,
