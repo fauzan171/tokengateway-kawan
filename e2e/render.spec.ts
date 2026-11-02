@@ -47,8 +47,11 @@ test.describe("render snapshot publik", () => {
 
   test("fokus keyboard terlihat", async ({ page }) => {
     await page.goto(`/s/${TOKEN}`);
+    // Tab nyata (bukan locator.focus) supaya :focus-visible aktif — kondisi
+    // outline WCAG 2.4.7 yang diperiksa di globals.css.
+    await page.keyboard.press("Tab");
+    // Fokus pertama halaman publik = tautan markdown pertama.
     const link = page.getByRole("link", { name: "tautan" });
-    await link.focus();
     await expect(link).toBeFocused();
     const outline = await link.evaluate((el) => getComputedStyle(el).outlineWidth);
     expect(outline).not.toBe("0px");

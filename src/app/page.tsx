@@ -104,7 +104,7 @@ export default function Home() {
           {t("nav.privacy")}
         </a>
       </nav>
-      <a className="mt-2 px-3 text-xs text-muted-foreground/70" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
+      <a className="mt-2 inline-flex min-h-6 items-center px-3 text-xs text-muted-foreground/70" href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer">by tokengateway.ai.id</a>
     </div>
   );
 
@@ -137,7 +137,7 @@ export default function Home() {
           {section === "chat" ? (
             <ChatView initialChatId={activeChatId} onChatCreated={setActiveChatId} />
           ) : (
-<section className="mx-auto w-full max-w-[760px] py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">{t("home.aboutBody")}</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-block underline">by tokengateway.ai.id</a></section>
+<section className="mx-auto w-full max-w-[760px] py-12"><h1 className="text-3xl font-semibold">Kawan</h1><p className="mt-5 leading-7 text-muted-foreground">{t("home.aboutBody")}</p><a href="https://tokengateway.ai.id" target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex min-h-6 items-center underline">by tokengateway.ai.id</a></section>
           )}
           <footer className="text-center text-xs leading-6 text-muted-foreground">{t("home.footer")}</footer>
         </main>

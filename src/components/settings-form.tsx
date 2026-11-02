@@ -40,6 +40,17 @@ function apply(settings: UserSettings) {
   } catch { /* Storage can be unavailable in private browsers. */ }
 }
 
+/** Dengarkan perubahan `prefers-color-scheme` saat tema "system". */
+function useSystemTheme(settings: UserSettings | null) {
+  useEffect(() => {
+    if (settings?.theme !== "system") return;
+    const media = matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => apply(settings);
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, [settings]);
+}
+
 export function SettingsForm() {
   const t = useT();
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -64,6 +75,8 @@ export function SettingsForm() {
       alive = false;
     };
   }, [t]);
+
+  useSystemTheme(settings);
 
   const save = useCallback(async (patch: Patch) => {
     setError(null);
