@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { Menu, MessageSquare, PanelLeft, Plus, Settings, ShieldCheck, X } from "lucide-react";
+import { Menu, PanelLeft, Plus, Settings, ShieldCheck, X } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { ChatSidebar } from "@/components/chat-sidebar";
@@ -141,18 +141,6 @@ export default function Home() {
           )}
           <footer className="text-center text-xs leading-6 text-muted-foreground">{t("home.footer")}</footer>
         </main>
-        {/* DESIGN.md 3.2 — bottom nav mobile (< lg), touch target 44px, safe-area bawah. */}
-        <nav aria-label={t("nav.main")} className="flex items-stretch justify-around border-t bg-background px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] lg:hidden">
-          <Button variant="ghost" className="flex min-h-11 min-w-11 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[0.65rem]" aria-label={t("nav.newChat")} onClick={() => { setActiveChatId(null); navigate("chat"); }}>
-            <MessageSquare className="size-5" />{t("nav.newChat")}
-          </Button>
-          <Button variant="ghost" className="flex min-h-11 min-w-11 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[0.65rem]" aria-label={t("nav.openMenu")} onClick={() => setOpen(true)}>
-            <Menu className="size-5" />{t("nav.openMenu")}
-          </Button>
-          <Button variant="ghost" className="flex min-h-11 min-w-11 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[0.65rem]" aria-label={t("nav.about")} onClick={() => navigate("about")}>
-            <ShieldCheck className="size-5" />{t("nav.about")}
-          </Button>
-        </nav>
       </div>
     </div>
   );
