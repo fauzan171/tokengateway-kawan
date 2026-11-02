@@ -993,7 +993,7 @@ export function ChatView({
                       className="flex h-full w-full cursor-pointer flex-col gap-2 rounded-2xl bg-[#f0f4f9] p-4 text-left transition-colors hover:bg-neutral-200/70 disabled:opacity-60 dark:bg-[#1e1f20] dark:hover:bg-neutral-800"
                     >
                       <span className="flex items-center gap-2">
-                        <KawanMascot mood="idle" size={24} />
+                        <KawanMascot agent={agent.id} state="idle" size={24} />
                         <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100">
                           {agent.name}
                         </span>
@@ -1015,7 +1015,7 @@ export function ChatView({
             // Agen terpilih: sapaan pembuka dari berkasnya, bukan judul generik.
             <div className="kawan-fade-in flex flex-col items-start">
               <div className="mb-1.5">
-                <KawanMascot mood="idle" size={20} />
+                <KawanMascot agent={activeAgent.id} state="idle" size={20} />
               </div>
               <Markdown text={activeAgent.greeting} />
             </div>
@@ -1183,7 +1183,7 @@ export function ChatView({
                       m.role === "assistant" ? (
                         <div className="min-w-0 w-full">
                           {/* Penanda respons bot ala Gemini: glyph kecil di atas teks. */}
-                          <div className="mb-1.5"><KawanMascot mood="idle" size={20} /></div>
+                          <div className="mb-1.5"><KawanMascot agent={activeAgentId ?? undefined} state={m.status === "streaming" ? "thinking" : "idle"} size={20} /></div>
                           <Markdown text={text} />
                         </div>
                       ) : (
@@ -1410,7 +1410,7 @@ export function ChatView({
       <form onSubmit={handleSend} className="relative pt-2">
         {activeAgent && (
           <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <KawanMascot mood="idle" size={16} />
+            <KawanMascot agent={activeAgent.id} state="idle" size={16} />
             {activeAgent.name}
           </p>
         )}

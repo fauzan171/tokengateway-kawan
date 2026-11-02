@@ -214,4 +214,49 @@
 @media (prefers-reduced-motion: reduce) {
   .kawan-dots > span { animation: none; opacity: 0.7; }
   .kawan-fade-in { animation: none; }
+  .kawan-mascot-bob,
+  .kawan-mascot-pulse,
+  .kawan-mascot-shake,
+  .kawan-mascot-eyes { animation: none; }
 }
+
+/* ---- Maskot SVG prosedural (DESIGN.md §6.5, fallback 6.3) ---- */
+
+/* thinking: goyang pelan kiri-kanan (2s, §6.5) */
+@keyframes kawan-mascot-bob {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+.kawan-mascot-bob { animation: kawan-mascot-bob 2s ease-in-out infinite; }
+
+/* speaking: squash & stretch kecil mengikuti ritme token */
+@keyframes kawan-mascot-pulse {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.04, 0.96); }
+}
+.kawan-mascot-pulse { animation: kawan-mascot-pulse 0.8s ease-in-out infinite; }
+
+/* alert/penjaga: bodi bergetar halus */
+@keyframes kawan-mascot-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(0.5px); }
+  75% { transform: translateX(-0.5px); }
+}
+.kawan-mascot-shake { animation: kawan-mascot-shake 0.3s linear infinite; }
+
+/* Mata: arah pandang (listening/thinking, §6.5) */
+@keyframes kawan-mascot-eye-up {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+@keyframes kawan-mascot-eye-down {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1px); }
+}
+@keyframes kawan-mascot-eye-side {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(1px); }
+}
+.kawan-mascot-eyes-up { animation: kawan-mascot-eye-up 2s ease-in-out infinite; }
+.kawan-mascot-eyes-down { animation: kawan-mascot-eye-down 2s ease-in-out infinite; }
+.kawan-mascot-eyes-side { animation: kawan-mascot-eye-side 2.4s ease-in-out infinite; }
