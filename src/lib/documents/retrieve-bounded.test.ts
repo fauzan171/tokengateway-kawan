@@ -26,12 +26,14 @@ describe("FIX-06: retrieval bounded", () => {
     expect(hits.length).toBeGreaterThan(0);
   });
 
-  it("skor di bawah RAG_MIN_SCORE ditolak", async () => {
+  it("query tak cocok dalam scope chat mengembalikan potongan awal dokumen", async () => {
     await d().chat.create({ data: { id: "chatZ", userId, title: "Z" } });
     await d().document.create({ data: { id: "docZ", userId, filename: "z", mime: "text/plain", sizeBytes: 1, storageKey: "z" } });
     await d().chatDocument.create({ data: { id: "mZ", chatId: "chatZ", documentId: "docZ", ownerId: userId } });
     await d().documentChunk.create({ data: { id: "cZ", documentId: "docZ", page: null, ordinal: 0, text: "memasak rendang padang", embedding: null } });
+    // Fallback scope-chat: model tetap harus bisa membaca dokumen terlampir
+    // walau query ("baca pdf ini") tidak memuat kata kunci isi dokumen.
     const hits = await mod.retrieveChunks(db.db, { userId, chatId: "chatZ", query: "gurita jakarta kantor", limit: 4 });
-    expect(hits).toHaveLength(0);
+    expect(hits.map((h) => h.chunkId)).toEqual(["cZ"]);
   });
 });

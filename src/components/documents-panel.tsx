@@ -134,6 +134,9 @@ export function useDocuments(): DocumentsApi {
           return;
         }
         setDocuments((current) => [data.document as DocumentItem, ...current]);
+        // Otomatis pilih dokumen baru supaya langsung terlampir ke pesan
+        // berikutnya. Kalau tidak, user harus klik chip dulu — sering terlewat.
+        setSelectedIds((current) => [...current, data.document!.id]);
       } catch {
         setError(t("documents.uploadFailedNetwork"));
       } finally {

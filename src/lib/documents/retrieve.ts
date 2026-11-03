@@ -148,7 +148,21 @@ export async function retrieveChunks(db: Db, input: RetrieveInput): Promise<Retr
     if (vectorHits.length > 0) return vectorHits;
   }
 
-  return keywordSearch(db, where, query, limit);
+  const keywordHits = await keywordSearch(db, where, query, limit);
+  // Scope sempit (dokumen terlampir ke chat) + query generik ("baca pdf ini"):
+  // kata kunci tidak pernah cocok isi dokumen, jadi hasil kosong membuat model
+  // mengira tidak ada lampiran. Kirim potongan awal dokumen supaya model
+  // tetap bisa membaca isinya.
+  if (keywordHits.length === 0 && scope && scope.length > 0) {
+    const heads = (await db.documentChunk.findMany({
+      where,
+      select: SELECT,
+      orderBy: [{ documentId: "asc" }, { ordinal: "asc" }],
+      take: limit,
+    })) as Row[];
+    return heads.map((row) => toResult(row, 0));
+  }
+  return keywordHits;
 }
 
 /** Pencarian kata kunci (REQ-NT-61). Dipakai saat embedding tidak tersedia

@@ -660,6 +660,17 @@ export function ChatView({
           : { mime: image.mime, dataUrl: image.dataUrl },
       );
 
+      // FIX-06c: kirim hanya dokumen siap, tanpa duplikat — auto-select
+      // boleh menambah id yang sama dua kali, server menolak duplikat.
+      const readyDocIds = [
+        ...new Set(
+          documentsApi.selectedIds.filter((id) =>
+            documentsApi.documents.some(
+              (doc) => doc.id === id && doc.status === "ready",
+            ),
+          ),
+        ),
+      ];
       const sendRes = await fetch(`/api/kawan/v1/chat/${activeId}/messages`, {
         method: "POST",
         headers: {
@@ -670,7 +681,7 @@ export function ChatView({
           content: userText || "(gambar)",
           parentId,
           attachments: wireAttachments,
-          ...(documentsApi.selectedIds.length > 0 ? { documentIds: documentsApi.selectedIds } : {}),
+          ...(readyDocIds.length > 0 ? { documentIds: readyDocIds } : {}),
           ...(searchOn ? { webSearch: true } : {}),
         }),
       });

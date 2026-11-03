@@ -940,14 +940,29 @@ export async function runGeneration(
   const attachedDocuments = await db.chatDocument.count({
     where: { chatId: chat.id, chat: { userId: chat.userId } },
   });
-  if (query.trim() !== "" && attachedDocuments > 0) {
+  // FIX-06b: chat baru tanpa manifest, tetapi pengguna pernah melampirkan
+  // dokumen di chat lain — pakai dokumen ready terbaru miliknya sebagai
+  // kandidat, supaya "baca pdf ini" di chat baru tetap terjawab.
+  let fallbackDocIds: string[] | undefined;
+  if (query.trim() !== "" && attachedDocuments === 0) {
+    const recent = await db.chatDocument.findMany({
+      where: { chat: { userId: chat.userId }, document: { status: "ready" } },
+      orderBy: { addedAt: "desc" },
+      select: { documentId: true },
+      take: 10,
+    });
+    const ids = [...new Set(recent.map((row) => row.documentId))];
+    if (ids.length > 0) fallbackDocIds = ids;
+  }
+  if (query.trim() !== "" && (attachedDocuments > 0 || fallbackDocIds)) {
     // FIX-06: query retrieval = pesan terakhir + judul chat, bukan pesan saja.
     const retrievalQuery = chat.title ? `${query}\n${chat.title}` : query;
     const embedding = readEmbeddingConfig();
     try {
       const chunks = await retrieveChunks(db, {
         userId: chat.userId,
-        chatId: chat.id,
+        ...(attachedDocuments > 0 ? { chatId: chat.id } : {}),
+        ...(fallbackDocIds ? { documentIds: fallbackDocIds } : {}),
         query: retrievalQuery,
         limit: 6,
         ...(embedding ? { embedding } : {}),
@@ -964,7 +979,8 @@ export async function runGeneration(
       try {
         const chunks = await retrieveChunks(db, {
           userId: chat.userId,
-          chatId: chat.id,
+          ...(attachedDocuments > 0 ? { chatId: chat.id } : {}),
+          ...(fallbackDocIds ? { documentIds: fallbackDocIds } : {}),
           query: retrievalQuery,
           limit: 6,
         });
