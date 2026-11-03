@@ -170,12 +170,20 @@ export function useDocuments(): DocumentsApi {
       setError(null);
       try {
         const response = await fetch(`/api/kawan/v1/documents/${id}`, { method: "DELETE" });
+        if (response.status === 401) {
+          window.location.assign("/masuk");
+          return;
+        }
         if (!response.ok) {
+          // Laporkan kode/status supaya akar masalah terlihat di log browser.
+          console.error("hapus dokumen gagal", { id, status: response.status });
           setError(t("documents.deleteFailed"));
           return;
         }
         setDocuments((current) => current.filter((item) => item.id !== id));
-      } catch {
+        setSelectedIds((current) => current.filter((item) => item !== id));
+      } catch (err) {
+        console.error("hapus dokumen gagal network", err);
         setError(t("documents.deleteFailed"));
       }
     },
